@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>PicoScope 4824A 控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260919-lcr-frequency-units1" />
+    <link rel="stylesheet" href="/styles.css?v=20260922-big-lcr1" />
   </head>
   <body data-page="measure">
     <header class="topbar">
@@ -222,7 +222,71 @@
           <small id="sweepProgressText" class="progress-text">尚未开始扫描</small>
         </section>
 
-        <section class="panel hero-control page-only" data-pages="lcr">
+        <section id="lcrModePanel" class="panel lcr-mode-panel page-only" data-pages="lcr">
+          <div class="panel-heading compact"><div><span class="step">MODE</span><h2>LCR 测量模式</h2></div><small>未选中的模式不会挂载采集控件</small></div>
+          <label>测量类型<select id="lcrMeasurementMode"><option value="big" selected>大信号测量（ATA-2021B）</option><option value="small">小信号测量（原有 LCR）</option></select></label>
+          <p class="wiring-note"><span>i</span> 两种模式整页互斥；切换模式不会改写小信号参数、校准文件或分析算法。</p>
+        </section>
+
+        <section class="panel hero-control page-only" data-pages="lcr" data-lcr-mode="big">
+          <div class="panel-heading">
+            <div><span class="step">01</span><h2>ATA-2021B 大信号接线与采样</h2></div>
+            <label class="switch-label"><input id="bigLcrSimulate" type="checkbox" /><span class="switch"></span>仿真</label>
+          </div>
+          <div class="form-grid">
+            <label>采样率 <span>MS/s</span><input id="bigLcrSampleRate" type="number" value="20" min="0.001" max="80" step="0.1" /></label>
+            <label>触发电平 <span>V</span><input id="bigLcrTriggerLevel" type="number" value="0.02" step="0.005" /></label>
+            <label>触发来源<select id="bigLcrTriggerSignal"><option value="voltage" selected>Voltage Monitor</option><option value="current">Current Monitor</option></select></label>
+            <label>Voltage Monitor 通道<select id="bigLcrVoltageChannel"></select></label>
+            <label>电压通道量程<select id="bigLcrVoltageRange"></select></label>
+            <label>Current Monitor 通道<select id="bigLcrCurrentChannel"></select></label>
+            <label>电流通道量程<select id="bigLcrCurrentRange"></select></label>
+          </div>
+          <p class="wiring-note"><span>!</span> Pico AWG 接 ATA-2021B 输入；Voltage Monitor 和 Current Monitor 两个 SMA 分别回到所选 Pico 通道。这里不需要 AWG 监测端口，也不要把 ATA 功率输出直接接入 Pico。</p>
+        </section>
+
+        <section class="panel page-only" data-pages="lcr" data-lcr-mode="big">
+          <div class="panel-heading compact"><div><span class="step">02</span><h2>大信号激励与频率扫描</h2></div><small id="bigLcrEstimate">—</small></div>
+          <label>测量方式<select id="bigLcrMode"><option value="single">单频测量</option><option value="linear">线性扫频</option><option value="log">对数扫频</option></select></label>
+          <div id="bigLcrSingleControls" class="form-grid"><label>测量频率 <span>kHz</span><input id="bigLcrFrequency" type="number" value="100" min="0.001" max="1000" step="1" /></label></div>
+          <div id="bigLcrSweepControls" hidden><div class="form-grid three">
+            <label>起始 <span>kHz</span><input id="bigLcrFrequencyStart" type="number" value="20" min="0.001" max="1000" step="1" /></label>
+            <label>停止 <span>kHz</span><input id="bigLcrFrequencyStop" type="number" value="200" min="0.001" max="1000" step="1" /></label>
+            <label id="bigLcrLinearStepLabel">步长 <span>kHz</span><input id="bigLcrFrequencyStep" type="number" value="5" min="0.001" step="1" /></label>
+            <label id="bigLcrLogPointsLabel" hidden>每十倍频程点数<input id="bigLcrPointsPerDecade" type="number" value="12" min="1" max="200" step="1" /></label>
+          </div></div>
+          <div class="subhead"><span>ATA 输入突发正弦</span><small>低压 AWG 输入由功放放大</small></div>
+          <div class="form-grid">
+            <label>Pico AWG 输入 <span>Vpp</span><input id="bigLcrAwgVpp" type="number" value="0.5" min="0.001" max="4" step="0.01" /></label>
+            <label>总周期数<input id="bigLcrBurstCycles" type="number" value="40" min="8" step="1" /></label>
+            <label>缓升/缓降 <span>周期</span><input id="bigLcrRampCycles" type="number" value="3" min="0" step="0.5" /></label>
+            <label>拟合周期数<input id="bigLcrAnalysisCycles" type="number" value="16" min="2" step="1" /></label>
+            <label>拟合保护 <span>周期</span><input id="bigLcrGuardCycles" type="number" value="2" min="0" step="0.5" /></label>
+            <label>每频点重复<input id="bigLcrRepeats" type="number" value="3" min="1" max="100" step="1" /></label>
+            <label>测量间隔 <span>s</span><input id="bigLcrInterval" type="number" value="0.5" min="0" max="3600" step="0.1" /></label>
+          </div>
+        </section>
+
+        <section class="panel page-only" data-pages="lcr" data-lcr-mode="big">
+          <div class="panel-heading compact"><div><span class="step">03</span><h2>ATA 监测换算与安全状态</h2></div><small>系数随本次测量保存</small></div>
+          <div class="form-grid">
+            <label>线圈电压 / Monitor V <span>V/V</span><input id="bigLcrVoltageScale" type="number" value="1" min="0.000001" step="0.001" /></label>
+            <label>线圈电流 / Monitor V <span>A/V</span><input id="bigLcrCurrentScale" type="number" value="1" min="0.000001" step="0.000001" /></label>
+            <label>Current Monitor 极性<select id="bigLcrCurrentPolarity"><option value="1" selected>同相</option><option value="-1">反相</option></select></label>
+            <label>Voltage Monitor 偏置 <span>V</span><input id="bigLcrVoltageOffset" type="number" value="0" step="0.001" /></label>
+            <label>Current Monitor 偏置 <span>V</span><input id="bigLcrCurrentOffset" type="number" value="0" step="0.001" /></label>
+            <label>最大 AWG 输入 <span>Vpp</span><input id="bigLcrMaxDrive" type="number" value="2" min="0.001" max="4" step="0.01" /></label>
+            <label>最大线圈电压 <span>Vrms</span><input id="bigLcrMaxVoltage" type="number" value="20" min="0.001" step="0.1" /></label>
+            <label>最大线圈电流 <span>Arms</span><input id="bigLcrMaxCurrent" type="number" value="1" min="0.000001" step="0.001" /></label>
+            <label>最大测量频率 <span>kHz</span><input id="bigLcrMaxFrequency" type="number" value="1000" min="0.001" max="1000" step="1" /></label>
+          </div>
+          <label class="safety-ack-label"><input id="bigLcrSafetyAck" type="checkbox" />我已核对 ATA-2021B 增益、线圈电压/电流和功放保护限值</label>
+          <div id="bigLcrSafetyStatus" class="big-safety-status warn">未确认安全参数；开始按钮将保持锁定</div>
+          <div class="sweep-action-row"><button id="bigLcrStartBtn" class="sweep-start" disabled><span class="play"></span>开始大信号 LCR</button><button id="bigLcrStopBtn" class="sweep-stop" disabled>停止</button></div>
+          <div class="progress-track"><i id="bigLcrProgressBar"></i></div><small id="bigLcrProgressText" class="progress-text">尚未开始</small>
+        </section>
+
+        <section class="panel hero-control page-only" data-pages="lcr" data-lcr-mode="small">
           <div class="panel-heading">
             <div><span class="step">01</span><h2>LCR 接线与采样</h2></div>
             <label class="switch-label"><input id="lcrSimulate" type="checkbox" /><span class="switch"></span>仿真</label>
@@ -239,7 +303,7 @@
           <p class="wiring-note"><span>i</span> 只需两路采集：RF_IN1 接 Pico AWG；RF_OUT1、RF_OUT2 分别接电压/电流通道，其中任选一路兼作触发。不需要 AWG 监测或第三根触发线。测低阻抗时若 RF_OUT1 太小，可改用 RF_OUT2 触发。禁止把功放高压输出接入此板或 Pico。</p>
         </section>
 
-        <section class="panel page-only" data-pages="lcr">
+        <section class="panel page-only" data-pages="lcr" data-lcr-mode="small">
           <div class="panel-heading compact"><div><span class="step">02</span><h2>激励与扫频</h2></div><small id="lcrEstimate">—</small></div>
           <label>测量方式<select id="lcrMode"><option value="single">单频测量</option><option value="linear">线性扫频</option><option value="log">对数扫频</option></select></label>
           <div id="lcrSingleControls" class="form-grid">
@@ -265,7 +329,7 @@
           </div>
         </section>
 
-        <section class="panel page-only" data-pages="lcr">
+        <section class="panel page-only" data-pages="lcr" data-lcr-mode="small">
           <div class="panel-heading compact"><div><span class="step">03</span><h2>模拟前端与校正</h2></div><small>依据 LCR.asc，可按实装值修改</small></div>
           <div class="form-grid">
             <label>反馈电阻 Rf <span>Ω</span><input id="lcrFeedbackResistance" type="number" value="1000" min="0.001" step="1" /></label>
@@ -574,7 +638,24 @@
           </div>
         </section>
 
-        <section id="lcrResultPanel" class="scope-panel lcr-result-panel page-only" data-pages="lcr">
+        <section id="bigLcrResultPanel" class="scope-panel lcr-result-panel big-lcr-result-panel page-only" data-pages="lcr" data-lcr-mode="big">
+          <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B LARGE-SIGNAL</p><h2>大信号 LCR 结果</h2><small id="bigLcrResultPath" class="scope-interaction-help">等待首次测量</small></div></div>
+          <div class="lcr-metrics big-lcr-metrics">
+            <article><span>|Z|</span><strong id="bigLcrMagnitudeMetric">—</strong><small>Ω</small></article>
+            <article><span>Phase</span><strong id="bigLcrPhaseMetric">—</strong><small>°</small></article>
+            <article><span>Rs / Xs</span><strong id="bigLcrRxMetric">—</strong><small>Ω</small></article>
+            <article><span>Leff</span><strong id="bigLcrLeffMetric">—</strong><small id="bigLcrLeffUnit">H</small></article>
+            <article><span>Q</span><strong id="bigLcrQMetric">—</strong><small>无量纲</small></article>
+            <article><span>Vrms / Irms</span><strong id="bigLcrViMetric">—</strong><small>V / A</small></article>
+          </div>
+          <div class="big-lcr-status-grid"><div><span>安全状态</span><strong id="bigLcrSafetyMetric">—</strong></div><div><span>电压监测 SNR</span><strong id="bigLcrVoltageSnrMetric">—</strong></div><div><span>电流监测 SNR</span><strong id="bigLcrCurrentSnrMetric">—</strong></div></div>
+          <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>|Z| / Rs / Xs</span><small>频率曲线</small></div><div class="lcr-canvas-wrap"><canvas id="bigLcrImpedanceCanvas"></canvas></div></div><div><div class="subhead"><span>Leff / Q</span><small>频率曲线</small></div><div class="lcr-canvas-wrap"><canvas id="bigLcrComponentCanvas"></canvas></div></div></div>
+          <div class="subhead"><span>Voltage Monitor 波形</span><small>最近一次采集（监测端）</small></div><div class="lcr-wave-wrap"><canvas id="bigLcrVoltageWaveCanvas"></canvas></div>
+          <div class="subhead"><span>Current Monitor 波形</span><small>最近一次采集（监测端）</small></div><div class="lcr-wave-wrap"><canvas id="bigLcrCurrentWaveCanvas"></canvas></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>次数</th><th>|Z|/Ω</th><th>Phase/°</th><th>Rs/Ω</th><th>Xs/Ω</th><th>Leff/H</th><th>Q</th><th>Vrms/V</th><th>Irms/A</th><th>电压SNR/dB</th><th>电流SNR/dB</th><th>安全</th></tr></thead><tbody id="bigLcrTableBody"></tbody></table></div>
+        </section>
+
+        <section id="lcrResultPanel" class="scope-panel lcr-result-panel page-only" data-pages="lcr" data-lcr-mode="small">
           <div class="scope-toolbar"><div><p class="eyebrow">COMPLEX IMPEDANCE</p><h2>LCR 阻抗测量</h2><small id="lcrResultPath" class="scope-interaction-help">等待首次测量</small></div></div>
           <div class="lcr-metrics">
             <article><span>|Z|</span><strong id="lcrMagnitudeMetric">—</strong><small id="lcrMagnitudeMetricUnit">Ω</small></article>
@@ -718,6 +799,6 @@
         </section>
       </section>
     </main>
-    <script src="/app.js?v=20260919-lcr-frequency-units1"></script>
+    <script src="/app.js?v=20260922-big-lcr1"></script>
   </body>
 </html>

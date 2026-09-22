@@ -14,6 +14,7 @@
 - 单独扫频、单独扫周期及频率×周期二维笛卡尔扫描
 - 扫描每点重复采集、可停止、自动保存原始 NPZ、逐次 CSV 与按参数点汇总 CSV
 - 基于双通道相量拟合的 LCR/复阻抗单频与扫频测量，支持精准电阻逐频点复数校准、夹具校正和串/并联等效参数
+- `/lcr` 页面内的大信号/小信号互斥模式；大信号模式适配 ATA-2021B 的 Voltage Monitor / Current Monitor，并提供可配置换算系数、实测 RMS 安全限值和安全停止
 - 本地 Web 控制台、Tk 桌面控制界面和命令行控制
 - 无硬件仿真模式及自动测试
 
@@ -68,13 +69,19 @@ Web控制台分为五个独立地址，顶部导航可以直接切换：
 
 - <http://127.0.0.1:4824/measure>：实时测量、同步通道、触发、AWG和单次数据保存。
 - <http://127.0.0.1:4824/sweep>：单独扫频、单独扫周期、二维扫描和逐次/汇总评价。
-- <http://127.0.0.1:4824/lcr>：LCR 单频/扫频测量、Bode/Nyquist 图和等效参数。
+- <http://127.0.0.1:4824/lcr>：页面内切换 ATA-2021B 大信号 LCR 或原有小信号 LCR；大信号显示 `|Z|`、Phase、`Rs/Xs`、`Leff`、`Q`、`Vrms/Irms`、Voltage/Current Monitor 波形和安全状态，小信号的原有 Bode/Nyquist、校准和等效参数保持不变。
 - <http://127.0.0.1:4824/file-analysis>：单个NPZ/CSV数据的波形、带通、频谱、时频和空间—时间对称性分析。
 - <http://127.0.0.1:4824/sweep-analysis>：完整参数扫描归档的热图、逐点/逐次指标、原始波形和N/f重新评价。
 
 硬件、AWG和扫描设置保存在当前浏览器的本地设置中，页面切换或重启Web服务后仍可恢复；实际每次采集和扫描仍会把完整配置写入数据文件。
 
 ## LCR 复阻抗测量
+
+### ATA-2021B 大信号模式
+
+`/lcr` 默认进入“大信号测量”。Pico AWG 只输出 ATA-2021B 的低压输入，Voltage Monitor 和 Current Monitor 两个 SMA 分别回到两个 Pico ADC 通道；页面不会要求 AWG 监测端口，也不会把功放输出接入 Pico。两路监测系数可直接填写为“线圈实际电压 / Monitor V（V/V）”和“线圈实际电流 / Monitor V（A/V）”，并可设置 Current Monitor 极性。程序对监测端波形做同频最小二乘相量拟合，再计算 `Z=V/I`、`|Z|`、Phase、`Rs`、`Xs`、`Leff`、`Q`、`Vrms` 和 `Irms`。
+
+开始前必须勾选安全确认。最大 AWG 输入、最大线圈 Vrms/Arms 和最大频率在网页可调；每次采集完成后按实际监测 RMS 重新判定 `OK/WARN/TRIP`，触发 `TRIP` 会自动停止后续频点，并保留已完成的原始 NPZ、`runs.csv`、`summary.csv` 和 `big_lcr_config.json`。大信号结果单独保存在 `data\\lcr_big\\big_lcr_日期_时间_微秒`，不会覆盖小信号 `data\\lcr`。
 
 LCR 页面按 `LCR.asc`/`LCR.png` 中的双输出结构设计：AWG 接 `RF_IN1`；被测件接 `U19` 的 `HPOT–LPOT`；`RF_OUT1` 是器件电压监测，`RF_OUT2` 是反馈电阻形成的反相电流监测。只需要两个 Pico ADC 通道：`RF_OUT1` 接所选电压通道，`RF_OUT2` 接所选电流通道；其中任意一路可以兼作硬件触发，不需要 AWG 监测端口、分线或第三个触发通道。两个通道均可在 A～H 中选择，默认使用 A、B，并使用RF_OUT1触发；测量低阻抗器件时若RF_OUT1幅值太小，可切换为RF_OUT2触发。禁止把 18/20 V 电源、虚地节点或任何功放高压输出直接接到 PicoScope。
 
@@ -213,6 +220,7 @@ python -m unittest discover -s tests -v
 - `pico4824a/storage.py`：NPZ/CSV 数据保存
 - `pico4824a/sweep.py`：扫描轴、重复执行、N/f 自适应评价、排名与扫描数据归档
 - `pico4824a/lcr.py`：LCR 频率轴、稳态相量拟合、复阻抗/等效参数和测量归档
+- `pico4824a/big_signal_lcr.py`：ATA-2021B 大信号监测相量、换算系数、安全状态和独立测量归档
 - `pico4824a/analysis.py`：单文件分析、扫描归档恢复/重新评价、零相位带通、多时段频谱和派生数据导出
 - `pico4824a/time_frequency.py`：STFT、WPD和Morlet CWT时频图
 - `pico4824a/experimental_modes.py`：实验性任意双通道空间—时间对称性和端面回波匹配

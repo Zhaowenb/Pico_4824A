@@ -36,6 +36,11 @@ from .lcr import (
     discover_lcr_calibrations,
     execute_lcr,
 )
+from .big_signal_lcr import (
+    BigSignalLcrConfig,
+    BigSignalLcrOutcome,
+    execute_big_signal_lcr,
+)
 from .storage import default_stem, save_csv, save_npz
 from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
@@ -62,17 +67,20 @@ class WebControlState:
         self,
         sweep_output_root: Path | None = None,
         lcr_output_root: Path | None = None,
+        big_lcr_output_root: Path | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self.status = WebStatus()
         self.result: CaptureResult | None = None
         self.sweep_result: SweepOutcome | None = None
         self.lcr_result: LcrOutcome | None = None
+        self.big_lcr_result: BigSignalLcrOutcome | None = None
         self.device: Pico4824A | None = None
         self._hardware_device: Pico4824A | None = None
         self._worker_thread: threading.Thread | None = None
         self.sweep_output_root = sweep_output_root or PROJECT_DIR / "data" / "sweeps"
         self.lcr_output_root = lcr_output_root or PROJECT_DIR / "data" / "lcr"
+        self.big_lcr_output_root = big_lcr_output_root or PROJECT_DIR / "data" / "lcr_big"
         self._stop_event = threading.Event()
 
     def snapshot(self) -> dict[str, Any]:
@@ -88,6 +96,7 @@ class WebControlState:
                 "has_result": self.result is not None,
                 "has_sweep_result": self.sweep_result is not None,
                 "has_lcr_result": self.lcr_result is not None,
+                "has_big_lcr_result": self.big_lcr_result is not None,
             }
 
     def start_capture(self, raw: dict[str, Any]) -> int:
@@ -217,6 +226,51 @@ class WebControlState:
             args=(task_id, config, lcr, simulate, calibration_standard_ohm),
             daemon=True,
             name=f"pico-lcr-{task_id}",
+        )
+        with self._lock:
+            self._worker_thread = worker
+        worker.start()
+        return task_id
+
+    def start_big_lcr(self, raw: dict[str, Any]) -> int:
+        """Start the independent ATA-2021B large-signal LCR task."""
+        config_raw = raw.get("config")
+        big_raw = raw.get("big_lcr")
+        if not isinstance(config_raw, dict) or not isinstance(big_raw, dict):
+            raise ValueError("大信号 LCR 请求必须同时包含 config 和 big_lcr")
+        if raw.get("safety_acknowledged") is not True:
+            raise ValueError("开始大信号测量前必须确认 ATA-2021B 安全参数")
+        config_values = dict(config_raw)
+        simulate = bool(config_values.pop("simulate", False))
+        config = AcquisitionConfig.from_dict(config_values)
+        big_lcr = BigSignalLcrConfig.from_dict(big_raw)
+        with self._lock:
+            if self.status.state == "running":
+                raise RuntimeError("已有仪器任务正在运行")
+            self._stop_event.clear()
+            self.status.capture_id += 1
+            task_id = self.status.capture_id
+            self.status.state = "running"
+            self.status.task_kind = "big_lcr"
+            self.status.message = (
+                f"ATA-2021B 大信号 LCR 已启动：{len(big_lcr.frequencies_hz)} 个频点，"
+                f"共 {len(big_lcr.frequencies_hz) * big_lcr.repeats} 次采集"
+            )
+            self.status.started_at = time.time()
+            self.status.finished_at = None
+            self.status.progress = {
+                "phase": "starting",
+                "run_index": 0,
+                "total_runs": len(big_lcr.frequencies_hz) * big_lcr.repeats,
+                "point_index": 0,
+                "total_points": len(big_lcr.frequencies_hz),
+            }
+            self.big_lcr_result = None
+        worker = threading.Thread(
+            target=self._big_lcr_worker,
+            args=(task_id, config, big_lcr, simulate),
+            daemon=True,
+            name=f"pico-big-lcr-{task_id}",
         )
         with self._lock:
             self._worker_thread = worker
@@ -443,6 +497,91 @@ class WebControlState:
                 if self._worker_thread is threading.current_thread():
                     self._worker_thread = None
 
+    def _big_lcr_worker(
+        self,
+        task_id: int,
+        config: AcquisitionConfig,
+        big_lcr: BigSignalLcrConfig,
+        simulate: bool,
+    ) -> None:
+        device, temporary = self._device_for_task(simulate)
+        with self._lock:
+            self.device = device
+
+        def update(progress: dict[str, Any], result: CaptureResult | None) -> None:
+            with self._lock:
+                if self.status.capture_id != task_id:
+                    return
+                self.status.progress = progress
+                if result is not None:
+                    # /api/result/display intentionally remains the shared latest
+                    # waveform endpoint; tasks are mutually exclusive.
+                    self.result = result
+                phase = "采集" if progress["phase"] == "capturing" else "已分析并保存"
+                safety = progress.get("safety_state")
+                suffix = f"，安全状态 {safety}" if safety else ""
+                self.status.message = (
+                    f"大信号 LCR {progress['run_index']}/{progress['total_runs']}："
+                    f"{progress['frequency_hz'] / 1000:g} kHz，"
+                    f"第 {progress['repeat']}/{progress['repeats']} 次，{phase}{suffix}"
+                )
+
+        try:
+            if temporary:
+                with device:
+                    outcome = execute_big_signal_lcr(
+                        config,
+                        big_lcr,
+                        device,
+                        self.big_lcr_output_root,
+                        self._stop_event,
+                        update,
+                    )
+            else:
+                device.open()
+                outcome = execute_big_signal_lcr(
+                    config,
+                    big_lcr,
+                    device,
+                    self.big_lcr_output_root,
+                    self._stop_event,
+                    update,
+                )
+            with self._lock:
+                if self.status.capture_id == task_id:
+                    self.big_lcr_result = outcome
+                    self.status.state = "stopped" if outcome.stopped else "complete"
+                    if outcome.safety_tripped:
+                        self.status.message = (
+                            f"大信号 LCR 触发安全停止，已保留 {len(outcome.run_rows)} 次测量："
+                            f"{outcome.directory}"
+                        )
+                    elif outcome.stopped:
+                        self.status.message = (
+                            f"大信号 LCR 已停止，已保留 {len(outcome.run_rows)} 次测量："
+                            f"{outcome.directory}"
+                        )
+                    else:
+                        self.status.message = (
+                            f"大信号 LCR 完成，共 {len(outcome.run_rows)} 次测量："
+                            f"{outcome.directory}"
+                        )
+                    self.status.finished_at = time.time()
+        except Exception as exc:
+            with self._lock:
+                if self.status.capture_id == task_id:
+                    self.status.state = "stopped" if self._stop_event.is_set() else "error"
+                    self.status.message = (
+                        "大信号 LCR 已停止" if self._stop_event.is_set() else str(exc)
+                    )
+                    self.status.finished_at = time.time()
+        finally:
+            with self._lock:
+                if self.device is device:
+                    self.device = None
+                if self._worker_thread is threading.current_thread():
+                    self._worker_thread = None
+
     def stop(self) -> None:
         with self._lock:
             device = self.device
@@ -453,6 +592,7 @@ class WebControlState:
                 "sweep": "正在停止扫描",
                 "lcr": "正在停止 LCR 测量",
                 "lcr_calibration": "正在停止精准电阻校准",
+                "big_lcr": "正在停止大信号 LCR 测量",
             }.get(self.status.task_kind, "正在停止采集")
         if device is not None:
             device.stop()
@@ -559,6 +699,13 @@ class WebControlState:
             outcome = self.lcr_result
         if outcome is None:
             raise RuntimeError("尚无 LCR 测量结果")
+        return outcome.payload()
+
+    def big_lcr_result_payload(self) -> dict[str, Any]:
+        with self._lock:
+            outcome = self.big_lcr_result
+        if outcome is None:
+            raise RuntimeError("尚无大信号 LCR 测量结果")
         return outcome.payload()
 
     def lcr_calibrations_payload(self) -> dict[str, Any]:
@@ -685,6 +832,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json(self.control.sweep_result_payload())
             elif path == "/api/lcr/result":
                 self._send_json(self.control.lcr_result_payload())
+            elif path == "/api/big-lcr/result":
+                self._send_json(self.control.big_lcr_result_payload())
             elif path == "/api/lcr/calibrations":
                 self._send_json(self.control.lcr_calibrations_payload())
             elif path == "/api/sweep/run":
@@ -711,6 +860,9 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json({"task_id": task_id}, HTTPStatus.ACCEPTED)
             elif path == "/api/lcr/calibrate":
                 task_id = self.control.start_lcr_calibration(payload)
+                self._send_json({"task_id": task_id}, HTTPStatus.ACCEPTED)
+            elif path == "/api/big-lcr/start":
+                task_id = self.control.start_big_lcr(payload)
                 self._send_json({"task_id": task_id}, HTTPStatus.ACCEPTED)
             elif path == "/api/result/display":
                 max_points = max(200, min(int(payload.get("max_points", 6000)), 20_000))

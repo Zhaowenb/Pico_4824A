@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 
 from pico4824a.config import AcquisitionConfig, AwgConfig
+from pico4824a.big_signal_lcr import BigSignalLcrConfig
 from pico4824a.lcr import LcrConfig
 from pico4824a.web import PicoWebHandler, ThreadingHTTPServer, WebControlState
 
@@ -23,6 +24,7 @@ class WebApiTests(unittest.TestCase):
         self.server.control = WebControlState(
             sweep_output_root=output_root / "sweeps",
             lcr_output_root=output_root / "lcr",
+            big_lcr_output_root=output_root / "lcr_big",
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -116,6 +118,55 @@ class WebApiTests(unittest.TestCase):
         ]
         self.assertEqual(enabled, ["A", "B"])
         self.assertEqual(saved_config["base_config"]["trigger"]["source"], "A")
+
+    def test_simulated_big_signal_lcr_measurement_through_http_api(self) -> None:
+        config = AcquisitionConfig(
+            sample_rate_hz=5_000_000,
+            pre_trigger_samples=100,
+            post_trigger_samples=1000,
+        ).to_dict()
+        config["simulate"] = True
+        for name, channel in config["channels"].items():
+            channel["enabled"] = name in {"A", "B"}
+        big_lcr = asdict(BigSignalLcrConfig(
+            frequency_hz=100_000,
+            repeats=1,
+            interval_s=0.0,
+            burst_cycles=20,
+            ramp_cycles=2.0,
+            analysis_cycles=8,
+            analysis_guard_cycles=1.0,
+            awg_drive_vpp=0.5,
+            max_drive_vpp=2.0,
+            max_voltage_rms_v=20.0,
+            max_current_rms_a=1.0,
+        ))
+        reply = self.post_json(
+            "/api/big-lcr/start",
+            {"config": config, "big_lcr": big_lcr, "safety_acknowledged": True},
+        )
+        self.assertEqual(reply["task_id"], 1)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            status = self.get_json("/api/status")
+            if status["state"] != "running":
+                break
+            time.sleep(0.01)
+        self.assertEqual(status["state"], "complete", status.get("message"))
+        self.assertEqual(status["task_kind"], "big_lcr")
+        result = self.get_json("/api/big-lcr/result")
+        self.assertEqual(len(result["run_rows"]), 1)
+        self.assertEqual(len(result["summary_rows"]), 1)
+        row = result["run_rows"][0]
+        for key in (
+            "impedance_magnitude_ohm", "phase_deg", "series_resistance_ohm",
+            "series_reactance_ohm", "effective_inductance_h", "quality_factor",
+            "voltage_rms_v", "current_rms_a", "safety_state",
+        ):
+            self.assertIn(key, row)
+        saved_config = json.loads(Path(result["directory"], "big_lcr_config.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved_config["big_lcr"]["voltage_monitor_scale_v_per_v"], 1.0)
+        self.assertTrue(Path(result["directory"], "summary.csv").is_file())
 
     def test_precision_resistor_calibration_through_http_api(self) -> None:
         config = AcquisitionConfig(
@@ -258,6 +309,17 @@ class WebApiTests(unittest.TestCase):
         self.assertIn('id="lcrResistanceUnit"', html)
         self.assertIn('id="lcrCapacitanceUnit"', html)
         self.assertIn('id="lcrInductanceUnit"', html)
+        self.assertIn('id="lcrMeasurementMode"', html)
+        self.assertIn('大信号测量（ATA-2021B）', html)
+        self.assertIn('id="bigLcrStartBtn"', html)
+        self.assertIn('id="bigLcrVoltageChannel"', html)
+        self.assertIn('id="bigLcrCurrentChannel"', html)
+        self.assertIn('id="bigLcrVoltageScale"', html)
+        self.assertIn('id="bigLcrCurrentScale"', html)
+        self.assertIn('id="bigLcrSafetyAck"', html)
+        self.assertIn('id="bigLcrVoltageWaveCanvas"', html)
+        self.assertIn('id="bigLcrCurrentWaveCanvas"', html)
+        self.assertIn('id="bigLcrTableBody"', html)
         self.assertIn('滚轮：时间缩放', html)
         self.assertNotIn('id="preSamples"', html)
         self.assertNotIn('id="postSamples"', html)
@@ -278,6 +340,8 @@ class WebApiTests(unittest.TestCase):
         with urlopen(self.base + "/app.js", timeout=3) as response:
             javascript = response.read().decode("utf-8")
         self.assertIn("channelNames.map((name)", javascript)
+        self.assertIn("/api/big-lcr/start", javascript)
+        self.assertIn("mountLcrMode", javascript)
         self.assertNotIn("channelNames.slice(0, 7)", javascript)
 
     def test_simulated_frequency_sweep_through_http_api(self) -> None:
