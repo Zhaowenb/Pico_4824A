@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+# Captures, sweeps, calibration results and generated analysis artifacts stay
+# local; the repository stores only the empty data directory marker.
+data/**
+!data/.gitkeep
+# Dependencies/build caches for the optional Sites dashboard are not source.
+sites/**/node_modules/
+sites/**/.next/
+sites/**/dist/
+# This is a separate, unfinished Sites workspace with its own empty .git.
+sites/

@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>PicoScope 4824A 控制台</title>
+    <link rel="stylesheet" href="/styles.css?v=20260919-lcr-frequency-units1" />
+  </head>
+  <body data-page="measure">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><span></span><span></span><span></span></div>
+        <div>
+          <p class="eyebrow">GUIDED WAVE LAB</p>
+          <h1>PicoScope 4824A</h1>
+        </div>
+      </div>
+      <nav class="page-nav" aria-label="主功能">
+        <a href="/measure" data-nav="measure">实时测量</a>
+        <a href="/sweep" data-nav="sweep">参数扫描</a>
+        <a href="/lcr" data-nav="lcr">LCR测量</a>
+        <a href="/file-analysis" data-nav="file-analysis">单数据分析</a>
+        <a href="/sweep-analysis" data-nav="sweep-analysis">参数数据分析</a>
+      </nav>
+      <div class="connection">
+        <span id="statusDot" class="status-dot"></span>
+        <div>
+          <strong id="stateText">系统就绪</strong>
+          <small id="modeText">本机仪器服务 · 127.0.0.1</small>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-stack">
+        <section class="panel hero-control page-only" data-pages="measure">
+          <div class="panel-heading">
+            <div><span class="step">01</span><h2>采集设置</h2></div>
+            <label class="switch-label">
+              <input id="simulate" type="checkbox" />
+              <span class="switch"></span>
+              仿真
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>采样率 <span>MS/s</span><input id="sampleRate" type="number" value="20" min="0.001" max="80" step="0.1" /></label>
+            <label>默认输入量程
+              <select id="inputRange">
+                <option>10mV</option><option>20mV</option><option>50mV</option>
+                <option>100mV</option><option>200mV</option><option>500mV</option>
+                <option>1V</option><option>2V</option><option selected>5V</option>
+                <option>10V</option><option>20V</option><option>50V</option>
+              </select>
+            </label>
+            <label>采样时间 <span>μs</span><input id="captureDurationUs" type="number" value="10000" min="0.1" step="10" /></label>
+            <label>触发位置 <span>%记录长度</span><input id="triggerPositionPercent" type="number" value="10" min="0" max="99.999" step="0.1" /></label>
+          </div>
+          <div id="capturePlanSummary" class="analysis-meta">20 MS/s × 10000 μs = 200000 点/通道；触发前10%，触发后90%</div>
+          <div class="subhead"><span>同步输入通道 A–H</span><small>每通道可独立启用和设置量程</small></div>
+          <div id="channels" class="channel-grid"></div>
+        </section>
+
+        <section class="panel page-only" data-pages="measure">
+          <div class="panel-heading compact">
+            <div><span class="step">02</span><h2>硬件触发</h2></div>
+            <label class="switch-label icon-only" title="启用触发">
+              <input id="triggerEnabled" type="checkbox" checked />
+              <span class="switch"></span>
+            </label>
+          </div>
+          <div class="form-grid three">
+            <label>源<select id="triggerSource"></select></label>
+            <label>电平 <span>V</span><input id="triggerLevel" type="number" value="0.1" step="0.01" /></label>
+            <label>超时 <span>ms</span><input id="triggerTimeout" type="number" value="2000" min="0" step="100" /></label>
+          </div>
+          <p class="wiring-note"><span>!</span> AWG 或功放低压监测输出应回接至触发通道。</p>
+        </section>
+
+        <section class="panel page-only" data-pages="measure">
+          <div class="panel-heading compact">
+            <div><span class="step">03</span><h2>AWG 激励</h2></div>
+            <label class="switch-label icon-only" title="启用 AWG">
+              <input id="awgEnabled" type="checkbox" checked />
+              <span class="switch"></span>
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>波形<select id="waveform">
+              <option value="hann_burst">Hann 正弦脉冲</option>
+              <option value="hann_cancel">Hann + 主动消振</option>
+              <option value="hann_ramp_hold">Hann + 爬升保持</option>
+              <option value="sine">正弦</option><option value="square">方波</option><option value="triangle">三角波</option>
+            </select></label>
+            <label>频率 <span>kHz</span><input id="awgFrequency" type="number" value="100" min="0.001" max="1000" step="1" /></label>
+            <label>周期数<input id="awgCycles" type="number" value="5" min="1" step="1" /></label>
+            <label>峰峰值 <span>V</span><input id="awgVpp" type="number" value="2" min="0.001" max="4" step="0.1" /></label>
+            <label>偏置 <span>V</span><input id="awgOffset" type="number" value="0" min="-2" max="2" step="0.1" /></label>
+            <label>AWG 缓冲点数<input id="awgBufferSamples" type="number" value="8192" min="10" max="16384" step="1" /></label>
+          </div>
+
+          <div id="cancelControls" class="awg-mode-controls" hidden>
+            <div class="subhead"><span>主动消振参数</span><small>先手动调节，按拖尾能量优化</small></div>
+            <div class="form-grid">
+              <label>消振幅值 <span>% Vpk</span><input id="cancelAmplitude" type="number" value="25" min="0" max="100" step="1" /></label>
+              <label>消振频率 <span>kHz</span><input id="cancelFrequency" type="number" value="60" min="0.001" max="1000" step="1" /></label>
+              <label>消振周期数<input id="cancelCycles" type="number" value="4" min="1" step="1" /></label>
+              <label>消振相位 <span>°</span><input id="cancelPhase" type="number" value="180" min="-360" max="360" step="5" /></label>
+              <label>消振延迟 <span>主频周期</span><input id="cancelDelayCycles" type="number" value="0" min="0" max="20" step="0.25" /></label>
+            </div>
+          </div>
+
+          <div id="rampControls" class="awg-mode-controls" hidden>
+            <div class="subhead"><span>线性爬升与保持</span><small>0 V → +Vpk → 0 V</small></div>
+            <div class="form-grid">
+              <label>上升时间 <span>主频周期</span><input id="rampUpCycles" type="number" value="3" min="0.1" max="100" step="0.1" /></label>
+              <label>保持时间 <span>主频周期</span><input id="holdCycles" type="number" value="8" min="0" max="1000" step="0.5" /></label>
+              <label>下降时间 <span>主频周期</span><input id="rampDownCycles" type="number" value="3" min="0.1" max="100" step="0.1" /></label>
+              <label>稳定电压 <span>% +Vpk</span><input id="holdLevel" type="number" value="100" min="0" max="100" step="1" /></label>
+            </div>
+          </div>
+
+          <div class="awg-preview">
+            <div class="subhead"><span>实际 AWG 缓冲波形预览</span><small id="awgPreviewMeta">—</small></div>
+            <canvas id="awgPreviewCanvas" aria-label="AWG 输出波形预览"></canvas>
+          </div>
+          <p class="wiring-note"><span>!</span> ATA-2021B 支持直流，但请按功放增益核算输出峰值；禁止超过压电片和功放允许范围。</p>
+        </section>
+
+        <section class="panel page-only" data-pages="measure">
+          <div class="panel-heading compact">
+            <div><span class="step">DISPLAY</span><h2>实时显示滤波</h2></div>
+            <label class="switch-label icon-only" title="启用实时显示带通">
+              <input id="measureFilterEnabled" type="checkbox" />
+              <span class="switch"></span>
+            </label>
+          </div>
+          <div class="form-grid three">
+            <label>下限 <span>kHz</span><input id="measureBandLow" type="number" value="20" min="0" step="1" /></label>
+            <label>上限 <span>kHz</span><input id="measureBandHigh" type="number" value="180" min="0.001" step="1" /></label>
+            <label>过渡带 <span>kHz</span><input id="measureTransition" type="number" value="5" min="0" step="0.5" /></label>
+          </div>
+          <div id="measureFilterStatus" class="analysis-meta">未启用；当前显示原始波形</div>
+          <p class="wiring-note"><span>i</span> 仅改变实时画布显示；保存的 NPZ/CSV 始终是原始采集数据。</p>
+        </section>
+
+        <section class="panel sweep-context page-only" data-pages="sweep">
+          <div class="panel-heading compact">
+            <div><span class="step">BASE</span><h2>当前测量与激励配置</h2></div>
+            <a href="/measure" data-route-link="measure">前往修改</a>
+          </div>
+          <div id="sweepBaseSummary" class="base-summary"></div>
+          <p class="wiring-note"><span>i</span> 扫描使用实时测量页保存的采样率、通道、触发、AWG幅值及波形设置。</p>
+        </section>
+
+        <section class="panel sweep-control-panel page-only" data-pages="sweep">
+          <div class="panel-heading compact">
+            <div><span class="step">04</span><h2>频率与周期扫描</h2></div>
+            <small id="sweepEstimate">—</small>
+          </div>
+          <label>扫描方式<select id="sweepMode">
+            <option value="frequency">单独扫频</option>
+            <option value="cycles">单独扫周期</option>
+            <option value="grid">频率 × 周期二维扫描</option>
+          </select></label>
+          <div id="frequencySweepControls" class="sweep-axis">
+            <div class="subhead"><span>频率轴</span><small>停止值会被包含</small></div>
+            <div class="form-grid three">
+              <label>起始 <span>kHz</span><input id="frequencyStart" type="number" value="60" min="0.001" max="1000" step="1" /></label>
+              <label>停止 <span>kHz</span><input id="frequencyStop" type="number" value="100" min="0.001" max="1000" step="1" /></label>
+              <label>步长 <span>kHz</span><input id="frequencyStep" type="number" value="10" min="0.001" max="1000" step="1" /></label>
+            </div>
+          </div>
+          <div id="cycleSweepControls" class="sweep-axis" hidden>
+            <div class="subhead"><span>周期轴</span><small>整数周期</small></div>
+            <div class="form-grid three">
+              <label>起始<input id="cyclesStart" type="number" value="5" min="1" step="1" /></label>
+              <label>停止<input id="cyclesStop" type="number" value="15" min="1" step="1" /></label>
+              <label>步长<input id="cyclesStep" type="number" value="1" min="1" step="1" /></label>
+            </div>
+          </div>
+          <div class="subhead"><span>重复与冷却</span><small>每次均保存原始 NPZ</small></div>
+          <div class="form-grid">
+            <label>每点重复次数<input id="sweepRepeats" type="number" value="3" min="1" max="100" step="1" /></label>
+            <label>采集间隔 <span>s</span><input id="sweepInterval" type="number" value="1" min="0" max="3600" step="0.1" /></label>
+          </div>
+          <div class="subhead"><span>N/f 自适应评价</span><small id="sweepReceiverSummary">A–H可多选</small></div>
+          <label>发射监测通道
+            <select id="sweepTransmitterChannel">
+              <option value="NONE">无（全部通道均可评价）</option>
+            </select>
+          </label>
+          <div id="sweepReceiverChannels" class="sweep-receiver-grid" aria-label="扫描评价接收通道"></div>
+          <div class="evaluation-grid">
+            <label>评价频带下限 <span>kHz</span><input id="metricBandLow" type="number" value="20" min="0.1" max="5000" step="1" /></label>
+            <label>评价频带上限 <span>kHz</span><input id="metricBandHigh" type="number" value="180" min="0.2" max="5000" step="1" /></label>
+            <label>直达波搜索起点 <span>μs</span><input id="directSearchStart" type="number" value="90" min="0" step="1" /></label>
+            <label>直达波搜索终点 <span>μs</span><input id="directSearchEnd" type="number" value="440" min="0" step="1" /></label>
+            <label>反射最小延迟 <span>μs</span><input id="reflectionDelayMin" type="number" value="420" min="1" step="1" /></label>
+            <label>反射最大延迟 <span>μs</span><input id="reflectionDelayMax" type="number" value="570" min="1" step="1" /></label>
+            <label>N/f 主窗倍率<input id="packetWindowScale" type="number" value="1" min="0.25" max="3" step="0.05" /></label>
+            <label>直达后保护 <span>周期</span><input id="tailGuardAfter" type="number" value="0" min="0" max="20" step="0.25" /></label>
+            <label>反射前保护 <span>周期</span><input id="tailGuardBefore" type="number" value="0" min="0" max="20" step="0.25" /></label>
+            <label>噪声窗起点 <span>μs</span><input id="noiseStart" type="number" value="-95" step="1" /></label>
+            <label>噪声窗终点 <span>μs</span><input id="noiseEnd" type="number" value="-20" step="1" /></label>
+            <label>稳定阈值 <span>%峰值</span><input id="settlingThreshold" type="number" value="10" min="1" max="99" step="1" /></label>
+            <label>稳定保持 <span>周期</span><input id="settlingHoldCycles" type="number" value="2" min="0.25" max="20" step="0.25" /></label>
+          </div>
+          <div class="subhead"><span>推荐方案约束</span><small>结果出来后可实时调节</small></div>
+          <div class="evaluation-grid recommendation-grid">
+            <label>最大 N/f <span>μs</span><input id="recommendationMaxDuration" type="number" value="100" min="1" step="1" /></label>
+            <label>平衡方案最低强度 <span>dB</span><input id="recommendationMinStrength" type="number" value="-12" max="0" step="0.5" /></label>
+            <label>强信号最低强度 <span>dB</span><input id="recommendationStrongMinStrength" type="number" value="-6" max="0" step="0.5" /></label>
+            <label>最低反射 SNR <span>dB</span><input id="recommendationMinReflectionSnr" type="number" value="25" min="0" step="1" /></label>
+          </div>
+          <p class="wiring-note"><span>i</span> A–H均可作为评价、显示和分析通道。评价通道必须已启用，且不能与当前发射监测通道重复；D/H配置可选择D评价、H监测与触发。信号处理参数对下一次扫描生效。</p>
+          <div class="sweep-action-row">
+            <button id="sweepBtn" class="sweep-start"><span class="play"></span>开始自动扫描</button>
+            <button id="sweepStopBtn" class="sweep-stop" disabled>停止扫描</button>
+          </div>
+          <div class="progress-track"><i id="sweepProgressBar"></i></div>
+          <small id="sweepProgressText" class="progress-text">尚未开始扫描</small>
+        </section>
+
+        <section class="panel hero-control page-only" data-pages="lcr">
+          <div class="panel-heading">
+            <div><span class="step">01</span><h2>LCR 接线与采样</h2></div>
+            <label class="switch-label"><input id="lcrSimulate" type="checkbox" /><span class="switch"></span>仿真</label>
+          </div>
+          <div class="form-grid">
+            <label>采样率 <span>MS/s</span><input id="lcrSampleRate" type="number" value="20" min="0.001" max="80" step="0.1" /></label>
+            <label>所选输出触发电平 <span>V</span><input id="lcrTriggerLevel" type="number" value="0.02" step="0.005" /></label>
+            <label>采集触发来源<select id="lcrTriggerSignal"><option value="voltage" selected>RF_OUT1（电压）</option><option value="current">RF_OUT2（电流）</option></select></label>
+            <label>电压输出 RF_OUT1<select id="lcrVoltageChannel"></select></label>
+            <label>电压通道量程<select id="lcrVoltageRange"></select></label>
+            <label>电流输出 RF_OUT2<select id="lcrCurrentChannel"></select></label>
+            <label>电流通道量程<select id="lcrCurrentRange"></select></label>
+          </div>
+          <p class="wiring-note"><span>i</span> 只需两路采集：RF_IN1 接 Pico AWG；RF_OUT1、RF_OUT2 分别接电压/电流通道，其中任选一路兼作触发。不需要 AWG 监测或第三根触发线。测低阻抗时若 RF_OUT1 太小，可改用 RF_OUT2 触发。禁止把功放高压输出接入此板或 Pico。</p>
+        </section>
+
+        <section class="panel page-only" data-pages="lcr">
+          <div class="panel-heading compact"><div><span class="step">02</span><h2>激励与扫频</h2></div><small id="lcrEstimate">—</small></div>
+          <label>测量方式<select id="lcrMode"><option value="single">单频测量</option><option value="linear">线性扫频</option><option value="log">对数扫频</option></select></label>
+          <div id="lcrSingleControls" class="form-grid">
+            <label>测量频率 <span>kHz</span><input id="lcrFrequency" type="number" value="100" min="0.001" max="1000" step="1" /></label>
+          </div>
+          <div id="lcrSweepControls" hidden>
+            <div class="form-grid three">
+              <label>起始 <span>kHz</span><input id="lcrFrequencyStart" type="number" value="20" min="0.001" max="1000" step="1" /></label>
+              <label>停止 <span>kHz</span><input id="lcrFrequencyStop" type="number" value="200" min="0.001" max="1000" step="1" /></label>
+              <label id="lcrLinearStepLabel">步长 <span>kHz</span><input id="lcrFrequencyStep" type="number" value="5" min="0.001" step="1" /></label>
+              <label id="lcrLogPointsLabel" hidden>每十倍频程点数<input id="lcrPointsPerDecade" type="number" value="12" min="1" max="200" step="1" /></label>
+            </div>
+          </div>
+          <div class="subhead"><span>平顶正弦突发</span><small>余弦缓升 → 稳态 → 余弦缓降</small></div>
+          <div class="form-grid">
+            <label>激励幅值 <span>Vpp</span><input id="lcrVpp" type="number" value="1" min="0.001" max="4" step="0.1" /></label>
+            <label>总周期数<input id="lcrBurstCycles" type="number" value="40" min="8" step="1" /></label>
+            <label>缓升/缓降 <span>周期</span><input id="lcrRampCycles" type="number" value="3" min="0" step="0.5" /></label>
+            <label>拟合周期数<input id="lcrAnalysisCycles" type="number" value="16" min="2" step="1" /></label>
+            <label>拟合保护 <span>周期</span><input id="lcrGuardCycles" type="number" value="2" min="0" step="0.5" /></label>
+            <label>每频点重复<input id="lcrRepeats" type="number" value="3" min="1" max="100" step="1" /></label>
+            <label>测量间隔 <span>s</span><input id="lcrInterval" type="number" value="0.2" min="0" max="3600" step="0.1" /></label>
+          </div>
+        </section>
+
+        <section class="panel page-only" data-pages="lcr">
+          <div class="panel-heading compact"><div><span class="step">03</span><h2>模拟前端与校正</h2></div><small>依据 LCR.asc，可按实装值修改</small></div>
+          <div class="form-grid">
+            <label>反馈电阻 Rf <span>Ω</span><input id="lcrFeedbackResistance" type="number" value="1000" min="0.001" step="1" /></label>
+            <label>RF_OUT1 增益 Gv<input id="lcrVoltageGain" type="number" value="1.993377" min="0.001" step="0.001" /></label>
+            <label>RF_OUT2 增益 Gi<input id="lcrCurrentGain" type="number" value="1.993377" min="0.001" step="0.001" /></label>
+            <label>电流极性<select id="lcrCurrentPolarity"><option value="-1" selected>反相（原理图默认）</option><option value="1">同相</option></select></label>
+            <label>阻抗幅值校正<input id="lcrImpedanceScale" type="number" value="1" min="0.000001" step="0.0001" /></label>
+            <label>相位校正 <span>°</span><input id="lcrPhaseCorrection" type="number" value="0" step="0.01" /></label>
+            <label>串联残余 R <span>Ω</span><input id="lcrSeriesR" type="number" value="0" step="0.001" /></label>
+            <label>串联残余 X <span>Ω</span><input id="lcrSeriesX" type="number" value="0" step="0.001" /></label>
+            <label>并联残余 G <span>S</span><input id="lcrParallelG" type="number" value="0" step="0.000000001" /></label>
+            <label>并联残余 B <span>S</span><input id="lcrParallelB" type="number" value="0" step="0.000000001" /></label>
+          </div>
+          <p class="wiring-note"><span>!</span> Rf 必须填写 R2_1—R2_2 实际安装的反馈电阻，不是右侧候选电阻列表中的任意默认值。</p>
+          <div class="subhead"><span>精准电阻复数校准</span><small>逐频点修正实部与虚部</small></div>
+          <div class="form-grid">
+            <label>标准电阻实测值 <span>Ω</span><input id="lcrCalibrationResistance" type="number" value="1000" min="0.000001" step="0.001" /></label>
+            <label>测量时使用的校准<select id="lcrCalibrationFile"><option value="">不使用校准</option></select></label>
+          </div>
+          <p class="wiring-note"><span>i</span> 校准时把精准电阻接到 DUT 位置，保持通道、量程、采样率、Rf、增益、极性和激励幅值不变。软件按当前频率表测量并生成 K(f)=R标准/Z测量，后续同时修正阻抗实部和虚部。单电阻校准不是开路/短路/负载三标准校准。</p>
+          <small id="lcrCalibrationStatus" class="progress-text">尚无校准信息</small>
+          <div class="lcr-action-row"><button id="lcrCalibrateBtn" class="secondary">测量标准电阻并生成校准</button><button id="lcrStartBtn" class="sweep-start"><span class="play"></span>开始 LCR 测量</button><button id="lcrStopBtn" class="sweep-stop" disabled>停止</button></div>
+          <div class="progress-track"><i id="lcrProgressBar"></i></div><small id="lcrProgressText" class="progress-text">尚未开始</small>
+        </section>
+
+        <section class="panel analysis-source-panel page-only" data-pages="file-analysis">
+          <div class="panel-heading compact">
+            <div><span class="step">01</span><h2>数据源</h2></div>
+            <small>NPZ / CSV</small>
+          </div>
+          <label>文件或文件夹完整路径
+            <div class="inline-input">
+              <input id="analysisPath" type="text" value="F:\Project\01guided_waves\software\Pico_4824A\data" />
+              <button id="analysisBrowseBtn">读取</button>
+            </div>
+          </label>
+          <label class="block-label">目录内数据文件
+            <select id="analysisFileList" size="7"></select>
+          </label>
+          <div id="analysisMeta" class="analysis-meta">尚未加载数据</div>
+        </section>
+
+        <section class="panel page-only" data-pages="file-analysis">
+          <div class="panel-heading compact">
+            <div><span class="step">02</span><h2>波形与带通</h2></div>
+            <label class="switch-label icon-only" title="启用带通">
+              <input id="analysisFilterEnabled" type="checkbox" />
+              <span class="switch"></span>
+            </label>
+          </div>
+          <div class="form-grid three">
+            <label>下限 <span>kHz</span><input id="analysisBandLow" type="number" value="60" min="0" step="1" /></label>
+            <label>上限 <span>kHz</span><input id="analysisBandHigh" type="number" value="90" min="0.001" step="1" /></label>
+            <label>过渡带 <span>kHz</span><input id="analysisTransition" type="number" value="5" min="0" step="0.5" /></label>
+          </div>
+          <div class="analysis-checks">
+            <label><input id="analysisShowRaw" type="checkbox" checked />原始</label>
+            <label><input id="analysisShowFiltered" type="checkbox" />带通后</label>
+          </div>
+          <div class="subhead"><span>显示通道</span><small>单击选择，双击独显</small></div>
+          <div id="analysisChannels" class="analysis-channel-grid"></div>
+          <div class="subhead"><span>时间与幅值</span><small>画布支持滚轮缩放、拖动平移</small></div>
+          <div class="form-grid">
+            <label>起点 <span>μs</span><input id="analysisTimeStart" type="number" value="-100" step="1" /></label>
+            <label>终点 <span>μs</span><input id="analysisTimeEnd" type="number" value="900" step="1" /></label>
+            <label>排列方式<select id="analysisLayout"><option value="stacked">分通道</option><option value="overlay">叠加</option></select></label>
+            <label>幅值缩放<select id="analysisAmplitudeMode"><option value="auto">自动</option><option value="manual">手动</option></select></label>
+            <label>幅值下限 <span>V</span><input id="analysisAmpMin" type="number" value="-0.01" step="0.001" disabled /></label>
+            <label>幅值上限 <span>V</span><input id="analysisAmpMax" type="number" value="0.01" step="0.001" disabled /></label>
+          </div>
+          <div class="analysis-button-row">
+            <button id="analysisApplyBtn" class="accent-button">应用显示</button>
+            <button id="analysisResetViewBtn">全时段</button>
+          </div>
+        </section>
+
+        <section class="panel page-only" data-pages="file-analysis">
+          <div class="panel-heading compact">
+            <div><span class="step">03</span><h2>多时段频谱</h2></div>
+            <button id="addSpectrumWindowBtn" class="small-button">＋时段</button>
+          </div>
+          <div class="form-grid">
+            <label>频谱数据<select id="spectrumSource"><option value="filtered">带通后</option><option value="raw">原始</option></select></label>
+            <label>频谱类型<select id="spectrumMode"><option value="amplitude">幅值谱</option><option value="psd">功率谱密度</option></select></label>
+            <label>窗函数<select id="spectrumWindowFunction"><option value="hann">Hann</option><option value="blackman">Blackman</option><option value="rectangular">矩形</option></select></label>
+            <label>纵轴<select id="spectrumScale"><option value="db">dB</option><option value="linear">线性</option></select></label>
+            <label>频率起点 <span>kHz</span><input id="spectrumFreqMin" type="number" value="0" min="0" step="1" /></label>
+            <label>频率终点 <span>kHz</span><input id="spectrumFreqMax" type="number" value="200" min="0.001" step="1" /></label>
+          </div>
+          <div id="spectrumWindows" class="spectrum-window-list"></div>
+          <div class="analysis-button-row">
+            <button id="exportFilteredNpzBtn">导出带通 NPZ</button>
+            <button id="exportFilteredCsvBtn">导出带通 CSV</button>
+          </div>
+          <p class="wiring-note"><span>i</span> 带通和频谱均为派生分析；原始文件永不覆盖。不同时间窗使用相同频率坐标，可叠加比较。</p>
+        </section>
+
+        <section class="panel page-only" data-pages="file-analysis">
+          <div class="panel-heading compact">
+            <div><span class="step">04</span><h2>时频图</h2></div>
+            <small>STFT / WPD / CWT</small>
+          </div>
+          <div class="form-grid">
+            <label>方法<select id="timeFrequencyMethod"><option value="stft">STFT</option><option value="wpd">WPD</option><option value="cwt">CWT</option></select></label>
+            <label>通道<select id="timeFrequencyChannel"></select></label>
+            <label>时间起点 <span>μs</span><input id="timeFrequencyStart" type="number" value="100" step="1" /></label>
+            <label>时间终点 <span>μs</span><input id="timeFrequencyEnd" type="number" value="800" step="1" /></label>
+            <label>频率下限 <span>kHz</span><input id="timeFrequencyMin" type="number" value="20" min="0" step="1" /></label>
+            <label>频率上限 <span>kHz</span><input id="timeFrequencyMax" type="number" value="180" min="0.001" step="1" /></label>
+            <label>动态范围下限 <span>dB</span><input id="timeFrequencyFloor" type="number" value="-60" min="-120" max="-10" step="5" /></label>
+          </div>
+          <div id="stftControls" class="method-controls">
+            <div class="subhead"><span>STFT参数</span><small>窗长决定时间/频率分辨率</small></div>
+            <div class="form-grid">
+              <label>窗长度 <span>μs</span><input id="stftWindowUs" type="number" value="80" min="0.1" step="5" /></label>
+              <label>重叠率 <span>%</span><input id="stftOverlap" type="number" value="85" min="0" max="97" step="1" /></label>
+              <label>FFT点数 <span>0=自动</span><input id="stftFftSamples" type="number" value="0" min="0" step="256" /></label>
+              <label>窗函数<select id="stftWindowFunction"><option value="hann">Hann</option><option value="blackman">Blackman</option><option value="rectangular">矩形</option></select></label>
+            </div>
+          </div>
+          <div id="wpdControls" class="method-controls" hidden>
+            <div class="subhead"><span>WPD参数</span><small>频带数 = 2^层数</small></div>
+            <div class="form-grid">
+              <label>分解层数 <span>0=自动</span><input id="wpdLevel" type="number" value="0" min="0" max="12" step="1" /></label>
+              <label>小波<select id="wpdWavelet"><option value="db4">Daubechies 4</option><option value="haar">Haar</option></select></label>
+            </div>
+          </div>
+          <div id="cwtControls" class="method-controls" hidden>
+            <div class="subhead"><span>CWT参数</span><small>复Morlet连续小波</small></div>
+            <div class="form-grid">
+              <label>频率点数<input id="cwtBins" type="number" value="72" min="16" max="160" step="8" /></label>
+              <label>Morlet ω0<input id="cwtOmega0" type="number" value="6" min="4" max="12" step="0.5" /></label>
+            </div>
+            <div class="analysis-checks"><label><input id="cwtLogFrequency" type="checkbox" />对数频率轴</label></div>
+          </div>
+          <button id="calculateTimeFrequencyBtn" class="sweep-start">计算时频图</button>
+        </section>
+
+        <section class="panel experimental-panel page-only" data-pages="file-analysis">
+          <div class="panel-heading compact">
+            <div><span class="test-badge">TEST</span><h2>空间—时间对称性分析</h2></div>
+            <small>不参与正式评价</small>
+          </div>
+          <p class="experimental-warning">可从A–H中任选两个实际采集通道。分析包含空间共模/差模、时间对齐、分时窗对称性和端面相似度；当前结果不自动判定缺陷。</p>
+          <div class="subhead"><span>通道对</span><small>A–H任意两个已加载通道</small></div>
+          <div class="form-grid">
+            <label>参考通道<select id="modeReferenceChannel"></select></label>
+            <label>比较通道<select id="modeComparisonChannel"></select></label>
+            <label>时间对称滑窗 <span>μs</span><input id="modeTemporalWindow" type="number" value="20" min="0.1" step="1" /></label>
+          </div>
+          <div class="subhead"><span>直达波校准窗</span><small>自动补偿增益、极性与微小时差</small></div>
+          <div class="form-grid">
+            <label>起点 <span>μs</span><input id="modeDirectStart" type="number" value="150" step="1" /></label>
+            <label>终点 <span>μs</span><input id="modeDirectEnd" type="number" value="270" step="1" /></label>
+            <label>最大对齐 <span>μs</span><input id="modeMaxShift" type="number" value="2" min="0" max="20" step="0.1" /></label>
+          </div>
+          <div class="subhead"><span>候选回波搜索窗</span><small>位于直达波与端面模板之间</small></div>
+          <div class="form-grid">
+            <label>起点 <span>μs</span><input id="modeSearchStart" type="number" value="270" step="1" /></label>
+            <label>终点 <span>μs</span><input id="modeSearchEnd" type="number" value="620" step="1" /></label>
+            <label>候选间隔 <span>μs</span><input id="modeCandidateSeparation" type="number" value="30" min="1" step="1" /></label>
+          </div>
+          <div class="subhead"><span>端面回波模板窗</span><small>允许正向或反向减幅匹配</small></div>
+          <div class="form-grid">
+            <label>起点 <span>μs</span><input id="modeEndStart" type="number" value="630" step="1" /></label>
+            <label>终点 <span>μs</span><input id="modeEndEnd" type="number" value="760" step="1" /></label>
+            <label>候选数量<input id="modeCandidateCount" type="number" value="6" min="1" max="20" step="1" /></label>
+          </div>
+          <button id="calculateModesBtn" class="sweep-start test-action">运行实验分析</button>
+        </section>
+
+        <section class="panel analysis-source-panel page-only" data-pages="sweep-analysis">
+          <div class="panel-heading compact">
+            <div><span class="step">01</span><h2>参数扫描归档</h2></div>
+            <small>sweep文件夹</small>
+          </div>
+          <label>扫描文件夹完整路径
+            <div class="inline-input">
+              <input id="archivePath" type="text" value="F:\Project\01guided_waves\software\Pico_4824A\data\sweeps" />
+              <button id="archiveLoadBtn">读取</button>
+            </div>
+          </label>
+          <div id="archiveLoadMeta" class="analysis-meta">请选择包含 sweep_config.json、runs.csv、summary.csv 和 raw 的扫描文件夹</div>
+        </section>
+
+        <section class="panel page-only" data-pages="sweep-analysis">
+          <div class="panel-heading compact">
+            <div><span class="step">02</span><h2>N/f重新评价</h2></div>
+            <small>不改写原始文件</small>
+          </div>
+          <label>发射监测通道<select id="archiveTransmitterChannel"><option value="NONE">无</option></select></label>
+          <div class="subhead"><span>评价接收通道 A–H</span><small id="archiveReceiverSummary">尚未加载</small></div>
+          <div id="archiveReceiverChannels" class="sweep-receiver-grid"></div>
+          <div class="evaluation-grid">
+            <label>评价频带下限 <span>kHz</span><input id="archiveMetricBandLow" type="number" value="20" min="0.1" step="1" /></label>
+            <label>评价频带上限 <span>kHz</span><input id="archiveMetricBandHigh" type="number" value="180" min="0.2" step="1" /></label>
+            <label>直达搜索起点 <span>μs</span><input id="archiveDirectStart" type="number" value="90" step="1" /></label>
+            <label>直达搜索终点 <span>μs</span><input id="archiveDirectEnd" type="number" value="440" step="1" /></label>
+            <label>反射最小延迟 <span>μs</span><input id="archiveReflectionMin" type="number" value="420" min="1" step="1" /></label>
+            <label>反射最大延迟 <span>μs</span><input id="archiveReflectionMax" type="number" value="570" min="1" step="1" /></label>
+            <label>N/f主窗倍率<input id="archivePacketScale" type="number" value="1" min="0.25" max="3" step="0.05" /></label>
+            <label>直达后保护 <span>周期</span><input id="archiveTailAfter" type="number" value="0" min="0" max="20" step="0.25" /></label>
+            <label>反射前保护 <span>周期</span><input id="archiveTailBefore" type="number" value="0" min="0" max="20" step="0.25" /></label>
+            <label>噪声窗起点 <span>μs</span><input id="archiveNoiseStart" type="number" value="-95" step="1" /></label>
+            <label>噪声窗终点 <span>μs</span><input id="archiveNoiseEnd" type="number" value="-20" step="1" /></label>
+            <label>稳定阈值 <span>%峰值</span><input id="archiveSettlingThreshold" type="number" value="10" min="1" max="99" step="1" /></label>
+            <label>稳定保持 <span>周期</span><input id="archiveSettlingHold" type="number" value="2" min="0.25" max="20" step="0.25" /></label>
+          </div>
+          <div class="subhead"><span>推荐约束</span><small>实时重排，不重算波形</small></div>
+          <div class="evaluation-grid recommendation-grid">
+            <label>最大 N/f <span>μs</span><input id="archiveRecommendationDuration" type="number" value="100" min="1" step="1" /></label>
+            <label>平衡最低强度 <span>dB</span><input id="archiveRecommendationStrength" type="number" value="-12" max="0" step="0.5" /></label>
+            <label>强信号最低强度 <span>dB</span><input id="archiveRecommendationStrong" type="number" value="-6" max="0" step="0.5" /></label>
+            <label>最低反射 SNR <span>dB</span><input id="archiveRecommendationSnr" type="number" value="25" min="0" step="1" /></label>
+          </div>
+          <button id="archiveReevaluateBtn" class="sweep-start">用以上参数重新评价全部原始采集</button>
+        </section>
+
+        <section class="action-panel page-only" data-pages="measure">
+          <button id="captureBtn" class="primary"><span class="play"></span>开始同步采集</button>
+          <button id="stopBtn" class="secondary" disabled>停止</button>
+        </section>
+      </aside>
+
+      <section class="monitor-stack">
+        <section class="metrics page-only" data-pages="measure">
+          <article><span>采样点</span><strong id="sampleMetric">—</strong><small>每通道</small></article>
+          <article><span>实际采样率</span><strong id="rateMetric">—</strong><small>MS/s</small></article>
+          <article><span>采样间隔</span><strong id="intervalMetric">—</strong><small>ns</small></article>
+          <article><span>输入状态</span><strong id="overflowMetric">正常</strong><small>过量程检测</small></article>
+        </section>
+
+        <section class="scope-panel page-only" data-pages="measure">
+          <div class="scope-toolbar">
+            <div>
+              <p class="eyebrow">SYNCHRONOUS ACQUISITION</p>
+              <h2>八通道波形</h2>
+              <small class="scope-interaction-help">滚轮：时间缩放　拖动：时间平移　Shift＋滚轮：幅值缩放　双击：恢复全时段</small>
+            </div>
+            <div class="scope-actions">
+              <button id="saveNpz" disabled>保存 NPZ</button>
+              <button id="saveCsv" disabled>保存 CSV</button>
+            </div>
+          </div>
+          <div class="legend" id="legend"></div>
+          <div class="canvas-wrap">
+            <canvas id="scopeCanvas"></canvas>
+            <div id="emptyState" class="empty-state">
+              <div class="pulse-ring"><i></i></div>
+              <strong>等待首次采集</strong>
+              <span>可先启用仿真模式检查完整流程</span>
+            </div>
+          </div>
+          <div class="timebar"><span id="timeStart">—</span><span class="trigger-mark">触发点 t = 0</span><span id="timeEnd">—</span></div>
+        </section>
+
+        <section id="sweepResultPanel" class="scope-panel sweep-result-panel page-only" data-pages="sweep" hidden>
+          <div class="scope-toolbar">
+            <div>
+              <p class="eyebrow">PARAMETER SWEEP</p>
+              <h2>拖尾评价结果</h2>
+            </div>
+            <div class="result-controls">
+              <div class="view-tabs">
+                <button id="summaryViewBtn" class="active">参数点汇总</button>
+                <button id="runsViewBtn">每次采集</button>
+              </div>
+              <label id="sweepMetricLabel">显示指标<select id="sweepMetric">
+                <option value="tail_to_direct_db">拖尾 / 直达波 (dB)</option>
+                <option value="reflection_to_direct_db">端面反射 / 直达波 (dB)</option>
+                <option value="quality_db">综合质量 (dB)</option>
+                <option value="strength_db_from_max">相对信号强度 (dB)</option>
+                <option value="nominal_duration_us">N/f 理论时长 (μs)</option>
+                <option value="settling_to_threshold_us">稳定时间 (μs)</option>
+                <option value="receiver_tail_rms_v">拖尾 RMS (V)</option>
+              </select></label>
+            </div>
+          </div>
+          <p id="sweepPath" class="result-path">—</p>
+          <div id="sweepSummaryView">
+            <div id="evaluationSummaryCards" class="evaluation-summary-cards"></div>
+            <div class="sweep-canvas-wrap"><canvas id="sweepCanvas"></canvas></div>
+            <div class="result-table-wrap">
+              <table>
+                <thead><tr><th>频率 / kHz</th><th>周期</th><th>N/f / μs</th><th>完成次数</th><th>拖尾/直达 / dB</th><th>反射/直达 / dB</th><th>质量 / dB</th><th>相对强度 / dB</th><th>反射 SNR / dB</th></tr></thead>
+                <tbody id="sweepTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="sweepRunsView" hidden>
+            <div class="run-wave-heading">
+              <strong id="sweepRunTitle">点击下表中的“查看波形”</strong>
+              <small id="sweepRunFile">每一次重复采集都可以查看原始波形；评价通道由扫描配置决定</small>
+            </div>
+            <div class="sweep-run-canvas-wrap">
+              <canvas id="sweepRunCanvas"></canvas>
+              <div id="sweepRunEmpty" class="run-empty">尚未选择采集记录</div>
+            </div>
+            <div class="legend" id="sweepRunLegend"></div>
+            <div class="result-table-wrap run-table-wrap">
+              <table>
+                <thead><tr><th>序号</th><th>频率 / kHz</th><th>周期</th><th>N/f / μs</th><th>重复</th><th>拖尾/直达 / dB</th><th>反射/直达 / dB</th><th>质量 / dB</th><th>评价通道</th><th>各通道拖尾 / dB</th><th>原始文件</th><th></th></tr></thead>
+                <tbody id="sweepRunsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="lcrResultPanel" class="scope-panel lcr-result-panel page-only" data-pages="lcr">
+          <div class="scope-toolbar"><div><p class="eyebrow">COMPLEX IMPEDANCE</p><h2>LCR 阻抗测量</h2><small id="lcrResultPath" class="scope-interaction-help">等待首次测量</small></div></div>
+          <div class="lcr-metrics">
+            <article><span>|Z|</span><strong id="lcrMagnitudeMetric">—</strong><small id="lcrMagnitudeMetricUnit">Ω</small></article>
+            <article><span>相位</span><strong id="lcrPhaseMetric">—</strong><small>°</small></article>
+            <article><span>串联 R / X</span><strong id="lcrRxMetric">—</strong><small id="lcrRxMetricUnit">Ω</small></article>
+            <article><span>串联 C / L</span><strong id="lcrComponentMetric">—</strong><small id="lcrComponentUnit">—</small></article>
+            <article><span>Q / D</span><strong id="lcrQMetric">—</strong><small>品质 / 损耗</small></article>
+            <article><span>V / I RMS</span><strong id="lcrViMetric">—</strong><small>V / A</small></article>
+          </div>
+          <div class="lcr-unit-controls">
+            <label>频率轴<select id="lcrFrequencyAxisScale"><option value="log" selected>对数</option><option value="linear">线性</option></select></label>
+            <label>频率单位<select id="lcrFrequencyUnit"><option value="auto" selected>自动</option><option value="1">Hz</option><option value="1000">kHz</option><option value="1000000">MHz</option></select></label>
+            <label>阻抗/电阻单位<select id="lcrResistanceUnit"><option value="auto" selected>自动</option><option value="0.001">mΩ</option><option value="1">Ω</option><option value="1000">kΩ</option><option value="1000000">MΩ</option></select></label>
+            <label>电容单位<select id="lcrCapacitanceUnit"><option value="auto" selected>自动</option><option value="1e-12">pF</option><option value="1e-9">nF</option><option value="1e-6">μF</option><option value="0.001">mF</option><option value="1">F</option></select></label>
+            <label>电感单位<select id="lcrInductanceUnit"><option value="auto" selected>自动</option><option value="1e-9">nH</option><option value="1e-6">μH</option><option value="0.001">mH</option><option value="1">H</option></select></label>
+          </div>
+          <div class="subhead"><span>磁致伸缩线圈参数—频率曲线</span><small>单位可自动选择，也可在上方固定；无物理意义的串/并联参数显示为空</small></div>
+          <div class="lcr-parameter-grid">
+            <div><div class="subhead compact-chart"><span>|Z|、实部 R、虚部 X</span><small id="lcrImpedanceUnitLabel">—</small></div><div class="lcr-parameter-canvas-wrap"><canvas id="lcrImpedanceCanvas"></canvas></div></div>
+            <div><div class="subhead compact-chart"><span>并联等效电阻 Rp</span><small id="lcrParallelResistanceUnitLabel">—</small></div><div class="lcr-parameter-canvas-wrap"><canvas id="lcrParallelResistanceCanvas"></canvas></div></div>
+            <div><div class="subhead compact-chart"><span>串联 Cs、并联 Cp</span><small id="lcrCapacitanceUnitLabel">—</small></div><div class="lcr-parameter-canvas-wrap"><canvas id="lcrCapacitanceCanvas"></canvas></div></div>
+            <div><div class="subhead compact-chart"><span>串联 Ls、并联 Lp</span><small id="lcrInductanceUnitLabel">—</small></div><div class="lcr-parameter-canvas-wrap"><canvas id="lcrInductanceCanvas"></canvas></div></div>
+            <div><div class="subhead compact-chart"><span>品质因数 Q、损耗因数 D</span><small>无量纲</small></div><div class="lcr-parameter-canvas-wrap"><canvas id="lcrFactorCanvas"></canvas></div></div>
+            <div class="wide-chart"><div class="subhead compact-chart"><span>电压与电流拟合 SNR</span><small>dB</small></div><div class="lcr-parameter-canvas-wrap"><canvas id="lcrSnrCanvas"></canvas></div></div>
+          </div>
+          <div class="lcr-chart-grid">
+            <div><div class="subhead"><span>Bode：|Z| 与相位</span><small>频率对数轴</small></div><div class="lcr-canvas-wrap"><canvas id="lcrBodeCanvas"></canvas></div></div>
+            <div><div class="subhead"><span>Nyquist：R + jX</span><small>每个点对应一个频率</small></div><div class="lcr-canvas-wrap"><canvas id="lcrNyquistCanvas"></canvas></div></div>
+          </div>
+          <div class="subhead"><span>最近一次电压/电流前端波形</span><small>用于检查削顶、相位和信噪比</small></div>
+          <div class="lcr-wave-wrap"><canvas id="lcrWaveCanvas"></canvas></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th id="lcrFrequencyHeader">频率/kHz</th><th>次数</th><th id="lcrMagnitudeHeader">|Z|/Ω</th><th>相位/°</th><th id="lcrRHeader">R/Ω</th><th id="lcrXHeader">X/Ω</th><th id="lcrCsHeader">Cs/F</th><th id="lcrLsHeader">Ls/H</th><th id="lcrRpHeader">Rp/Ω</th><th id="lcrCpHeader">Cp/F</th><th id="lcrLpHeader">Lp/H</th><th>Q</th><th>D</th><th>电压SNR/dB</th><th>电流SNR/dB</th></tr></thead><tbody id="lcrTableBody"></tbody></table></div>
+        </section>
+
+        <section class="scope-panel analysis-workbench page-only" data-pages="file-analysis">
+          <div class="scope-toolbar">
+            <div>
+              <p class="eyebrow">NON-DESTRUCTIVE ANALYSIS</p>
+              <h2>波形浏览</h2>
+            </div>
+            <div class="analysis-readout">
+              <span id="analysisCursorTime">t = —</span>
+              <span id="analysisCursorValue">V = —</span>
+            </div>
+          </div>
+          <div id="analysisWaveLegend" class="legend interactive-legend"></div>
+          <div class="analysis-canvas-wrap">
+            <canvas id="analysisWaveCanvas"></canvas>
+            <div id="analysisWaveEmpty" class="run-empty">输入文件或文件夹路径后开始分析</div>
+          </div>
+          <div class="analysis-help">滚轮：时间缩放　拖动：时间平移　Shift＋滚轮：幅值缩放　双击：恢复全时段</div>
+        </section>
+
+        <section id="scanArchivePanel" class="scope-panel scan-archive-panel page-only" data-pages="sweep-analysis" hidden>
+          <div class="scope-toolbar">
+            <div>
+              <p class="eyebrow">SAVED PARAMETER SWEEP</p>
+              <h2>扫描文件夹参数分析</h2>
+            </div>
+            <label>显示指标<select id="archiveMetric"></select></label>
+          </div>
+          <p id="archiveSummary" class="result-path">—</p>
+          <div id="archiveRecommendationCards" class="evaluation-summary-cards"></div>
+          <div class="archive-layout">
+            <div class="archive-heatmap-wrap"><canvas id="archiveHeatmapCanvas"></canvas></div>
+            <div id="archiveConfigCards" class="archive-config-cards"></div>
+          </div>
+          <div class="result-table-wrap archive-table-wrap">
+            <table>
+              <thead><tr><th>频率 / kHz</th><th>周期</th><th>N/f / μs</th><th>重复</th><th>拖尾/直达 / dB</th><th>反射/直达 / dB</th><th>质量 / dB</th><th>相对强度 / dB</th><th>反射SNR / dB</th><th>稳定时间 / μs</th></tr></thead>
+              <tbody id="archiveTableBody"></tbody>
+            </table>
+          </div>
+          <div class="subhead"><span>每一次独立采集</span><small>显示实际采集到的全部A–H通道</small></div>
+          <div class="sweep-run-canvas-wrap">
+            <canvas id="archiveRunCanvas"></canvas>
+            <div id="archiveRunEmpty" class="run-empty">点击下表查看某一次原始波形</div>
+          </div>
+          <div id="archiveRunLegend" class="legend"></div>
+          <div class="result-table-wrap run-table-wrap">
+            <table>
+              <thead><tr><th>序号</th><th>频率/kHz</th><th>周期</th><th>重复</th><th>拖尾/直达/dB</th><th>反射/直达/dB</th><th>质量/dB</th><th>评价通道</th><th>原始文件</th><th></th></tr></thead>
+              <tbody id="archiveRunsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="scope-panel spectrum-panel page-only" data-pages="file-analysis">
+          <div class="scope-toolbar">
+            <div>
+              <p class="eyebrow">MULTI-WINDOW FFT</p>
+              <h2>多时段频谱</h2>
+            </div>
+            <small id="spectrumResolution">—</small>
+          </div>
+          <div id="spectrumLegend" class="legend interactive-legend"></div>
+          <div class="spectrum-canvas-wrap">
+            <canvas id="spectrumCanvas"></canvas>
+            <div id="spectrumEmpty" class="run-empty">加载数据后显示频谱</div>
+          </div>
+        </section>
+
+        <section class="scope-panel time-frequency-panel page-only" data-pages="file-analysis">
+          <div class="scope-toolbar">
+            <div>
+              <p class="eyebrow">TIME–FREQUENCY</p>
+              <h2 id="timeFrequencyTitle">STFT时频图</h2>
+            </div>
+            <small id="timeFrequencyMeta">设置参数后计算</small>
+          </div>
+          <div class="tf-canvas-wrap">
+            <canvas id="timeFrequencyCanvas"></canvas>
+            <div id="timeFrequencyEmpty" class="run-empty">尚未计算时频图</div>
+          </div>
+          <div class="tf-colorbar"><span id="tfFloorLabel">−60 dB</span><i></i><span>0 dB</span></div>
+        </section>
+
+        <section class="scope-panel experimental-result-panel page-only" data-pages="file-analysis">
+          <div class="scope-toolbar">
+            <div>
+              <p class="eyebrow test-eyebrow">EXPERIMENTAL / TEST</p>
+              <h2 id="modeResultTitle">双通道空间—时间对称性与端面匹配</h2>
+            </div>
+            <small id="modeAnalysisMeta">不参与正式评分</small>
+          </div>
+          <div id="modeMetricCards" class="evaluation-summary-cards"></div>
+          <div class="mode-canvas-wrap"><canvas id="modeWaveCanvas"></canvas><div id="modeWaveEmpty" class="run-empty">尚未运行实验分析</div></div>
+          <div class="mode-canvas-wrap match-canvas-wrap"><canvas id="modeSymmetryCanvas"></canvas></div>
+          <div class="mode-canvas-wrap match-canvas-wrap"><canvas id="modeMatchCanvas"></canvas></div>
+          <div class="result-table-wrap">
+            <table>
+              <thead><tr><th>候选时间 / μs</th><th>绝对相似度</th><th>带符号相关</th><th>极性</th></tr></thead>
+              <tbody id="modeCandidatesBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="event-panel">
+          <div><span class="event-label">运行信息</span><strong id="messageText">系统就绪，可以开始配置。</strong></div>
+          <time id="eventTime">—</time>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js?v=20260919-lcr-frequency-units1"></script>
+  </body>
+</html>

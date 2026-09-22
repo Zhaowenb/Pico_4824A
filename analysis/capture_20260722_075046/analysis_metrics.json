@@ -1,0 +1,257 @@
+{
+  "samples": 80000,
+  "sample_rate_hz": 79999999.99995469,
+  "time_start_s": -0.0001,
+  "time_end_s": 0.0008999875,
+  "channels": {
+    "A": {
+      "mean_v": -0.0010583946883056159,
+      "minimum_v": -0.01644947661,
+      "maximum_v": 0.01451155126,
+      "peak_to_peak_v": 0.030961027869999998,
+      "pretrigger_noise_rms_v": 0.0005101807993756175,
+      "pretrigger_noise_std_v": 0.0005101807993756175,
+      "posttrigger_peak_abs_v": 0.015587424089435909,
+      "posttrigger_peak_time_us": 200.4625,
+      "peak_snr_db": 29.70100483097817,
+      "peak_frequency_hz": 49998.798105786445,
+      "centroid_hz_20_120k": 56631.347156958735,
+      "envelope_detection_threshold_v": 0.0011553016097943037,
+      "envelope_peaks": [
+        {
+          "time_us": 197.8,
+          "amplitude_v": 0.014441270122428795
+        },
+        {
+          "time_us": 243.63750000000002,
+          "amplitude_v": 0.0024961524297623327
+        },
+        {
+          "time_us": 286.4125,
+          "amplitude_v": 0.00623241708058977
+        },
+        {
+          "time_us": 322.8875,
+          "amplitude_v": 0.006323339133073524
+        },
+        {
+          "time_us": 345.15000000000003,
+          "amplitude_v": 0.005989974804077036
+        },
+        {
+          "time_us": 366.25,
+          "amplitude_v": 0.005971577826667396
+        },
+        {
+          "time_us": 682.45,
+          "amplitude_v": 0.014334662212995753
+        },
+        {
+          "time_us": 731.1,
+          "amplitude_v": 0.003165135866634827
+        },
+        {
+          "time_us": 752.2125,
+          "amplitude_v": 0.0028647854310969835
+        },
+        {
+          "time_us": 787.1875,
+          "amplitude_v": 0.0018610828978404825
+        },
+        {
+          "time_us": 805.0,
+          "amplitude_v": 0.0014559583843560375
+        },
+        {
+          "time_us": 828.7875,
+          "amplitude_v": 0.0013717383512521053
+        }
+      ],
+      "matched_filter": {
+        "delay_us": 172.62500000009777,
+        "correlation": -0.9927372955234147,
+        "window_start_us": 258.2250000001463
+      }
+    },
+    "C": {
+      "mean_v": -0.00014360332033748824,
+      "minimum_v": -0.01940977203,
+      "maximum_v": 0.01907406842,
+      "peak_to_peak_v": 0.03848384045,
+      "pretrigger_noise_rms_v": 0.0006717006863583751,
+      "pretrigger_noise_std_v": 0.0006717006863583751,
+      "posttrigger_peak_abs_v": 0.01928940829449157,
+      "posttrigger_peak_time_us": 284.475,
+      "peak_snr_db": 29.16286227458022,
+      "peak_frequency_hz": 49998.798105786445,
+      "centroid_hz_20_120k": 61029.56251128232,
+      "envelope_detection_threshold_v": 0.001444437040312508,
+      "envelope_peaks": [
+        {
+          "time_us": 28.1875,
+          "amplitude_v": 0.0021528319410180742
+        },
+        {
+          "time_us": 182.17499999999998,
+          "amplitude_v": 0.006910704944833345
+        },
+        {
+          "time_us": 238.3375,
+          "amplitude_v": 0.007899827227891131
+        },
+        {
+          "time_us": 286.975,
+          "amplitude_v": 0.018055463003906348
+        },
+        {
+          "time_us": 325.6625,
+          "amplitude_v": 0.005027980053309733
+        },
+        {
+          "time_us": 365.7375,
+          "amplitude_v": 0.002633981333117141
+        },
+        {
+          "time_us": 396.09999999999997,
+          "amplitude_v": 0.002864553544177184
+        },
+        {
+          "time_us": 439.8875,
+          "amplitude_v": 0.002137179373281839
+        },
+        {
+          "time_us": 683.6125,
+          "amplitude_v": 0.013650356468193615
+        },
+        {
+          "time_us": 731.85,
+          "amplitude_v": 0.005440570957734181
+        },
+        {
+          "time_us": 761.1125000000001,
+          "amplitude_v": 0.004377227640100756
+        },
+        {
+          "time_us": 789.5875,
+          "amplitude_v": 0.003276034486303381
+        },
+        {
+          "time_us": 809.5375,
+          "amplitude_v": 0.00273667194557099
+        },
+        {
+          "time_us": 831.5,
+          "amplitude_v": 0.0024841263619697074
+        },
+        {
+          "time_us": 876.125,
+          "amplitude_v": 0.001934630334527121
+        }
+      ],
+      "matched_filter": {
+        "delay_us": 659.8625000003738,
+        "correlation": 0.9818766884440275,
+        "window_start_us": 745.4625000004222
+      }
+    },
+    "G": {
+      "mean_v": -0.0006887579346156519,
+      "minimum_v": -0.01635792108,
+      "maximum_v": 0.01568651387,
+      "peak_to_peak_v": 0.03204443495,
+      "pretrigger_noise_rms_v": 0.00040023775574305495,
+      "pretrigger_noise_std_v": 0.00040023775574305495,
+      "posttrigger_peak_abs_v": 0.016408306289832537,
+      "posttrigger_peak_time_us": 200.25,
+      "peak_snr_db": 32.25491399292017,
+      "peak_frequency_hz": 48075.767409410044,
+      "centroid_hz_20_120k": 57253.62765954607,
+      "envelope_detection_threshold_v": 0.0012170137961584934,
+      "envelope_peaks": [
+        {
+          "time_us": 198.85000000000002,
+          "amplitude_v": 0.015212672451981168
+        },
+        {
+          "time_us": 292.775,
+          "amplitude_v": 0.0059334853992369044
+        },
+        {
+          "time_us": 331.0125,
+          "amplitude_v": 0.006088852058816041
+        },
+        {
+          "time_us": 367.9,
+          "amplitude_v": 0.006337195399826978
+        },
+        {
+          "time_us": 480.26250000000005,
+          "amplitude_v": 0.0022292808414585254
+        },
+        {
+          "time_us": 519.1125000000001,
+          "amplitude_v": 0.0014256067315528754
+        },
+        {
+          "time_us": 681.45,
+          "amplitude_v": 0.014759363932341785
+        },
+        {
+          "time_us": 730.3875,
+          "amplitude_v": 0.004469176874431824
+        },
+        {
+          "time_us": 752.6625,
+          "amplitude_v": 0.0037935373700340945
+        },
+        {
+          "time_us": 786.7625,
+          "amplitude_v": 0.0025923534022922468
+        },
+        {
+          "time_us": 804.5125,
+          "amplitude_v": 0.0021804432005286143
+        },
+        {
+          "time_us": 828.1625,
+          "amplitude_v": 0.0017715759998957025
+        },
+        {
+          "time_us": 847.1375,
+          "amplitude_v": 0.0013629684426295086
+        }
+      ],
+      "matched_filter": {
+        "delay_us": 172.65000000009778,
+        "correlation": -0.9903326255057958,
+        "window_start_us": 258.25000000014626
+      }
+    },
+    "H": {
+      "mean_v": -0.0005670995208420653,
+      "minimum_v": -0.2823114719,
+      "maximum_v": 0.2815027314,
+      "peak_to_peak_v": 0.5638142033,
+      "pretrigger_noise_rms_v": 0.0019208747819498709,
+      "pretrigger_noise_std_v": 0.0019208747819498709,
+      "posttrigger_peak_abs_v": 0.2822472134828106,
+      "posttrigger_peak_time_us": 27.849999999999998,
+      "peak_snr_db": 43.34261216032489,
+      "peak_frequency_hz": 59613.95158766845,
+      "centroid_hz_20_120k": 59995.383399125814
+    }
+  },
+  "transmit_H": {
+    "envelope_10pct_start_us": -9.4,
+    "envelope_peak_us": 23.75,
+    "envelope_10pct_end_us": 56.9125,
+    "measured_duration_us": 66.3125,
+    "template_start_us": -14.399999999999999,
+    "template_end_us": 61.9
+  },
+  "receiver_pair_correlation": {
+    "A_C": 0.5044814964939158,
+    "A_G": 0.4989507919012901,
+    "C_G": 0.3988138976703544
+  }
+}
