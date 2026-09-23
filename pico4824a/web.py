@@ -41,6 +41,7 @@ from .big_signal_lcr import (
     BigSignalLcrOutcome,
     execute_big_signal_lcr,
 )
+from .big_signal_linearity import analyze_linearity_directory, linearity_run_preview
 from .storage import default_stem, save_csv, save_npz
 from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
@@ -244,6 +245,8 @@ class WebControlState:
         simulate = bool(config_values.pop("simulate", False))
         config = AcquisitionConfig.from_dict(config_values)
         big_lcr = BigSignalLcrConfig.from_dict(big_raw)
+        total_points = len(big_lcr.parameter_points)
+        total_runs = total_points * big_lcr.repeats
         with self._lock:
             if self.status.state == "running":
                 raise RuntimeError("已有仪器任务正在运行")
@@ -253,17 +256,17 @@ class WebControlState:
             self.status.state = "running"
             self.status.task_kind = "big_lcr"
             self.status.message = (
-                f"ATA-2021B 大信号 LCR 已启动：{len(big_lcr.frequencies_hz)} 个频点，"
-                f"共 {len(big_lcr.frequencies_hz) * big_lcr.repeats} 次采集"
+                f"ATA-2021B 大信号 LCR 已启动：{total_points} 个频率/Vpp 组合点，"
+                f"共 {total_runs} 次采集"
             )
             self.status.started_at = time.time()
             self.status.finished_at = None
             self.status.progress = {
                 "phase": "starting",
                 "run_index": 0,
-                "total_runs": len(big_lcr.frequencies_hz) * big_lcr.repeats,
+                "total_runs": total_runs,
                 "point_index": 0,
-                "total_points": len(big_lcr.frequencies_hz),
+                "total_points": total_points,
             }
             self.big_lcr_result = None
         worker = threading.Thread(
@@ -434,7 +437,11 @@ class WebControlState:
                 self.status.progress = progress
                 if result is not None:
                     self.result = result
-                phase = "采集" if progress["phase"] == "capturing" else "已分析并保存"
+                phase = {
+                    "capturing": "采集",
+                    "auto_range": f"自动量程重采第 {progress.get('range_attempt', 2)} 次",
+                    "saved": "已分析并保存",
+                }.get(progress["phase"], progress["phase"])
                 label = "电阻校准" if calibration_standard_ohm is not None else "LCR"
                 self.status.message = (
                     f"{label} {progress['run_index']}/{progress['total_runs']}："
@@ -522,7 +529,8 @@ class WebControlState:
                 suffix = f"，安全状态 {safety}" if safety else ""
                 self.status.message = (
                     f"大信号 LCR {progress['run_index']}/{progress['total_runs']}："
-                    f"{progress['frequency_hz'] / 1000:g} kHz，"
+                    f"{progress['frequency_hz'] / 1000:g} kHz × "
+                    f"{progress.get('awg_drive_vpp', 0):g} Vpp，"
                     f"第 {progress['repeat']}/{progress['repeats']} 次，{phase}{suffix}"
                 )
 
@@ -552,8 +560,9 @@ class WebControlState:
                     self.big_lcr_result = outcome
                     self.status.state = "stopped" if outcome.stopped else "complete"
                     if outcome.safety_tripped:
+                        reason = outcome.run_rows[-1].get("safety_message", "") if outcome.run_rows else ""
                         self.status.message = (
-                            f"大信号 LCR 触发安全停止，已保留 {len(outcome.run_rows)} 次测量："
+                            f"大信号 LCR 保护性停止（{reason}），已保留 {len(outcome.run_rows)} 次测量："
                             f"{outcome.directory}"
                         )
                     elif outcome.stopped:
@@ -708,6 +717,27 @@ class WebControlState:
             raise RuntimeError("尚无大信号 LCR 测量结果")
         return outcome.payload()
 
+    def _linearity_directory(self, supplied: str) -> Path:
+        root = self.big_lcr_output_root.resolve()
+        if supplied.strip():
+            directory = Path(supplied).resolve()
+        else:
+            with self._lock:
+                latest = self.big_lcr_result.directory if self.big_lcr_result else None
+            folders = sorted(root.glob("big_lcr_*"), reverse=True) if root.is_dir() else []
+            directory = latest.resolve() if latest else (folders[0].resolve() if folders else root)
+        if not directory.is_relative_to(root):
+            raise ValueError("大信号线性度分析仅允许读取本项目 data/lcr_big 下的测量目录")
+        return directory
+
+    def big_lcr_linearity_payload(self, raw: dict[str, Any]) -> dict[str, Any]:
+        directory = self._linearity_directory(str(raw.get("directory", "")))
+        return analyze_linearity_directory(directory, int(raw.get("harmonic_order", 5)))
+
+    def big_lcr_linearity_run_payload(self, raw: dict[str, Any]) -> dict[str, Any]:
+        directory = self._linearity_directory(str(raw.get("directory", "")))
+        return linearity_run_preview(directory, int(raw.get("run_index", 0)))
+
     def lcr_calibrations_payload(self) -> dict[str, Any]:
         return {"calibrations": discover_lcr_calibrations(self.lcr_output_root)}
 
@@ -816,6 +846,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 "/file-analysis",
                 "/sweep-analysis",
                 "/lcr",
+                "/lcr-linearity",
             }:
                 self._send_asset("index.html", "text/html; charset=utf-8")
             elif path == "/app.js":
@@ -864,6 +895,10 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             elif path == "/api/big-lcr/start":
                 task_id = self.control.start_big_lcr(payload)
                 self._send_json({"task_id": task_id}, HTTPStatus.ACCEPTED)
+            elif path == "/api/big-lcr/linearity":
+                self._send_json(self.control.big_lcr_linearity_payload(payload))
+            elif path == "/api/big-lcr/linearity/run":
+                self._send_json(self.control.big_lcr_linearity_run_payload(payload))
             elif path == "/api/result/display":
                 max_points = max(200, min(int(payload.get("max_points", 6000)), 20_000))
                 self._send_json(

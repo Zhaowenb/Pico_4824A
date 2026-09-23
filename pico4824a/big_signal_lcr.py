@@ -19,7 +19,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from .config import AcquisitionConfig, CHANNEL_NAMES
+from .config import AcquisitionConfig, CHANNEL_NAMES, RANGE_VOLTS
 from .device import CaptureResult, Pico4824A
 from .storage import save_npz
 
@@ -36,7 +36,10 @@ class BigSignalLcrConfig:
     * ``current_monitor_scale_a_per_v``: coil amps per monitor-channel volt.
     """
 
+    # ``mode`` selects the frequency-axis spacing (kept for compatibility with
+    # existing requests); ``scan_mode`` selects which dimensions are swept.
     mode: str = "single"
+    scan_mode: str = "grid"
     frequency_hz: float = 100_000.0
     frequency_start_hz: float = 20_000.0
     frequency_stop_hz: float = 200_000.0
@@ -45,6 +48,9 @@ class BigSignalLcrConfig:
     repeats: int = 1
     interval_s: float = 0.2
     awg_drive_vpp: float = 0.5
+    awg_vpp_start: float = 0.5
+    awg_vpp_stop: float = 0.5
+    awg_vpp_step: float = 0.1
     burst_cycles: int = 40
     ramp_cycles: float = 3.0
     analysis_cycles: int = 16
@@ -57,14 +63,30 @@ class BigSignalLcrConfig:
     current_monitor_polarity: int = 1
     voltage_monitor_offset_v: float = 0.0
     current_monitor_offset_v: float = 0.0
+    ata_voltage_gain: float = 1.0
+    auto_monitor_range: bool = False
+    auto_range_max_retries: int = 2
+    trip_detection_enabled: bool = True
+    trip_drop_ratio: float = 0.20
+    trip_hold_cycles: float = 3.0
+    min_monitor_rms_v: float = 0.002
     max_drive_vpp: float = 2.0
-    max_voltage_rms_v: float = 20.0
-    max_current_rms_a: float = 1.0
+    alert_voltage_vpp_v: float = 400.0
+    alert_current_peak_a: float = 2.0
     max_frequency_hz: float = 1_000_000.0
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "BigSignalLcrConfig":
-        config = cls(**raw)
+        values = dict(raw)
+        # Older saved requests used sinusoidal RMS warning thresholds.  Accept
+        # them without silently treating RMS values as peak-to-peak or peak.
+        legacy_voltage = values.pop("max_voltage_rms_v", None)
+        legacy_current = values.pop("max_current_rms_a", None)
+        if legacy_voltage is not None:
+            values.setdefault("alert_voltage_vpp_v", float(legacy_voltage) * 2 * math.sqrt(2))
+        if legacy_current is not None:
+            values.setdefault("alert_current_peak_a", float(legacy_current) * math.sqrt(2))
+        config = cls(**values)
         config.validate()
         return config
 
@@ -72,11 +94,14 @@ class BigSignalLcrConfig:
         self.mode = str(self.mode).lower()
         if self.mode not in {"single", "linear", "log"}:
             raise ValueError("大信号 LCR 模式必须是 single、linear 或 log")
+        self.scan_mode = str(self.scan_mode).lower()
+        if self.scan_mode not in {"single", "frequency", "voltage", "grid"}:
+            raise ValueError("大信号 LCR 扫描方式必须是 single、frequency、voltage 或 grid")
         if not 1.0 <= self.frequency_hz <= 1_000_000.0:
             raise ValueError("大信号 LCR 单点频率必须在 1 Hz 到 1 MHz 之间")
         if not 1.0 <= self.frequency_start_hz <= self.frequency_stop_hz <= 1_000_000.0:
             raise ValueError("大信号 LCR 扫频范围必须在 1 Hz 到 1 MHz 之间")
-        if self.frequency_step_hz <= 0:
+        if not math.isfinite(float(self.frequency_step_hz)) or self.frequency_step_hz <= 0:
             raise ValueError("大信号 LCR 线性扫频步长必须大于 0")
         if not 1 <= self.points_per_decade <= 200:
             raise ValueError("大信号 LCR 每十倍频程点数必须在 1 到 200 之间")
@@ -86,6 +111,10 @@ class BigSignalLcrConfig:
             raise ValueError("大信号 LCR 测量间隔必须在 0 到 3600 秒之间")
         if not 0 < self.awg_drive_vpp <= 4.0:
             raise ValueError("ATA 激励的 Pico AWG 输入必须在 0 到 4 Vpp 之间")
+        if not 0 < self.awg_vpp_start <= self.awg_vpp_stop <= 4.0:
+            raise ValueError("Pico AWG Vpp 扫描范围必须在 0 到 4 Vpp 之间，且停止值不小于起始值")
+        if not math.isfinite(float(self.awg_vpp_step)) or self.awg_vpp_step <= 0:
+            raise ValueError("Pico AWG Vpp 扫描步长必须大于 0")
         if not 8 <= self.burst_cycles <= 10_000:
             raise ValueError("大信号 LCR 突发周期数必须在 8 到 10000 之间")
         if self.ramp_cycles < 0 or self.ramp_cycles * 2 + 2 >= self.burst_cycles:
@@ -113,36 +142,76 @@ class BigSignalLcrConfig:
             ("电压监测换算系数", self.voltage_monitor_scale_v_per_v),
             ("电流监测换算系数", self.current_monitor_scale_a_per_v),
             ("最大 AWG 输入", self.max_drive_vpp),
-            ("最大线圈电压", self.max_voltage_rms_v),
-            ("最大线圈电流", self.max_current_rms_a),
+            ("线圈电压提醒阈值", self.alert_voltage_vpp_v),
+            ("线圈电流提醒阈值", self.alert_current_peak_a),
             ("最大测量频率", self.max_frequency_hz),
+            ("ATA 面板电压增益", self.ata_voltage_gain),
+            ("Monitor 最低有效 RMS", self.min_monitor_rms_v),
         ):
             if not math.isfinite(float(value)) or float(value) <= 0:
                 raise ValueError(f"{label}必须是大于0的有限数")
-        if self.awg_drive_vpp > self.max_drive_vpp:
-            raise ValueError("ATA 激励超过设定的最大 AWG 输入安全限值")
         if self.max_frequency_hz > 1_000_000.0:
             raise ValueError("最大测量频率不能超过 1 MHz")
+        if self.ata_voltage_gain > 60:
+            raise ValueError("ATA-2021B 面板电压增益必须在 0 到 60 之间")
+        if not 0 <= self.auto_range_max_retries <= 4:
+            raise ValueError("自动量程最多重采次数必须在 0 到 4 之间")
+        if not 0.02 <= self.trip_drop_ratio <= 0.8:
+            raise ValueError("疑似跳闸掉幅阈值必须在 2% 到 80% 之间")
+        if not 1 <= self.trip_hold_cycles <= 20:
+            raise ValueError("疑似跳闸持续周期必须在 1 到 20 之间")
+        maximum_shots = (
+            self.frequency_point_count * self.drive_point_count * self.repeats
+            * (self.auto_range_max_retries + 1 if self.auto_monitor_range else 1)
+        )
+        if maximum_shots > 10_000:
+            raise ValueError("考虑自动量程重采后，一次大信号 LCR 扫描最多允许 10000 次激励")
+        if max(self.drive_vpps) > self.max_drive_vpp:
+            raise ValueError("ATA 激励超过设定的最大 AWG 输入安全限值")
         if max(self.frequencies_hz) > self.max_frequency_hz:
             raise ValueError("测量频率超过 ATA 安全状态中的最大频率")
-        if len(self.frequencies_hz) * self.repeats > 10_000:
-            raise ValueError("一次大信号 LCR 扫描最多允许 10000 次采集")
+        # The voltage/current values above are user-selected software alerts,
+        # not amplifier ratings or pre-run interlocks.  The frontend reports
+        # an estimated voltage warning without disabling acquisition.
+
+    @property
+    def frequency_point_count(self) -> int:
+        if self.scan_mode not in {"frequency", "grid"} or self.mode == "single":
+            return 1
+        if self.mode == "linear":
+            count = int(math.floor(
+                (self.frequency_stop_hz - self.frequency_start_hz) / self.frequency_step_hz + 1e-9
+            )) + 1
+            last = self.frequency_start_hz + (count - 1) * self.frequency_step_hz
+            return count + (last < self.frequency_stop_hz - max(1e-9, abs(self.frequency_stop_hz) * 1e-12))
+        decades = math.log10(self.frequency_stop_hz / self.frequency_start_hz)
+        return max(2, int(math.ceil(decades * self.points_per_decade)) + 1)
+
+    @property
+    def drive_point_count(self) -> int:
+        if self.scan_mode not in {"voltage", "grid"}:
+            return 1
+        count = int(math.floor(
+            (self.awg_vpp_stop - self.awg_vpp_start) / self.awg_vpp_step + 1e-9
+        )) + 1
+        last = self.awg_vpp_start + (count - 1) * self.awg_vpp_step
+        return count + (last < self.awg_vpp_stop - max(1e-9, abs(self.awg_vpp_stop) * 1e-12))
 
     @property
     def frequencies_hz(self) -> tuple[float, ...]:
-        if self.mode == "single":
+        if self.scan_mode not in {"frequency", "grid"} or self.mode == "single":
             return (float(self.frequency_hz),)
         if self.mode == "linear":
             count = int(math.floor(
                 (self.frequency_stop_hz - self.frequency_start_hz)
                 / self.frequency_step_hz
-                + 1e-12
+                + 1e-9
             )) + 1
             values = [
                 self.frequency_start_hz + index * self.frequency_step_hz
                 for index in range(count)
             ]
-            if values[-1] < self.frequency_stop_hz * (1 - 1e-12):
+            if values[-1] < self.frequency_stop_hz - max(1e-9, abs(self.frequency_stop_hz) * 1e-12):
                 values.append(self.frequency_stop_hz)
             return tuple(float(min(value, self.frequency_stop_hz)) for value in values)
         decades = math.log10(self.frequency_stop_hz / self.frequency_start_hz)
@@ -150,6 +219,27 @@ class BigSignalLcrConfig:
         return tuple(float(value) for value in np.geomspace(
             self.frequency_start_hz, self.frequency_stop_hz, count
         ))
+
+    @property
+    def drive_vpps(self) -> tuple[float, ...]:
+        if self.scan_mode not in {"voltage", "grid"}:
+            return (float(self.awg_drive_vpp),)
+        count = int(math.floor(
+            (self.awg_vpp_stop - self.awg_vpp_start) / self.awg_vpp_step + 1e-9
+        )) + 1
+        values = [self.awg_vpp_start + index * self.awg_vpp_step for index in range(count)]
+        if values[-1] < self.awg_vpp_stop - max(1e-9, abs(self.awg_vpp_stop) * 1e-12):
+            values.append(self.awg_vpp_stop)
+        return tuple(float(min(value, self.awg_vpp_stop)) for value in values)
+
+    @property
+    def parameter_points(self) -> tuple[tuple[float, float], ...]:
+        """Return the frequency × AWG Vpp scan in deterministic row-major order."""
+        return tuple(
+            (frequency, drive_vpp)
+            for frequency in self.frequencies_hz
+            for drive_vpp in self.drive_vpps
+        )
 
     @property
     def trigger_source_channel(self) -> str:
@@ -281,6 +371,12 @@ def analyze_big_signal_impedance(
     quality = abs(reactance) / max(abs(resistance), 1e-30)
     voltage_rms = float(abs(dut_voltage) / math.sqrt(2))
     current_rms = float(abs(dut_current) / math.sqrt(2))
+    pretrigger = result.time_s < 0
+    voltage_baseline = float(np.median(voltage_monitor[pretrigger])) if np.any(pretrigger) else 0.0
+    current_baseline = float(np.median(current_monitor[pretrigger])) if np.any(pretrigger) else 0.0
+    voltage_peak = float(np.max(np.abs(voltage_monitor - voltage_baseline)) * config.voltage_monitor_scale_v_per_v)
+    current_peak = float(np.max(np.abs(current_monitor - current_baseline)) * config.current_monitor_scale_a_per_v)
+    voltage_vpp = float(np.ptp(voltage_monitor) * config.voltage_monitor_scale_v_per_v)
     return {
         "frequency_hz": float(frequency_hz),
         "impedance_real_ohm": resistance,
@@ -293,6 +389,9 @@ def analyze_big_signal_impedance(
         "quality_factor": float(quality),
         "voltage_rms_v": voltage_rms,
         "current_rms_a": current_rms,
+        "voltage_peak_v": voltage_peak,
+        "voltage_vpp_v": voltage_vpp,
+        "current_peak_a": current_peak,
         "voltage_fit_r2": float(voltage_fit_r2),
         "current_fit_r2": float(current_fit_r2),
         "voltage_snr_db": float(voltage_snr_db),
@@ -304,11 +403,11 @@ def analyze_big_signal_impedance(
 
 
 def _safety_metrics(
-    metrics: dict[str, Any], config: BigSignalLcrConfig
+    metrics: dict[str, Any], config: BigSignalLcrConfig, drive_vpp: float
 ) -> dict[str, Any]:
-    voltage_ratio = float(metrics["voltage_rms_v"]) / config.max_voltage_rms_v
-    current_ratio = float(metrics["current_rms_a"]) / config.max_current_rms_a
-    drive_ratio = config.awg_drive_vpp / config.max_drive_vpp
+    voltage_ratio = float(metrics["voltage_vpp_v"]) / config.alert_voltage_vpp_v
+    current_ratio = float(metrics["current_peak_a"]) / config.alert_current_peak_a
+    drive_ratio = drive_vpp / config.max_drive_vpp
     frequency_ratio = float(metrics["frequency_hz"]) / config.max_frequency_hz
     ratios = {
         "drive": drive_ratio,
@@ -316,23 +415,142 @@ def _safety_metrics(
         "current": current_ratio,
         "frequency": frequency_ratio,
     }
-    reasons: list[str] = []
+    stop_reasons: list[str] = []
+    warnings: list[str] = []
     if drive_ratio > 1.0:
-        reasons.append("AWG输入超过限值")
+        stop_reasons.append("AWG输入超过限值")
     if voltage_ratio > 1.0:
-        reasons.append("线圈电压超过限值")
+        warnings.append(f"线圈电压 {metrics['voltage_vpp_v']:.4g} Vpp 超过 {config.alert_voltage_vpp_v:g} Vpp 提醒值")
     if current_ratio > 1.0:
-        reasons.append("线圈电流超过限值")
+        warnings.append(f"线圈电流 {metrics['current_peak_a']:.4g} Apeak 超过 {config.alert_current_peak_a:g} Apeak 提醒值")
     if frequency_ratio > 1.0:
-        reasons.append("频率超过限值")
-    state = "TRIP" if reasons else ("WARN" if max(ratios.values()) >= 0.8 else "OK")
+        stop_reasons.append("频率超过限值")
+    state = "TRIP" if stop_reasons else ("WARN" if warnings or max(ratios.values()) >= 0.8 else "OK")
+    messages = stop_reasons + warnings
     return {
         "safety_state": state,
-        "safety_message": "；".join(reasons) if reasons else ("接近安全限值" if state == "WARN" else "在安全限值内"),
+        "safety_message": "；".join(messages) if messages else ("接近程序提醒阈值" if state == "WARN" else "未触及程序提醒阈值"),
         "safety_drive_ratio": float(drive_ratio),
         "safety_voltage_ratio": float(voltage_ratio),
         "safety_current_ratio": float(current_ratio),
         "safety_frequency_ratio": float(frequency_ratio),
+    }
+
+
+def monitor_health(
+    result: CaptureResult, config: BigSignalLcrConfig, frequency_hz: float
+) -> dict[str, Any]:
+    """Infer monitor loss or a sustained mid-burst collapse, never ATA status.
+
+    The check uses complete one-cycle RMS bins within the expected flat burst,
+    excluding both programmed ramps. A low signal is a wiring/trigger fault as
+    readily as an amplifier trip; only a previously present signal that drops
+    during the flat region is labelled *suspected* trip.
+    """
+    voltage = np.asarray(result.volts[config.voltage_channel], dtype=np.float64)
+    voltage_envelope = _moving_rms(voltage - np.median(voltage[: max(2, voltage.size // 20)]),
+                                   round(result.actual_sample_rate_hz / frequency_hz))
+    peak_envelope = float(np.max(voltage_envelope))
+    if peak_envelope < config.min_monitor_rms_v:
+        return {"monitor_state": "MONITOR_FAULT", "monitor_message": "Voltage Monitor 未见有效突发信号；检查触发、接线及 ATA 状态"}
+    threshold = max(peak_envelope * 0.08, config.min_monitor_rms_v * 0.5)
+    active = np.flatnonzero(voltage_envelope > threshold)
+    if not active.size or active[0] == 0:
+        return {"monitor_state": "MONITOR_FAULT", "monitor_message": "未完整记录突发起点，无法可靠判别疑似跳闸"}
+    onset_time = float(result.time_s[int(active[0])])
+    first_cycle = math.ceil(config.ramp_cycles + 1)
+    # The 8% envelope crossing may lag true AWG onset by up to the full ramp.
+    # Exclude that uncertainty from the trailing plateau to avoid mistaking
+    # the programmed fade-out for a protection trip.
+    last_cycle = math.floor(config.burst_cycles - 2 * config.ramp_cycles - 1)
+    cycle_numbers = range(first_cycle, last_cycle)
+    if len(cycle_numbers) < 5:
+        return {"monitor_state": "OK", "monitor_message": "平顶区过短，未执行掉幅判别"}
+    baseline_count = min(5, max(2, len(cycle_numbers) // 3))
+    ratios: dict[str, float] = {}
+    for label, channel in (("Voltage", config.voltage_channel), ("Current", config.current_channel)):
+        signal = np.asarray(result.volts[channel], dtype=np.float64)
+        values = []
+        for cycle in cycle_numbers:
+            first = int(np.searchsorted(result.time_s, onset_time + cycle / frequency_hz))
+            last = int(np.searchsorted(result.time_s, onset_time + (cycle + 1) / frequency_hz))
+            segment = signal[first:last]
+            if segment.size < 8:
+                return {"monitor_state": "MONITOR_FAULT", "monitor_message": "采样时间不足以覆盖平顶区"}
+            centered = segment - float(np.mean(segment))
+            values.append(float(np.sqrt(np.mean(centered * centered))))
+        rms = np.asarray(values)
+        baseline = float(np.median(rms[:baseline_count]))
+        if baseline < config.min_monitor_rms_v:
+            return {
+                "monitor_state": "MONITOR_FAULT",
+                "monitor_message": f"{label} Monitor 平顶区低于 {config.min_monitor_rms_v:g} Vrms；可能未触发、未接线或功放保护",
+                "monitor_voltage_baseline_v": baseline if label == "Voltage" else None,
+                "monitor_current_baseline_v": baseline if label == "Current" else None,
+            }
+        after = rms[baseline_count:]
+        ratio = after / baseline
+        ratios[label.lower()] = float(np.min(ratio)) if ratio.size else 1.0
+        hold = math.ceil(config.trip_hold_cycles)
+        if config.trip_detection_enabled and ratio.size >= hold:
+            collapsed = np.convolve((ratio < config.trip_drop_ratio).astype(int), np.ones(hold, dtype=int), "valid")
+            if np.any(collapsed == hold):
+                return {
+                    "monitor_state": "SUSPECT_TRIP",
+                    "monitor_message": f"{label} Monitor 平顶区持续掉幅；仅为疑似跳闸，请检查 ATA 面板",
+                    "monitor_min_ratio": float(np.min(ratio)),
+                }
+    return {
+        "monitor_state": "OK", "monitor_message": "双监测通道平顶区有效",
+        "monitor_min_ratio": float(min(ratios.values())),
+    }
+
+
+def _suggest_monitor_ranges(
+    result: CaptureResult, acquisition: AcquisitionConfig, config: BigSignalLcrConfig
+) -> tuple[dict[str, str], str | None]:
+    """Choose Pico ADC ranges from measured peaks, retaining trigger headroom."""
+    names = list(RANGE_VOLTS)
+    changes: dict[str, str] = {}
+    for channel in (config.voltage_channel, config.current_channel):
+        current = acquisition.channels[channel].range
+        index = names.index(current)
+        full_scale = RANGE_VOLTS[current]
+        peak = float(np.max(np.abs(result.volts[channel])))
+        overflow = channel in result.overflow_channels
+        if overflow or peak >= full_scale * 0.88:
+            if index == len(names) - 1:
+                return {}, f"{channel} 通道在 ±50 V 最大量程仍溢出/接近满量程"
+            target = next(
+                (name for name in names[index + 1:] if RANGE_VOLTS[name] >= peak / 0.65),
+                names[-1],
+            )
+            changes[channel] = target
+        elif peak < full_scale * 0.18 and peak > 0:
+            threshold = abs(acquisition.trigger.threshold_v) if acquisition.trigger.source == channel else 0.0
+            needed = max(peak / 0.65, threshold * 1.25)
+            target = next((name for name in names if RANGE_VOLTS[name] >= needed), names[-1])
+            if RANGE_VOLTS[target] < full_scale:
+                changes[channel] = target
+    return changes, None
+
+
+def _capture_peak_metrics(result: CaptureResult, config: BigSignalLcrConfig) -> dict[str, float]:
+    """Measure the complete burst for software alerts, including range retries."""
+    pretrigger = result.time_s < 0
+    peaks: dict[str, float] = {}
+    for label, channel, scale in (
+        ("voltage", config.voltage_channel, config.voltage_monitor_scale_v_per_v),
+        ("current", config.current_channel, config.current_monitor_scale_a_per_v),
+    ):
+        signal = np.asarray(result.volts[channel], dtype=np.float64)
+        baseline = float(np.median(signal[pretrigger])) if np.any(pretrigger) else 0.0
+        peaks[label] = float(np.max(np.abs(signal - baseline)) * scale)
+    voltage_signal = np.asarray(result.volts[config.voltage_channel], dtype=np.float64)
+    return {
+        "voltage_peak_v": peaks["voltage"],
+        "current_peak_a": peaks["current"],
+        "voltage_vpp_v": float(np.ptp(voltage_signal) * config.voltage_monitor_scale_v_per_v),
     }
 
 
@@ -351,22 +569,31 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def aggregate_big_signal_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    groups: dict[float, list[dict[str, Any]]] = {}
+    groups: dict[tuple[float, float], list[dict[str, Any]]] = {}
     for row in rows:
-        groups.setdefault(float(row["frequency_hz"]), []).append(row)
-    excluded = {"run_index", "repeat", "npz_file"}
+        key = (float(row["frequency_hz"]), float(row.get("awg_drive_vpp", 0.0)))
+        groups.setdefault(key, []).append(row)
+    excluded = {"run_index", "repeat", "npz_file", "auto_range_attempts"}
     result: list[dict[str, Any]] = []
-    for frequency, group in sorted(groups.items()):
+    for (frequency, drive_vpp), group in sorted(groups.items()):
+        valid = [item for item in group if item.get("safety_state") in {"OK", "WARN"}]
+        severity = ("SUSPECT_TRIP", "MONITOR_FAULT", "ADC_OVERFLOW", "ANALYSIS_ERROR", "TRIP", "WARN")
+        state = next((item for item in severity if any(row.get("safety_state") == item for row in group)), "OK")
         summary: dict[str, Any] = {
             "frequency_hz": frequency,
+            "awg_drive_vpp": drive_vpp,
             "repeats_completed": len(group),
-            "safety_state": "TRIP" if any(item.get("safety_state") == "TRIP" for item in group)
-            else ("WARN" if any(item.get("safety_state") == "WARN" for item in group) else "OK"),
+            "valid_repeats": len(valid),
+            "safety_state": state,
+            "safety_message": next((row.get("safety_message", "") for row in group if row.get("safety_state") == state), ""),
         }
-        for key, value in group[0].items():
+        if not valid:
+            result.append(summary)
+            continue
+        for key, value in valid[0].items():
             if key in excluded or key in {"safety_state", "safety_message"} or not isinstance(value, (int, float)):
                 continue
-            values = np.asarray([float(item[key]) for item in group], dtype=np.float64)
+            values = np.asarray([float(item[key]) for item in valid if key in item], dtype=np.float64)
             finite = values[np.isfinite(values)]
             summary[key] = float(np.mean(finite)) if finite.size else float("nan")
             summary[f"{key}_std"] = float(np.std(finite, ddof=1)) if finite.size > 1 else 0.0
@@ -403,9 +630,14 @@ def execute_big_signal_lcr(
     )
 
     rows: list[dict[str, Any]] = []
-    total_runs = len(config.frequencies_hz) * config.repeats
+    points = config.parameter_points
+    total_runs = len(points) * config.repeats
     run_index = 0
-    for point_index, frequency in enumerate(config.frequencies_hz, start=1):
+    current_ranges = {
+        name: base_config.channels[name].range
+        for name in (config.voltage_channel, config.current_channel)
+    }
+    for point_index, (frequency, drive_vpp) in enumerate(points, start=1):
         for repeat in range(1, config.repeats + 1):
             if stop_event.is_set():
                 summary = aggregate_big_signal_rows(rows)
@@ -418,41 +650,130 @@ def execute_big_signal_lcr(
             capture_config.awg.waveform = "lcr_tone"
             capture_config.awg.frequency_hz = frequency
             capture_config.awg.cycles = config.burst_cycles
-            capture_config.awg.pk_to_pk_v = config.awg_drive_vpp
+            capture_config.awg.pk_to_pk_v = drive_vpp
             capture_config.awg.offset_v = 0.0
             capture_config.awg.trigger_source = "software"
             capture_config.awg.tone_ramp_cycles = config.ramp_cycles
-            pre_duration = max(2.0 / frequency, 50e-6)
+            pre_duration = max((config.ramp_cycles + 3.0) / frequency, 50e-6)
             post_duration = (config.burst_cycles + 5.0) / frequency
             capture_config.pre_trigger_samples = max(1, round(capture_config.sample_rate_hz * pre_duration))
             capture_config.post_trigger_samples = max(2, round(capture_config.sample_rate_hz * post_duration))
             capture_config.trigger.enabled = True
             capture_config.trigger.source = config.trigger_source_channel
+            for name, range_name in current_ranges.items():
+                capture_config.channels[name].range = range_name
+            if config.auto_monitor_range:
+                # Panel gain is an estimate, never a substitute for measured
+                # monitor voltage. It only helps avoid a clipped first shot.
+                predicted_monitor_peak = (
+                    drive_vpp * config.ata_voltage_gain
+                    / (2 * config.voltage_monitor_scale_v_per_v)
+                )
+                voltage_range = capture_config.channels[config.voltage_channel].range
+                if predicted_monitor_peak > 0.65 * RANGE_VOLTS[voltage_range]:
+                    capture_config.channels[config.voltage_channel].range = next(
+                        (name for name, limit in RANGE_VOLTS.items()
+                         if limit >= predicted_monitor_peak / 0.65), "50V"
+                    )
             capture_config.validate()
-            if progress:
-                progress({
-                    "phase": "capturing", "run_index": run_index, "total_runs": total_runs,
-                    "point_index": point_index, "total_points": len(config.frequencies_hz),
-                    "repeat": repeat, "repeats": config.repeats, "frequency_hz": frequency,
-                }, None)
-            try:
-                capture = device.capture(capture_config)
-            except Exception:
+            capture = None
+            path = None
+            range_error = None
+            observed_peaks = {"voltage_peak_v": 0.0, "voltage_vpp_v": 0.0, "current_peak_a": 0.0}
+            early_health: dict[str, Any] | None = None
+            attempts = 0
+            for attempt in range(config.auto_range_max_retries + 1):
                 if stop_event.is_set():
                     summary = aggregate_big_signal_rows(rows)
+                    _write_csv(directory / "runs.csv", rows)
+                    _write_csv(directory / "summary.csv", summary)
                     return BigSignalLcrOutcome(directory, rows, summary, True)
-                raise
-            path = save_npz(capture, raw_dir / f"f{frequency:012.3f}_r{repeat:03d}.npz")
-            metrics = analyze_big_signal_impedance(capture, config, frequency)
-            metrics.update(_safety_metrics(metrics, config))
+                attempts = attempt + 1
+                if progress:
+                    progress({
+                        "phase": "auto_range" if attempt else "capturing",
+                        "run_index": run_index, "total_runs": total_runs,
+                        "point_index": point_index, "total_points": len(points),
+                        "repeat": repeat, "repeats": config.repeats, "frequency_hz": frequency,
+                        "awg_drive_vpp": drive_vpp, "range_attempt": attempts,
+                    }, None)
+                try:
+                    capture = device.capture(capture_config)
+                except Exception:
+                    if stop_event.is_set():
+                        summary = aggregate_big_signal_rows(rows)
+                        _write_csv(directory / "runs.csv", rows)
+                        _write_csv(directory / "summary.csv", summary)
+                        return BigSignalLcrOutcome(directory, rows, summary, True)
+                    raise
+                path = save_npz(
+                    capture,
+                    raw_dir / (
+                        f"p{point_index:05d}_f{frequency:012.3f}_v{drive_vpp:07.4f}"
+                        f"_r{repeat:03d}_a{attempts:02d}.npz"
+                    ),
+                )
+                for key, value in _capture_peak_metrics(capture, config).items():
+                    observed_peaks[key] = max(observed_peaks[key], value)
+                if not capture.overflow_channels:
+                    early_health = monitor_health(capture, config, frequency)
+                    if early_health["monitor_state"] != "OK":
+                        break
+                if not config.auto_monitor_range:
+                    break
+                changes, range_error = _suggest_monitor_ranges(capture, capture_config, config)
+                if range_error or not changes:
+                    break
+                if attempt == config.auto_range_max_retries:
+                    range_error = "自动量程重采次数用尽，尚未达到合适量程"
+                    break
+                for name, next_range in changes.items():
+                    capture_config.channels[name].range = next_range
+                capture_config.validate()
+            assert capture is not None and path is not None
+            current_ranges = {
+                name: capture.config.channels[name].range
+                for name in (config.voltage_channel, config.current_channel)
+            }
+            if capture.overflow_channels or range_error:
+                metrics = {
+                    "frequency_hz": float(frequency),
+                    "safety_state": "ADC_OVERFLOW",
+                    "safety_message": range_error or f"ADC 溢出：{','.join(capture.overflow_channels)}",
+                }
+            else:
+                health = early_health or monitor_health(capture, config, frequency)
+                if health["monitor_state"] != "OK":
+                    metrics = {
+                        "frequency_hz": float(frequency),
+                        "safety_state": health["monitor_state"],
+                        "safety_message": health["monitor_message"],
+                        **health,
+                    }
+                else:
+                    try:
+                        metrics = analyze_big_signal_impedance(capture, config, frequency)
+                        metrics.update(observed_peaks)
+                        metrics.update(_safety_metrics(metrics, config, drive_vpp))
+                        metrics.update(health)
+                    except ValueError as exc:
+                        metrics = {
+                            "frequency_hz": float(frequency),
+                            "safety_state": "ANALYSIS_ERROR",
+                            "safety_message": str(exc),
+                        }
             row = {
-                "run_index": run_index, "repeat": repeat,
+                "run_index": run_index, "repeat": repeat, "awg_drive_vpp": drive_vpp,
                 "npz_file": str(path.relative_to(directory)), **metrics,
+                "auto_range_attempts": attempts,
+                "voltage_range": capture.config.channels[config.voltage_channel].range,
+                "current_range": capture.config.channels[config.current_channel].range,
                 "voltage_monitor_channel": config.voltage_channel,
                 "current_monitor_channel": config.current_channel,
                 "voltage_monitor_scale_v_per_v": config.voltage_monitor_scale_v_per_v,
                 "current_monitor_scale_a_per_v": config.current_monitor_scale_a_per_v,
                 "current_monitor_polarity": config.current_monitor_polarity,
+                "ata_voltage_gain": config.ata_voltage_gain,
             }
             rows.append(row)
             summary = aggregate_big_signal_rows(rows)
@@ -461,11 +782,12 @@ def execute_big_signal_lcr(
             if progress:
                 progress({
                     "phase": "saved", "run_index": run_index, "total_runs": total_runs,
-                    "point_index": point_index, "total_points": len(config.frequencies_hz),
+                    "point_index": point_index, "total_points": len(points),
                     "repeat": repeat, "repeats": config.repeats, "frequency_hz": frequency,
+                    "awg_drive_vpp": drive_vpp,
                     "safety_state": metrics["safety_state"],
                 }, capture)
-            if metrics["safety_state"] == "TRIP":
+            if metrics["safety_state"] not in {"OK", "WARN"}:
                 return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped=True)
             if run_index < total_runs and stop_event.wait(config.interval_s):
                 return BigSignalLcrOutcome(directory, rows, summary, True)

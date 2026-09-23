@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>PicoScope 4824A 控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260922-big-lcr1" />
+    <link rel="stylesheet" href="/styles.css?v=20260923-big-lcr-alert4" />
   </head>
   <body data-page="measure">
     <header class="topbar">
@@ -20,6 +20,7 @@
         <a href="/measure" data-nav="measure">实时测量</a>
         <a href="/sweep" data-nav="sweep">参数扫描</a>
         <a href="/lcr" data-nav="lcr">LCR测量</a>
+        <a href="/lcr-linearity" data-nav="lcr-linearity">大信号线性度</a>
         <a href="/file-analysis" data-nav="file-analysis">单数据分析</a>
         <a href="/sweep-analysis" data-nav="sweep-analysis">参数数据分析</a>
       </nav>
@@ -242,12 +243,16 @@
             <label>Current Monitor 通道<select id="bigLcrCurrentChannel"></select></label>
             <label>电流通道量程<select id="bigLcrCurrentRange"></select></label>
           </div>
+          <label class="safety-ack-label"><input id="bigLcrAutoRange" type="checkbox" checked />Pico 双监测通道自动量程（每点最多额外重采 2 次）</label>
+          <p class="wiring-note"><span>i</span> 上方量程是第一次采集的起点；自动量程只调整 Pico ADC，不控制 ATA 输出档位。每次重采会重新发出一次 AWG 突发，并保存波形。</p>
           <p class="wiring-note"><span>!</span> Pico AWG 接 ATA-2021B 输入；Voltage Monitor 和 Current Monitor 两个 SMA 分别回到所选 Pico 通道。这里不需要 AWG 监测端口，也不要把 ATA 功率输出直接接入 Pico。</p>
         </section>
 
-        <section class="panel page-only" data-pages="lcr" data-lcr-mode="big">
-          <div class="panel-heading compact"><div><span class="step">02</span><h2>大信号激励与频率扫描</h2></div><small id="bigLcrEstimate">—</small></div>
-          <label>测量方式<select id="bigLcrMode"><option value="single">单频测量</option><option value="linear">线性扫频</option><option value="log">对数扫频</option></select></label>
+        <section id="bigLcrScanPanel" class="panel page-only" data-pages="lcr" data-lcr-mode="big">
+          <div class="panel-heading compact"><div><span class="step">02</span><h2>大信号激励与参数扫描</h2></div><small id="bigLcrEstimate">—</small></div>
+          <label>扫描模式<select id="bigLcrScanMode"><option value="grid" selected>频率 × AWG Vpp 矩形扫描</option><option value="frequency">单独扫频</option><option value="voltage">单独扫 AWG Vpp</option><option value="single">单点测量</option></select></label>
+          <label>频率轴<select id="bigLcrMode"><option value="single" selected>固定频率</option><option value="linear">线性步进</option><option value="log">对数分布</option></select></label>
+          <p class="wiring-note"><span>i</span> 矩形扫描的频率轴由上方选择，第二轴由 AWG Vpp 起始/停止/步长设置；每点实测并记录 Voltage Monitor 与 Current Monitor，结果按频率和 AWG Vpp 配对。</p>
           <div id="bigLcrSingleControls" class="form-grid"><label>测量频率 <span>kHz</span><input id="bigLcrFrequency" type="number" value="100" min="0.001" max="1000" step="1" /></label></div>
           <div id="bigLcrSweepControls" hidden><div class="form-grid three">
             <label>起始 <span>kHz</span><input id="bigLcrFrequencyStart" type="number" value="20" min="0.001" max="1000" step="1" /></label>
@@ -255,33 +260,52 @@
             <label id="bigLcrLinearStepLabel">步长 <span>kHz</span><input id="bigLcrFrequencyStep" type="number" value="5" min="0.001" step="1" /></label>
             <label id="bigLcrLogPointsLabel" hidden>每十倍频程点数<input id="bigLcrPointsPerDecade" type="number" value="12" min="1" max="200" step="1" /></label>
           </div></div>
-          <div class="subhead"><span>ATA 输入突发正弦</span><small>低压 AWG 输入由功放放大</small></div>
+          <div class="subhead"><span>Pico AWG 输入幅值 / ATA 突发正弦</span><small>矩形扫描逐点更新 AWG Vpp；Irms 是 Current Monitor 实测响应</small></div>
           <div class="form-grid">
-            <label>Pico AWG 输入 <span>Vpp</span><input id="bigLcrAwgVpp" type="number" value="0.5" min="0.001" max="4" step="0.01" /></label>
+            <label id="bigLcrFixedVppControl">固定 Pico AWG 输入 <span>Vpp</span><input id="bigLcrAwgVpp" type="number" value="0.5" min="0.001" max="4" step="0.01" /></label>
+          </div>
+          <div id="bigLcrVppSweepControls" class="form-grid three" hidden>
+            <label>起始 <span>Vpp</span><input id="bigLcrVppStart" type="number" value="0.5" min="0.001" max="4" step="0.01" /></label>
+            <label>停止 <span>Vpp</span><input id="bigLcrVppStop" type="number" value="0.5" min="0.001" max="4" step="0.01" /></label>
+            <label>步长 <span>Vpp</span><input id="bigLcrVppStep" type="number" value="0.1" min="0.001" max="4" step="0.01" /></label>
+          </div>
+          <div class="form-grid">
             <label>总周期数<input id="bigLcrBurstCycles" type="number" value="40" min="8" step="1" /></label>
             <label>缓升/缓降 <span>周期</span><input id="bigLcrRampCycles" type="number" value="3" min="0" step="0.5" /></label>
             <label>拟合周期数<input id="bigLcrAnalysisCycles" type="number" value="16" min="2" step="1" /></label>
             <label>拟合保护 <span>周期</span><input id="bigLcrGuardCycles" type="number" value="2" min="0" step="0.5" /></label>
-            <label>每频点重复<input id="bigLcrRepeats" type="number" value="3" min="1" max="100" step="1" /></label>
+            <label>每扫描点重复<input id="bigLcrRepeats" type="number" value="3" min="1" max="100" step="1" /></label>
             <label>测量间隔 <span>s</span><input id="bigLcrInterval" type="number" value="0.5" min="0" max="3600" step="0.1" /></label>
           </div>
         </section>
 
-        <section class="panel page-only" data-pages="lcr" data-lcr-mode="big">
+        <section class="panel page-only big-lcr-safety-panel" data-pages="lcr" data-lcr-mode="big">
           <div class="panel-heading compact"><div><span class="step">03</span><h2>ATA 监测换算与安全状态</h2></div><small>系数随本次测量保存</small></div>
           <div class="form-grid">
-            <label>线圈电压 / Monitor V <span>V/V</span><input id="bigLcrVoltageScale" type="number" value="1" min="0.000001" step="0.001" /></label>
-            <label>线圈电流 / Monitor V <span>A/V</span><input id="bigLcrCurrentScale" type="number" value="1" min="0.000001" step="0.000001" /></label>
+            <label>线圈电压 / Monitor V <span>V/V</span><input id="bigLcrVoltageScale" type="number" value="50" min="0.000001" step="0.001" /></label>
+            <label>线圈电流 / Monitor V <span>A/V</span><input id="bigLcrCurrentScale" type="number" value="0.5" min="0.000001" step="0.000001" /></label>
+            <label>ATA 面板电压增益 <span>倍</span><input id="bigLcrAtaGain" type="number" value="" placeholder="按面板实际设置填写" min="0.001" max="60" step="0.1" /></label>
             <label>Current Monitor 极性<select id="bigLcrCurrentPolarity"><option value="1" selected>同相</option><option value="-1">反相</option></select></label>
             <label>Voltage Monitor 偏置 <span>V</span><input id="bigLcrVoltageOffset" type="number" value="0" step="0.001" /></label>
             <label>Current Monitor 偏置 <span>V</span><input id="bigLcrCurrentOffset" type="number" value="0" step="0.001" /></label>
             <label>最大 AWG 输入 <span>Vpp</span><input id="bigLcrMaxDrive" type="number" value="2" min="0.001" max="4" step="0.01" /></label>
-            <label>最大线圈电压 <span>Vrms</span><input id="bigLcrMaxVoltage" type="number" value="20" min="0.001" step="0.1" /></label>
-            <label>最大线圈电流 <span>Arms</span><input id="bigLcrMaxCurrent" type="number" value="1" min="0.000001" step="0.001" /></label>
+            <label>线圈电压提醒 <span>Vpp</span><input id="bigLcrAlertVoltageVpp" type="number" value="400" min="0.001" step="1" /></label>
+            <label>线圈电流提醒 <span>Apeak</span><input id="bigLcrAlertCurrentPeak" type="number" value="2" min="0.001" step="0.1" /></label>
             <label>最大测量频率 <span>kHz</span><input id="bigLcrMaxFrequency" type="number" value="1000" min="0.001" max="1000" step="1" /></label>
           </div>
-          <label class="safety-ack-label"><input id="bigLcrSafetyAck" type="checkbox" />我已核对 ATA-2021B 增益、线圈电压/电流和功放保护限值</label>
-          <div id="bigLcrSafetyStatus" class="big-safety-status warn">未确认安全参数；开始按钮将保持锁定</div>
+          <p class="wiring-note"><span>!</span> 提醒值初始为 400 Vpp / 2 Apeak，超出只记录 WARN 并继续扫描。ATA-2021B 官网标称 200 Vpp / 0.5 Apeak；软件不是硬件保护，请核对设备。</p>
+          <div class="big-trip-heading"><strong>疑似跳闸识别</strong><small>由 Monitor 波形推断，不读取 ATA 面板状态</small></div>
+          <label class="big-trip-toggle"><input id="bigLcrTripDetection" type="checkbox" checked /><span><strong>启用掉幅停扫</strong><small>平顶区持续掉幅时停止后续激励</small></span></label>
+          <div class="big-trip-grid">
+            <label class="big-trip-field"><span>掉幅阈值 <small>%</small></span><input id="bigLcrTripDrop" type="number" value="20" min="2" max="80" step="1" /></label>
+            <label class="big-trip-field"><span>持续时间 <small>周期</small></span><input id="bigLcrTripHold" type="number" value="3" min="1" max="20" step="1" /></label>
+            <label class="big-trip-field wide"><span>最低有效监测幅值 <small>mVrms</small></span><input id="bigLcrMinMonitorRms" type="number" value="2" min="0.001" step="0.1" /></label>
+          </div>
+          <div class="big-preflight">
+            <div class="big-preflight-heading"><strong>启动前确认</strong><small>必填</small></div>
+            <label class="big-ack-row"><input id="bigLcrSafetyAck" type="checkbox" /><span>已核对面板增益、功放额定值及提醒阈值</span></label>
+            <div id="bigLcrSafetyStatus" class="big-safety-status warn" role="status">请确认安全参数后再开始</div>
+          </div>
           <div class="sweep-action-row"><button id="bigLcrStartBtn" class="sweep-start" disabled><span class="play"></span>开始大信号 LCR</button><button id="bigLcrStopBtn" class="sweep-stop" disabled>停止</button></div>
           <div class="progress-track"><i id="bigLcrProgressBar"></i></div><small id="bigLcrProgressText" class="progress-text">尚未开始</small>
         </section>
@@ -552,6 +576,17 @@
           <button id="captureBtn" class="primary"><span class="play"></span>开始同步采集</button>
           <button id="stopBtn" class="secondary" disabled>停止</button>
         </section>
+        <section class="panel hero-control page-only" data-pages="lcr-linearity">
+          <div class="panel-heading"><div><span class="step">01</span><h2>大信号线性度 / 波形畸变</h2></div></div>
+          <label>大信号 LCR 测量文件夹<input id="linearityDirectory" type="text" placeholder="留空分析最近一次大信号 LCR 扫描" /></label>
+          <div class="form-grid">
+            <label>最高谐波阶数<input id="linearityHarmonicOrder" type="number" value="5" min="2" max="15" step="1" /></label>
+            <label>查看频率<select id="linearityFrequency"><option value="">分析后选择</option></select></label>
+          </div>
+          <button id="linearityAnalyzeBtn" class="sweep-start">分析已保存的 Monitor 波形</button>
+          <small id="linearityStatus" class="progress-text">不占用 PicoScope；首次分析大型文件夹可能较慢</small>
+          <p class="wiring-note"><span>i</span> 谐波只从平顶拟合窗计算；跳闸、监测故障及 ADC 溢出点不参与线性度参考。增益偏差以同频最低 AWG Vpp 为基准，不等于独立的功放线性度标定。</p>
+        </section>
       </aside>
 
       <section class="monitor-stack">
@@ -639,7 +674,7 @@
         </section>
 
         <section id="bigLcrResultPanel" class="scope-panel lcr-result-panel big-lcr-result-panel page-only" data-pages="lcr" data-lcr-mode="big">
-          <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B LARGE-SIGNAL</p><h2>大信号 LCR 结果</h2><small id="bigLcrResultPath" class="scope-interaction-help">等待首次测量</small></div></div>
+          <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B LARGE-SIGNAL</p><h2>大信号 LCR 结果</h2><small id="bigLcrResultPath" class="scope-interaction-help">等待首次测量</small><small id="bigLcrLastPoint" class="scope-interaction-help">当前显示点：—</small></div><a class="panel-link" href="/lcr-linearity" data-route-link="lcr-linearity">分析线性度与畸变 →</a></div>
           <div class="lcr-metrics big-lcr-metrics">
             <article><span>|Z|</span><strong id="bigLcrMagnitudeMetric">—</strong><small>Ω</small></article>
             <article><span>Phase</span><strong id="bigLcrPhaseMetric">—</strong><small>°</small></article>
@@ -649,10 +684,20 @@
             <article><span>Vrms / Irms</span><strong id="bigLcrViMetric">—</strong><small>V / A</small></article>
           </div>
           <div class="big-lcr-status-grid"><div><span>安全状态</span><strong id="bigLcrSafetyMetric">—</strong></div><div><span>电压监测 SNR</span><strong id="bigLcrVoltageSnrMetric">—</strong></div><div><span>电流监测 SNR</span><strong id="bigLcrCurrentSnrMetric">—</strong></div></div>
-          <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>|Z| / Rs / Xs</span><small>频率曲线</small></div><div class="lcr-canvas-wrap"><canvas id="bigLcrImpedanceCanvas"></canvas></div></div><div><div class="subhead"><span>Leff / Q</span><small>频率曲线</small></div><div class="lcr-canvas-wrap"><canvas id="bigLcrComponentCanvas"></canvas></div></div></div>
+          <div class="subhead"><span>|Z(f,Vpp)| 矩形扫描</span><small>横轴频率 / kHz · 纵轴 Pico AWG Vpp · 色阶为 |Z| / Ω</small></div><div class="lcr-canvas-wrap"><canvas id="bigLcrGridCanvas"></canvas></div>
+          <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>|Z| / Rs / Xs</span><small>最高 Vpp 下的频率曲线</small></div><div class="lcr-canvas-wrap"><canvas id="bigLcrImpedanceCanvas"></canvas></div></div><div><div class="subhead"><span>Leff / Q</span><small>最高 Vpp 下的频率曲线</small></div><div class="lcr-canvas-wrap"><canvas id="bigLcrComponentCanvas"></canvas></div></div></div>
           <div class="subhead"><span>Voltage Monitor 波形</span><small>最近一次采集（监测端）</small></div><div class="lcr-wave-wrap"><canvas id="bigLcrVoltageWaveCanvas"></canvas></div>
           <div class="subhead"><span>Current Monitor 波形</span><small>最近一次采集（监测端）</small></div><div class="lcr-wave-wrap"><canvas id="bigLcrCurrentWaveCanvas"></canvas></div>
-          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>次数</th><th>|Z|/Ω</th><th>Phase/°</th><th>Rs/Ω</th><th>Xs/Ω</th><th>Leff/H</th><th>Q</th><th>Vrms/V</th><th>Irms/A</th><th>电压SNR/dB</th><th>电流SNR/dB</th><th>安全</th></tr></thead><tbody id="bigLcrTableBody"></tbody></table></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>AWG Vpp/V</th><th>有效/总次数</th><th>|Z|/Ω</th><th>Phase/°</th><th>Rs/Ω</th><th>Xs/Ω</th><th>Leff/H</th><th>Q</th><th>Vrms/V</th><th>Irms/A</th><th>Vpp/V</th><th>Ipeak/A</th><th>电压SNR/dB</th><th>电流SNR/dB</th><th>状态</th></tr></thead><tbody id="bigLcrTableBody"></tbody></table></div>
+        </section>
+
+        <section class="scope-panel page-only linearity-result-panel" data-pages="lcr-linearity">
+          <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B MONITOR ANALYSIS</p><h2>大信号线性度 / 波形畸变分析</h2><small id="linearityResultPath" class="scope-interaction-help">等待加载测量文件夹</small></div></div>
+          <div class="big-lcr-status-grid"><div><span>有效运行 / 总运行</span><strong id="linearityRunCount">—</strong></div><div><span>最高谐波阶数</span><strong id="linearityOrderMetric">—</strong></div><div><span>当前频率</span><strong id="linearityFrequencyMetric">—</strong></div></div>
+          <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>THD 对 AWG Vpp</span><small>Voltage / Current Monitor 对应的线圈量</small></div><div class="lcr-canvas-wrap"><canvas id="linearityThdCanvas"></canvas></div></div><div><div class="subhead"><span>基波增益偏差对 AWG Vpp</span><small>同频最低 Vpp 作为 0 dB 参考</small></div><div class="lcr-canvas-wrap"><canvas id="linearityGainCanvas"></canvas></div></div></div>
+          <div class="subhead"><span>单次运行的电压/电流谐波</span><label>运行<select id="linearityRunSelect"><option value="">分析后选择</option></select></label></div><div class="lcr-canvas-wrap"><canvas id="linearityHarmonicCanvas"></canvas></div>
+          <div class="subhead"><span>平顶区电压 / 电流波形</span><small>两轴独立归一化，仅用于观察形状；数值请看下表</small></div><div class="lcr-wave-wrap"><canvas id="linearityWaveCanvas"></canvas></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>AWG Vpp/V</th><th>有效次数</th><th>电压 THD/%</th><th>电流 THD/%</th><th>电压 H2/dBc</th><th>电流 H2/dBc</th><th>电压 H3/dBc</th><th>电流 H3/dBc</th><th>电压增益偏差/dB</th><th>电流增益偏差/dB</th><th>基波 Vrms/V</th><th>基波 Irms/A</th></tr></thead><tbody id="linearityTableBody"></tbody></table></div>
         </section>
 
         <section id="lcrResultPanel" class="scope-panel lcr-result-panel page-only" data-pages="lcr" data-lcr-mode="small">
@@ -799,6 +844,6 @@
         </section>
       </section>
     </main>
-    <script src="/app.js?v=20260922-big-lcr1"></script>
+    <script src="/app.js?v=20260923-big-lcr-alert4"></script>
   </body>
 </html>

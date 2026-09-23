@@ -138,8 +138,8 @@ class WebApiTests(unittest.TestCase):
             analysis_guard_cycles=1.0,
             awg_drive_vpp=0.5,
             max_drive_vpp=2.0,
-            max_voltage_rms_v=20.0,
-            max_current_rms_a=1.0,
+            alert_voltage_vpp_v=400.0,
+            alert_current_peak_a=2.0,
         ))
         reply = self.post_json(
             "/api/big-lcr/start",
@@ -161,12 +161,23 @@ class WebApiTests(unittest.TestCase):
         for key in (
             "impedance_magnitude_ohm", "phase_deg", "series_resistance_ohm",
             "series_reactance_ohm", "effective_inductance_h", "quality_factor",
-            "voltage_rms_v", "current_rms_a", "safety_state",
+            "voltage_rms_v", "current_rms_a", "voltage_vpp_v", "current_peak_a", "safety_state",
         ):
             self.assertIn(key, row)
         saved_config = json.loads(Path(result["directory"], "big_lcr_config.json").read_text(encoding="utf-8"))
         self.assertEqual(saved_config["big_lcr"]["voltage_monitor_scale_v_per_v"], 1.0)
         self.assertTrue(Path(result["directory"], "summary.csv").is_file())
+        linearity = self.post_json(
+            "/api/big-lcr/linearity",
+            {"directory": result["directory"], "harmonic_order": 5},
+        )
+        self.assertEqual(linearity["valid_runs"], 1)
+        self.assertEqual(len(linearity["summary_rows"]), 1)
+        preview = self.post_json(
+            "/api/big-lcr/linearity/run",
+            {"directory": result["directory"], "run_index": 1},
+        )
+        self.assertTrue(preview["time_s"])
 
     def test_precision_resistor_calibration_through_http_api(self) -> None:
         config = AcquisitionConfig(
@@ -262,6 +273,7 @@ class WebApiTests(unittest.TestCase):
             "/measure",
             "/sweep",
             "/lcr",
+            "/lcr-linearity",
             "/analysis",
             "/file-analysis",
             "/sweep-analysis",

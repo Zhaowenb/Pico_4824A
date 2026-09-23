@@ -11,6 +11,8 @@ let latestLcr = null;
 let latestLcrWave = null;
 let latestBigLcr = null;
 let latestBigLcrWave = null;
+let latestLinearity = null;
+let latestLinearityWave = null;
 let polling = null;
 let previewTimer = null;
 let previewRequest = 0;
@@ -356,7 +358,9 @@ function buildBigLcrPayload() {
       capture_timeout_s: 10,
     },
     big_lcr: {
-      mode: $("bigLcrMode").value,
+      mode: ["frequency", "grid"].includes($("bigLcrScanMode").value)
+        ? $("bigLcrMode").value : "single",
+      scan_mode: $("bigLcrScanMode").value,
       frequency_hz: frequencyHz,
       frequency_start_hz: number("bigLcrFrequencyStart") * 1000,
       frequency_stop_hz: number("bigLcrFrequencyStop") * 1000,
@@ -365,6 +369,9 @@ function buildBigLcrPayload() {
       repeats: Math.round(number("bigLcrRepeats")),
       interval_s: number("bigLcrInterval"),
       awg_drive_vpp: number("bigLcrAwgVpp"),
+      awg_vpp_start: number("bigLcrVppStart"),
+      awg_vpp_stop: number("bigLcrVppStop"),
+      awg_vpp_step: number("bigLcrVppStep"),
       burst_cycles: burstCycles,
       ramp_cycles: number("bigLcrRampCycles"),
       analysis_cycles: Math.round(number("bigLcrAnalysisCycles")),
@@ -377,9 +384,16 @@ function buildBigLcrPayload() {
       current_monitor_polarity: Number($("bigLcrCurrentPolarity").value),
       voltage_monitor_offset_v: number("bigLcrVoltageOffset"),
       current_monitor_offset_v: number("bigLcrCurrentOffset"),
+      ata_voltage_gain: number("bigLcrAtaGain"),
+      auto_monitor_range: $("bigLcrAutoRange").checked,
+      auto_range_max_retries: 2,
+      trip_detection_enabled: $("bigLcrTripDetection").checked,
+      trip_drop_ratio: number("bigLcrTripDrop") / 100,
+      trip_hold_cycles: number("bigLcrTripHold"),
+      min_monitor_rms_v: number("bigLcrMinMonitorRms") / 1000,
       max_drive_vpp: number("bigLcrMaxDrive"),
-      max_voltage_rms_v: number("bigLcrMaxVoltage"),
-      max_current_rms_a: number("bigLcrMaxCurrent"),
+      alert_voltage_vpp_v: number("bigLcrAlertVoltageVpp"),
+      alert_current_peak_a: number("bigLcrAlertCurrentPeak"),
       max_frequency_hz: number("bigLcrMaxFrequency") * 1000,
     },
   };
@@ -444,19 +458,35 @@ function updateLcrControls() {
 function updateBigLcrControls() {
   if (!$("bigLcrMode")) return;
   const mode = $("bigLcrMode").value;
-  $("bigLcrSingleControls").hidden = mode !== "single";
-  $("bigLcrSweepControls").hidden = mode === "single";
+  const scanMode = $("bigLcrScanMode")?.value || "single";
+  const frequencyAxisEnabled = ["frequency", "grid"].includes(scanMode);
+  const voltageAxisEnabled = ["voltage", "grid"].includes(scanMode);
+  const frequencySweepEnabled = frequencyAxisEnabled && mode !== "single";
+  $("bigLcrSingleControls").hidden = frequencySweepEnabled;
+  $("bigLcrSweepControls").hidden = !frequencySweepEnabled;
   $("bigLcrLinearStepLabel").hidden = mode !== "linear";
   $("bigLcrLogPointsLabel").hidden = mode !== "log";
-  let points = 1;
-  if (mode === "linear") {
-    points = axisCount(number("bigLcrFrequencyStart"), number("bigLcrFrequencyStop"), number("bigLcrFrequencyStep"));
-  } else if (mode === "log") {
+  $("bigLcrFixedVppControl").hidden = voltageAxisEnabled;
+  $("bigLcrVppSweepControls").hidden = !voltageAxisEnabled;
+  let frequencyPoints = 1;
+  if (frequencySweepEnabled && mode === "linear") {
+    frequencyPoints = axisCount(number("bigLcrFrequencyStart"), number("bigLcrFrequencyStop"), number("bigLcrFrequencyStep"));
+  } else if (frequencySweepEnabled && mode === "log") {
     const ratio = number("bigLcrFrequencyStop") / Math.max(number("bigLcrFrequencyStart"), 1e-30);
-    points = ratio >= 1 ? Math.max(2, Math.ceil(Math.log10(ratio) * number("bigLcrPointsPerDecade")) + 1) : 0;
+    frequencyPoints = ratio >= 1 ? Math.max(2, Math.ceil(Math.log10(ratio) * number("bigLcrPointsPerDecade")) + 1) : 0;
   }
+  const voltagePoints = voltageAxisEnabled
+    ? axisCount(number("bigLcrVppStart"), number("bigLcrVppStop"), number("bigLcrVppStep")) : 1;
+  const points = frequencyPoints * voltagePoints;
   const runs = points * Math.max(0, Math.round(number("bigLcrRepeats")));
-  $("bigLcrEstimate").textContent = points ? `${points} 频点 · ${runs} 次采集` : "参数无效";
+  const estimate = scanMode === "grid"
+    ? `${frequencyPoints} 频点 × ${voltagePoints} 个 Vpp · ${points} 个组合点 · ${runs} 次采集`
+    : scanMode === "frequency" ? `${frequencyPoints} 频点 · ${runs} 次采集`
+      : scanMode === "voltage" ? `${voltagePoints} 个 Vpp · ${runs} 次采集`
+        : `${points} 个测量点 · ${runs} 次采集`;
+  $("bigLcrEstimate").textContent = points
+    ? `${estimate}${$("bigLcrAutoRange")?.checked ? ` · 最多 ${runs * 3} 次激励（含重采）` : ""}`
+    : "参数无效";
   updateBigSafetyStatus();
 }
 
@@ -465,28 +495,70 @@ function updateBigSafetyStatus(lastRow = null) {
   const button = $("bigLcrStartBtn");
   if (!status || !button) return;
   const acknowledged = $("bigLcrSafetyAck").checked;
-  const drive = Number($("bigLcrAwgVpp").value);
+  const scanMode = $("bigLcrScanMode")?.value || "single";
+  const voltageAxisEnabled = ["voltage", "grid"].includes(scanMode);
+  const drive = voltageAxisEnabled ? Number($("bigLcrVppStop").value) : Number($("bigLcrAwgVpp").value);
+  const driveStart = voltageAxisEnabled ? Number($("bigLcrVppStart").value) : Number($("bigLcrAwgVpp").value);
+  const driveStep = voltageAxisEnabled ? Number($("bigLcrVppStep").value) : 1;
   const maxDrive = Number($("bigLcrMaxDrive").value);
-  const frequency = $("bigLcrMode")?.value === "single"
-    ? Number($("bigLcrFrequency").value)
-    : Number($("bigLcrFrequencyStop").value);
+  const frequencySweepEnabled = ["frequency", "grid"].includes(scanMode) && $("bigLcrMode")?.value !== "single";
+  const frequencyStart = frequencySweepEnabled ? Number($("bigLcrFrequencyStart").value) : Number($("bigLcrFrequency").value);
+  const frequency = frequencySweepEnabled ? Number($("bigLcrFrequencyStop").value) : Number($("bigLcrFrequency").value);
   const maxFrequency = Number($("bigLcrMaxFrequency").value);
+  const gain = Number($("bigLcrAtaGain").value);
+  const alertVoltage = Number($("bigLcrAlertVoltageVpp").value);
+  const estimatedOutputVpp = drive * gain;
+  const validGain = gain > 0 && gain <= 60;
+  const alertCurrent = Number($("bigLcrAlertCurrentPeak").value);
+  const validAlertThresholds = alertVoltage > 0 && alertCurrent > 0;
+  const validDriveAxis = driveStart > 0 && drive <= maxDrive && driveStart <= drive && driveStep > 0;
+  const validFrequencyAxis = frequencyStart > 0 && frequency <= maxFrequency && frequencyStart <= frequency;
+  let frequencyPoints = 1;
+  if (frequencySweepEnabled && $("bigLcrMode").value === "linear") {
+    frequencyPoints = axisCount(Number($("bigLcrFrequencyStart").value), frequency, Number($("bigLcrFrequencyStep").value));
+  } else if (frequencySweepEnabled && $("bigLcrMode").value === "log") {
+    const ratio = frequency / Math.max(frequencyStart, 1e-30);
+    frequencyPoints = ratio >= 1
+      ? Math.max(2, Math.ceil(Math.log10(ratio) * number("bigLcrPointsPerDecade")) + 1) : 0;
+  }
+  const voltagePoints = voltageAxisEnabled
+    ? axisCount(driveStart, drive, driveStep) : 1;
+  const repeats = Math.round(number("bigLcrRepeats"));
+  const totalRuns = frequencyPoints * voltagePoints * repeats;
+  const maxShots = totalRuns * ($("bigLcrAutoRange")?.checked ? 3 : 1);
+  const validRunCount = frequencyPoints > 0 && voltagePoints > 0
+    && repeats >= 1 && repeats <= 100 && maxShots <= 10_000;
   status.className = "big-safety-status";
-  if (lastRow?.safety_state) {
-    const state = String(lastRow.safety_state).toLowerCase();
-    status.classList.add(state === "trip" ? "trip" : state === "warn" ? "warn" : "ok");
-    status.textContent = `最近一次：${lastRow.safety_state} · ${lastRow.safety_message || ""}`;
-  } else if (!acknowledged) {
+  if (!acknowledged) {
     status.classList.add("warn");
     status.textContent = "未确认安全参数；开始按钮将保持锁定";
-  } else if (!(drive > 0) || drive > maxDrive || !(frequency > 0) || frequency > maxFrequency) {
+  } else if (!validGain) {
+    status.classList.add("trip");
+    status.textContent = "请填写 ATA 面板增益（>0 且 ≤60 倍）。";
+  } else if (!validAlertThresholds) {
+    status.classList.add("trip");
+    status.textContent = "电压 Vpp 与电流 Apeak 提醒值均须大于 0。";
+  } else if (!validDriveAxis || !validFrequencyAxis) {
     status.classList.add("trip");
     status.textContent = "输入激励或频率超过安全限值，请先调整参数";
+  } else if (!validRunCount) {
+    status.classList.add("warn");
+    status.textContent = "扫描点数无效或考虑自动量程重采后最多超过 10000 次激励";
+  } else if (lastRow?.safety_state) {
+    const state = String(lastRow.safety_state).toLowerCase();
+    status.classList.add(["trip", "suspect_trip", "monitor_fault", "adc_overflow", "analysis_error"].includes(state) ? "trip" : state === "warn" ? "warn" : "ok");
+    status.textContent = `最近一次：${lastRow.safety_state} · ${lastRow.safety_message || ""}`;
+  } else if (estimatedOutputVpp > alertVoltage) {
+    status.classList.add("warn");
+    status.textContent = `估算输出 ${estimatedOutputVpp.toPrecision(4)} Vpp，超过程序提醒值；仍可开始。`;
+  } else if (estimatedOutputVpp > 200) {
+    status.classList.add("warn");
+    status.textContent = `估算输出 ${estimatedOutputVpp.toPrecision(4)} Vpp，超过 ATA-2021B 官网标称 200 Vpp；仍可开始。`;
   } else {
     status.classList.add("ok");
-    status.textContent = "安全参数已确认；测量后仍会按 Voltage/Current Monitor 实测 RMS 再判定";
+    status.textContent = `估算输出 ${estimatedOutputVpp.toPrecision(4)} Vpp；采集后按 Monitor 实测值提示。`;
   }
-  button.disabled = !acknowledged || !(drive > 0) || drive > maxDrive || !(frequency > 0) || frequency > maxFrequency;
+  button.disabled = !acknowledged || !validGain || !validAlertThresholds || !validDriveAxis || !validFrequencyAxis || !validRunCount;
 }
 
 function axisCount(start, stop, step) {
@@ -752,8 +824,8 @@ async function pollStatus() {
       const percent = progress.total_runs ? progress.run_index / progress.total_runs * 100 : 0;
       setWidth("bigLcrProgressBar", `${Math.min(100, percent)}%`);
       if ($("bigLcrProgressText")) $("bigLcrProgressText").textContent = progress.run_index
-        ? `${progress.run_index}/${progress.total_runs} 次 · ${(Number(progress.frequency_hz) / 1000).toFixed(3).replace(/\.000$/, "")} kHz · 重复 ${progress.repeat}/${progress.repeats}${progress.safety_state ? ` · ${progress.safety_state}` : ""}`
-        : `共 ${progress.total_points} 个频点，${progress.total_runs} 次采集`;
+        ? `${progress.run_index}/${progress.total_runs} 次 · ${(Number(progress.frequency_hz) / 1000).toFixed(3).replace(/\.000$/, "")} kHz · ${Number(progress.awg_drive_vpp).toFixed(3)} Vpp · 重复 ${progress.repeat}/${progress.repeats}${progress.safety_state ? ` · ${progress.safety_state}` : ""}`
+        : `共 ${progress.total_points} 个频率/Vpp 组合点，${progress.total_runs} 次采集`;
     }
     if (["complete", "stopped"].includes(status.state)) {
       clearInterval(polling);
@@ -787,6 +859,7 @@ async function pollStatus() {
         if (status.state === "complete") setWidth("lcrProgressBar", "100%");
       } else if (status.task_kind === "big_lcr" && status.has_big_lcr_result) {
         latestBigLcr = await api("/api/big-lcr/result");
+        if (latestBigLcr.safety_tripped && $("bigLcrSafetyAck")) $("bigLcrSafetyAck").checked = false;
         if (latestBigLcr.run_rows.length) {
           latestBigLcrWave = await api("/api/result/display", {
             method: "POST",
@@ -802,6 +875,7 @@ async function pollStatus() {
       ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
       ["stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn"].forEach((id) => setDisabled(id, true));
     }
+    if (status.state !== "running") updateBigSafetyStatus(latestBigLcr?.run_rows?.at(-1) || null);
   } catch (error) {
     setEvent(error.message, "error");
   }
@@ -1386,12 +1460,14 @@ function updateLcrResult() {
 
 function updateBigLcrResult() {
   if (!latestBigLcr || !$("bigLcrTableBody")) return;
-  const rows = [...(latestBigLcr.summary_rows || [])].sort((a, b) => Number(a.frequency_hz) - Number(b.frequency_hz));
-  const cell = (value, digits = 6) => Number.isFinite(Number(value)) ? Number(value).toPrecision(digits) : "—";
+  const rows = [...(latestBigLcr.summary_rows || [])].sort((a, b) =>
+    Number(a.frequency_hz) - Number(b.frequency_hz) || Number(a.awg_drive_vpp) - Number(b.awg_drive_vpp));
+  const cell = (value, digits = 6) => Number.isFinite(lcrNumeric(value)) ? Number(value).toPrecision(digits) : "—";
   $("bigLcrResultPath").textContent = latestBigLcr.directory || "—";
-  $("bigLcrTableBody").innerHTML = rows.map((row) => `<tr><td>${cell(Number(row.frequency_hz) / 1000, 6)}</td><td>${row.repeats_completed ?? "—"}</td><td>${cell(row.impedance_magnitude_ohm)}</td><td>${cell(row.phase_deg, 5)}</td><td>${cell(row.series_resistance_ohm)}</td><td>${cell(row.series_reactance_ohm)}</td><td>${cell(row.effective_inductance_h)}</td><td>${cell(row.quality_factor, 5)}</td><td>${cell(row.voltage_rms_v)}</td><td>${cell(row.current_rms_a)}</td><td>${cell(row.voltage_snr_db, 5)}</td><td>${cell(row.current_snr_db, 5)}</td><td>${row.safety_state || "—"}</td></tr>`).join("");
+  $("bigLcrTableBody").innerHTML = rows.map((row) => `<tr><td>${cell(Number(row.frequency_hz) / 1000, 6)}</td><td>${cell(row.awg_drive_vpp, 5)}</td><td>${row.valid_repeats ?? row.repeats_completed ?? "—"} / ${row.repeats_completed ?? "—"}</td><td>${cell(row.impedance_magnitude_ohm)}</td><td>${cell(row.phase_deg, 5)}</td><td>${cell(row.series_resistance_ohm)}</td><td>${cell(row.series_reactance_ohm)}</td><td>${cell(row.effective_inductance_h)}</td><td>${cell(row.quality_factor, 5)}</td><td>${cell(row.voltage_rms_v)}</td><td>${cell(row.current_rms_a)}</td><td>${cell(row.voltage_vpp_v)}</td><td>${cell(row.current_peak_a)}</td><td>${cell(row.voltage_snr_db, 5)}</td><td>${cell(row.current_snr_db, 5)}</td><td>${row.safety_state || "—"}</td></tr>`).join("");
   const last = latestBigLcr.run_rows?.at(-1) || rows.at(-1);
   if (last) {
+    $("bigLcrLastPoint").textContent = `当前指标点：${(Number(last.frequency_hz) / 1000).toPrecision(6)} kHz · AWG ${Number(last.awg_drive_vpp).toPrecision(5)} Vpp · Pico 电压 ±${last.voltage_range || "?"} / 电流 ±${last.current_range || "?"} · ${last.auto_range_attempts || 1} 次采集`;
     $("bigLcrMagnitudeMetric").textContent = engineering(last.impedance_magnitude_ohm, "Ω");
     $("bigLcrPhaseMetric").textContent = Number.isFinite(Number(last.phase_deg)) ? `${Number(last.phase_deg).toFixed(3)}°` : "—";
     $("bigLcrRxMetric").textContent = `${engineering(last.series_resistance_ohm, "Ω")} / ${engineering(last.series_reactance_ohm, "Ω")}`;
@@ -1404,6 +1480,173 @@ function updateBigLcrResult() {
     updateBigSafetyStatus(last);
   }
   drawBigLcrCharts(); drawBigLcrWaves();
+}
+
+async function analyzeBigLinearity() {
+  const button = $("linearityAnalyzeBtn");
+  button.disabled = true;
+  $("linearityStatus").textContent = "正在读取原始 NPZ 并拟合平顶区谐波…";
+  try {
+    latestLinearity = await api("/api/big-lcr/linearity", {
+      method: "POST",
+      body: JSON.stringify({
+        directory: $("linearityDirectory").value.trim(),
+        harmonic_order: Math.round(number("linearityHarmonicOrder")),
+      }),
+    });
+    latestLinearityWave = null;
+    $("linearityDirectory").value = latestLinearity.directory;
+    const frequencies = [...new Set((latestLinearity.summary_rows || []).map((row) => Number(row.frequency_hz)))].sort((a, b) => a - b);
+    const select = $("linearityFrequency");
+    select.replaceChildren(...frequencies.map((frequency) => new Option(`${(frequency / 1000).toPrecision(6)} kHz`, String(frequency))));
+    if (frequencies.length) select.value = String(frequencies[0]);
+    updateLinearityView();
+    $("linearityStatus").textContent = `完成：${latestLinearity.valid_runs}/${latestLinearity.total_runs} 次有效；${latestLinearity.warnings.length} 条诊断（只显示前 30 条）`;
+    if (latestLinearity.warnings.length) setEvent(latestLinearity.warnings[0], "warning");
+  } catch (error) {
+    $("linearityStatus").textContent = `分析失败：${error.message}`;
+    setEvent(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function updateLinearityView() {
+  if (!latestLinearity || document.body.dataset.page !== "lcr-linearity") return;
+  const frequency = Number($("linearityFrequency").value);
+  const rows = latestLinearity.summary_rows.filter((row) => Number(row.frequency_hz) === frequency)
+    .sort((a, b) => Number(a.awg_drive_vpp) - Number(b.awg_drive_vpp));
+  const cell = (value, digits = 5) => Number.isFinite(lcrNumeric(value)) ? Number(value).toPrecision(digits) : "—";
+  $("linearityResultPath").textContent = latestLinearity.directory;
+  $("linearityRunCount").textContent = `${latestLinearity.valid_runs} / ${latestLinearity.total_runs}`;
+  $("linearityOrderMetric").textContent = `${latestLinearity.harmonic_order} 阶`;
+  $("linearityFrequencyMetric").textContent = frequency ? `${(frequency / 1000).toPrecision(6)} kHz` : "—";
+  $("linearityTableBody").innerHTML = rows.map((row) => `<tr><td>${cell(Number(row.frequency_hz) / 1000)}</td><td>${cell(row.awg_drive_vpp)}</td><td>${row.repeats}</td><td>${cell(row.voltage_thd_pct)}</td><td>${cell(row.current_thd_pct)}</td><td>${cell(row.voltage_h2_dbc)}</td><td>${cell(row.current_h2_dbc)}</td><td>${cell(row.voltage_h3_dbc)}</td><td>${cell(row.current_h3_dbc)}</td><td>${cell(row.voltage_gain_deviation_db)}</td><td>${cell(row.current_gain_deviation_db)}</td><td>${cell(row.voltage_fundamental_rms_v)}</td><td>${cell(row.current_fundamental_rms_a)}</td></tr>`).join("");
+  const runs = latestLinearity.run_rows.filter((row) => row.analysis_state === "OK" && Number(row.frequency_hz) === frequency)
+    .sort((a, b) => Number(a.awg_drive_vpp) - Number(b.awg_drive_vpp) || Number(a.repeat) - Number(b.repeat));
+  const runSelect = $("linearityRunSelect");
+  const previous = runSelect.value;
+  runSelect.replaceChildren(...runs.map((row) => new Option(`${Number(row.awg_drive_vpp).toPrecision(5)} Vpp · 第 ${row.repeat} 次`, String(row.run_index))));
+  if (runs.some((row) => String(row.run_index) === previous)) runSelect.value = previous;
+  else if (runs.length) runSelect.value = String(runs.at(-1).run_index);
+  drawLinearityXY("linearityThdCanvas", rows, [
+    { key: "voltage_thd_pct", label: "电压 THD", color: "#35d0ba" },
+    { key: "current_thd_pct", label: "电流 THD", color: "#ffb64d" },
+  ], "%");
+  drawLinearityXY("linearityGainCanvas", rows, [
+    { key: "voltage_gain_deviation_db", label: "电压基波", color: "#35d0ba" },
+    { key: "current_gain_deviation_db", label: "电流基波", color: "#ffb64d" },
+  ], "dB");
+  updateLinearityRun();
+}
+
+function drawLinearityXY(canvasId, rows, series, unit) {
+  const canvas = $(canvasId);
+  const { ctx, width, height } = canvasSetup(canvas);
+  ctx.clearRect(0, 0, width, height);
+  const points = rows.map((row) => Number(row.awg_drive_vpp));
+  const values = rows.flatMap((row) => series.map((item) => lcrNumeric(row[item.key]))).filter(Number.isFinite);
+  if (!points.length || !values.length) {
+    ctx.fillStyle = "#78909c"; ctx.font = "12px sans-serif"; ctx.fillText("当前频率没有有效数据", 30, 40); return;
+  }
+  let xMin = Math.min(...points), xMax = Math.max(...points);
+  let yMin = Math.min(...values), yMax = Math.max(...values);
+  if (xMin === xMax) { xMin -= Math.max(0.05, Math.abs(xMin) * 0.1); xMax += Math.max(0.05, Math.abs(xMax) * 0.1); }
+  if (yMin === yMax) { yMin -= Math.max(0.1, Math.abs(yMin) * 0.1); yMax += Math.max(0.1, Math.abs(yMax) * 0.1); }
+  else { const pad = (yMax - yMin) * 0.1; yMin -= pad; yMax += pad; }
+  const left = 60, right = width - 20, top = 35, bottom = height - 36;
+  drawAxes(ctx, width, height, left, top, right, bottom,
+    (ratio) => (xMin + ratio * (xMax - xMin)).toPrecision(3),
+    (ratio) => (yMin + ratio * (yMax - yMin)).toPrecision(3), 60);
+  series.forEach((item, seriesIndex) => {
+    ctx.strokeStyle = item.color; ctx.fillStyle = item.color; ctx.lineWidth = 2; ctx.beginPath();
+    let connected = false;
+    rows.forEach((row) => {
+      const yValue = lcrNumeric(row[item.key]);
+      if (!Number.isFinite(yValue)) { connected = false; return; }
+      const x = left + (Number(row.awg_drive_vpp) - xMin) / (xMax - xMin) * (right - left);
+      const y = bottom - (yValue - yMin) / (yMax - yMin) * (bottom - top);
+      if (connected) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      connected = true;
+      ctx.fillRect(x - 2, y - 2, 4, 4);
+    });
+    ctx.stroke(); ctx.font = "10px sans-serif"; ctx.fillText(item.label, left + seriesIndex * 90, 16);
+  });
+  ctx.fillStyle = "#78909c"; ctx.textAlign = "right"; ctx.fillText("AWG Vpp / V", right, 16); ctx.textAlign = "left";
+  ctx.fillText(unit, 7, top - 8);
+}
+
+async function updateLinearityRun() {
+  if (!latestLinearity || document.body.dataset.page !== "lcr-linearity") return;
+  const run = latestLinearity.run_rows.find((row) => String(row.run_index) === $("linearityRunSelect").value);
+  drawLinearityHarmonics(run);
+  if (!run) return;
+  const requested = run.run_index;
+  try {
+    const wave = await api("/api/big-lcr/linearity/run", {
+      method: "POST", body: JSON.stringify({ directory: latestLinearity.directory, run_index: requested }),
+    });
+    if (String(requested) !== $("linearityRunSelect").value) return;
+    latestLinearityWave = wave;
+    drawLinearityWave();
+  } catch (error) {
+    $("linearityStatus").textContent = `波形预览失败：${error.message}`;
+  }
+}
+
+function drawLinearityHarmonics(run) {
+  const { ctx, width, height } = canvasSetup($("linearityHarmonicCanvas"));
+  ctx.clearRect(0, 0, width, height);
+  if (!run) return;
+  const voltage = run.voltage_harmonics_rms_v || [];
+  const current = run.current_harmonics_rms_a || [];
+  const count = Math.min(voltage.length, current.length);
+  const floorDb = -100;
+  const left = 55, right = width - 20, top = 34, bottom = height - 35;
+  drawAxes(ctx, width, height, left, top, right, bottom,
+    (ratio) => String(1 + Math.round(ratio * (count - 1))),
+    (ratio) => `${Math.round(floorDb * (1 - ratio))}`, 70);
+  for (let n = 0; n < count; n += 1) {
+    const center = left + (n + 0.5) * (right - left) / count;
+    [voltage, current].forEach((array, side) => {
+      const dbc = n === 0 ? 0 : Math.max(floorDb, 20 * Math.log10(Math.max(array[n], 1e-30) / Math.max(array[0], 1e-30)));
+      const y = top + (0 - dbc) / (0 - floorDb) * (bottom - top);
+      ctx.fillStyle = side === 0 ? "#35d0ba" : "#ffb64d";
+      ctx.fillRect(center + (side ? 1 : -7), y, 6, bottom - y);
+    });
+  }
+  ctx.fillStyle = "#35d0ba"; ctx.fillText("电压", left, 17);
+  ctx.fillStyle = "#ffb64d"; ctx.fillText("电流", left + 44, 17);
+  ctx.fillStyle = "#78909c"; ctx.fillText("dBc", 6, top - 8); ctx.textAlign = "right"; ctx.fillText("谐波阶数", right, 17); ctx.textAlign = "left";
+}
+
+function drawLinearityWave() {
+  if (!latestLinearityWave || document.body.dataset.page !== "lcr-linearity") return;
+  const wave = latestLinearityWave;
+  const { ctx, width, height } = canvasSetup($("linearityWaveCanvas"));
+  ctx.clearRect(0, 0, width, height);
+  if (!wave.time_s?.length) return;
+  const t = wave.time_s, left = 60, right = width - 20, top = 32, bottom = height - 34;
+  const tMin = t[0], tMax = t.at(-1);
+  drawAxes(ctx, width, height, left, top, right, bottom,
+    (ratio) => ((tMin + ratio * (tMax - tMin)) * 1e6).toFixed(1),
+    (ratio) => (2 * ratio - 1).toFixed(1), 70);
+  for (const edge of [wave.window_start_s, wave.window_end_s]) {
+    if (edge == null) continue;
+    const x = left + (edge - tMin) / (tMax - tMin) * (right - left);
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = "#78909c"; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.setLineDash([]);
+  }
+  [[wave.voltage_v, "#35d0ba", "线圈电压"], [wave.current_a, "#ffb64d", "线圈电流"]].forEach(([values, color, label], index) => {
+    const peak = Math.max(...values.map(Math.abs), 1e-12);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath();
+    values.forEach((value, i) => {
+      const x = left + (t[i] - tMin) / (tMax - tMin) * (right - left);
+      const y = bottom - (value / peak + 1) / 2 * (bottom - top);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    });
+    ctx.stroke(); ctx.fillStyle = color; ctx.font = "10px sans-serif"; ctx.fillText(`${label} / ${peak.toPrecision(4)} peak`, left + index * 180, 15);
+  });
+  ctx.fillStyle = "#78909c"; ctx.textAlign = "right"; ctx.fillText("时间 / μs", right, 15); ctx.textAlign = "left";
 }
 
 function drawLcrFrequencyChart(canvasId, rows, series, yUnit, emptyLabel) {
@@ -1651,7 +1894,7 @@ const spectrumWindowColors = ["#35d0ba", "#ffb64d", "#68a8ff", "#ff6f82", "#b88c
 function currentPage() {
   const part = location.pathname.replace(/^\/+|\/+$/g, "");
   if (part === "analysis") return "file-analysis";
-  return ["measure", "sweep", "lcr", "file-analysis", "sweep-analysis"].includes(part)
+  return ["measure", "sweep", "lcr", "lcr-linearity", "file-analysis", "sweep-analysis"].includes(part)
     ? part
     : "measure";
 }
@@ -1721,12 +1964,15 @@ function bindLcrModeListeners() {
   onElement("lcrMeasurementMode", "change", handleLcrModeChange);
   onElement("bigLcrStartBtn", "click", startBigLcr);
   onElement("bigLcrStopBtn", "click", stopCapture);
+  onElement("bigLcrScanMode", "change", updateBigLcrControls);
   onElement("bigLcrMode", "change", updateBigLcrControls);
   [
     "bigLcrFrequency", "bigLcrFrequencyStart", "bigLcrFrequencyStop", "bigLcrFrequencyStep",
-    "bigLcrPointsPerDecade", "bigLcrRepeats", "bigLcrAwgVpp", "bigLcrBurstCycles",
+    "bigLcrPointsPerDecade", "bigLcrVppStart", "bigLcrVppStop", "bigLcrVppStep",
+    "bigLcrRepeats", "bigLcrAwgVpp", "bigLcrBurstCycles",
     "bigLcrRampCycles", "bigLcrAnalysisCycles", "bigLcrGuardCycles", "bigLcrMaxDrive",
-    "bigLcrMaxFrequency", "bigLcrSafetyAck",
+    "bigLcrMaxFrequency", "bigLcrAlertVoltageVpp", "bigLcrAlertCurrentPeak", "bigLcrAtaGain", "bigLcrAutoRange",
+    "bigLcrTripDrop", "bigLcrTripHold", "bigLcrMinMonitorRms", "bigLcrSafetyAck",
   ].forEach((id) => onElement(id, "input", updateBigLcrControls));
   onElement("bigLcrSafetyAck", "change", updateBigSafetyStatus);
   onElement("lcrStartBtn", "click", startLcr);
@@ -1792,6 +2038,9 @@ function showPage(page, push = false) {
       drawBigLcrWaves();
       updateBigLcrResult();
     }
+  } else if (page === "lcr-linearity") {
+    if (!$("linearityDirectory").value && latestBigLcr?.directory) $("linearityDirectory").value = latestBigLcr.directory;
+    if (latestLinearity) updateLinearityView();
   }
 }
 
@@ -1825,12 +2074,15 @@ const persistedIds = [
   "lcrCapacitanceUnit", "lcrInductanceUnit",
   "bigLcrSimulate", "bigLcrSampleRate", "bigLcrTriggerLevel", "bigLcrVoltageChannel",
   "bigLcrCurrentChannel", "bigLcrVoltageRange", "bigLcrCurrentRange", "bigLcrTriggerSignal",
-  "bigLcrMode", "bigLcrFrequency", "bigLcrFrequencyStart", "bigLcrFrequencyStop",
-  "bigLcrFrequencyStep", "bigLcrPointsPerDecade", "bigLcrAwgVpp", "bigLcrBurstCycles",
+  "bigLcrScanMode", "bigLcrMode", "bigLcrFrequency", "bigLcrFrequencyStart", "bigLcrFrequencyStop",
+  "bigLcrFrequencyStep", "bigLcrPointsPerDecade", "bigLcrAwgVpp", "bigLcrVppStart", "bigLcrVppStop",
+  "bigLcrVppStep", "bigLcrBurstCycles",
   "bigLcrRampCycles", "bigLcrAnalysisCycles", "bigLcrGuardCycles", "bigLcrRepeats",
   "bigLcrInterval", "bigLcrVoltageScale", "bigLcrCurrentScale", "bigLcrVoltageOffset",
-  "bigLcrCurrentPolarity", "bigLcrCurrentOffset", "bigLcrMaxDrive", "bigLcrMaxVoltage", "bigLcrMaxCurrent",
-  "bigLcrMaxFrequency", "bigLcrSafetyAck",
+  "bigLcrCurrentPolarity", "bigLcrCurrentOffset", "bigLcrMaxDrive", "bigLcrAlertVoltageVpp", "bigLcrAlertCurrentPeak",
+  "bigLcrMaxFrequency", "bigLcrSafetyAck", "bigLcrAtaGain", "bigLcrAutoRange",
+  "bigLcrTripDetection", "bigLcrTripDrop", "bigLcrTripHold", "bigLcrMinMonitorRms",
+  "linearityDirectory", "linearityHarmonicOrder",
 ];
 
 function restoreSettings() {
@@ -2113,15 +2365,18 @@ function canvasSetup(canvas) {
   return { ctx, width: rect.width, height: rect.height, rect };
 }
 
-function drawAxes(ctx, width, height, left, top, right, bottom, xLabels, yLabels) {
+function drawAxes(ctx, width, height, left, top, right, bottom, xLabels, yLabels, minXTickSpacing = 0) {
   ctx.strokeStyle = "rgba(120,144,156,.19)";
   ctx.lineWidth = 1;
   ctx.font = "10px Consolas";
-  for (let index = 0; index <= 5; index += 1) {
-    const x = left + (right - left) * index / 5;
+  const xIntervals = minXTickSpacing > 0
+    ? Math.max(2, Math.min(5, Math.floor((right - left) / minXTickSpacing)))
+    : 5;
+  for (let index = 0; index <= xIntervals; index += 1) {
+    const x = left + (right - left) * index / xIntervals;
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
     ctx.fillStyle = "#69808a"; ctx.textAlign = "center";
-    ctx.fillText(xLabels(index / 5), x, height - 9);
+    ctx.fillText(xLabels(index / xIntervals), x, height - 9);
   }
   for (let index = 0; index <= 4; index += 1) {
     const y = top + (bottom - top) * index / 4;
@@ -2152,7 +2407,7 @@ function drawBigFrequencyChart(canvasId, rows, series, yUnit, emptyLabel) {
   const left = 74, right = width - 18, top = 34, bottom = height - 38;
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => lcrAxisNumber(10 ** (xMin + (xMax - xMin) * ratio) / 1000),
-    (ratio) => lcrAxisNumber(yMin + (yMax - yMin) * ratio));
+    (ratio) => lcrAxisNumber(yMin + (yMax - yMin) * ratio), 70);
   series.forEach((item, seriesIndex) => {
     ctx.strokeStyle = item.color; ctx.lineWidth = 1.7; ctx.beginPath();
     let connected = false;
@@ -2163,10 +2418,21 @@ function drawBigFrequencyChart(canvasId, rows, series, yUnit, emptyLabel) {
       const y = bottom - (value / yUnit.scale - yMin) / (yMax - yMin) * (bottom - top);
       if (!connected) ctx.moveTo(x, y); else ctx.lineTo(x, y); connected = true;
     });
-    ctx.stroke(); ctx.fillStyle = item.color; ctx.font = "10px Consolas"; ctx.fillText(item.label, left + seriesIndex * 58, 17);
+    ctx.stroke();
+    if (rows.length <= 40) {
+      ctx.fillStyle = item.color;
+      rows.forEach((row, index) => {
+        const value = lcrNumeric(row[item.key]);
+        if (!Number.isFinite(value)) return;
+        const x = left + (xValues[index] - xMin) / (xMax - xMin) * (right - left);
+        const y = bottom - (value / yUnit.scale - yMin) / (yMax - yMin) * (bottom - top);
+        ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+      });
+    }
+    ctx.fillStyle = item.color; ctx.font = "10px Consolas"; ctx.fillText(item.label, left + seriesIndex * 58, 17);
   });
   ctx.fillStyle = "#708790"; ctx.font = "10px Consolas"; ctx.textAlign = "right";
-  ctx.fillText("频率 / kHz（对数）", right, height - 7); ctx.textAlign = "left";
+  ctx.fillText("频率 / kHz（对数）", right, 17); ctx.textAlign = "left";
   ctx.fillText(yUnit.label || "", 8, top - 8);
 }
 
@@ -2202,7 +2468,7 @@ function drawBigComponentChart(rows) {
   const left = 68, right = width - 54, top = 34, bottom = height - 38;
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => lcrAxisNumber(10 ** (xMin + (xMax - xMin) * ratio) / 1000),
-    (ratio) => lcrAxisNumber(lMin + (lMax - lMin) * ratio));
+    (ratio) => lcrAxisNumber(lMin + (lMax - lMin) * ratio), 70);
   for (let index = 0; index <= 4; index += 1) {
     const y = bottom - (bottom - top) * index / 4;
     ctx.fillStyle = "#ff6f82"; ctx.textAlign = "left";
@@ -2216,21 +2482,91 @@ function drawBigComponentChart(rows) {
       const y = bottom - (value - min) / (max - min) * (bottom - top);
       if (!connected) ctx.moveTo(x, y); else ctx.lineTo(x, y); connected = true;
     }); ctx.stroke();
+    if (rows.length <= 40) {
+      ctx.fillStyle = color;
+      values.forEach((value, index) => {
+        if (!Number.isFinite(value)) return;
+        const x = left + (xValues[index] - xMin) / (xMax - xMin) * (right - left);
+        const y = bottom - (value - min) / (max - min) * (bottom - top);
+        ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+      });
+    }
   };
   plot(lValues, lMin, lMax, "#59d5ec"); plot(qValues, qMin, qMax, "#ff6f82");
   ctx.font = "10px Consolas"; ctx.fillStyle = "#59d5ec"; ctx.textAlign = "left"; ctx.fillText(`Leff / ${lLabel}`, left + 5, 17);
-  ctx.fillStyle = "#ff6f82"; ctx.fillText("Q", left + 70, 17); ctx.fillStyle = "#708790"; ctx.textAlign = "right"; ctx.fillText("频率 / kHz（对数）", right, height - 7); ctx.textAlign = "left";
+  ctx.fillStyle = "#ff6f82"; ctx.fillText("Q", left + 70, 17); ctx.fillStyle = "#708790"; ctx.textAlign = "right"; ctx.fillText("频率 / kHz（对数）", right, 17); ctx.textAlign = "left";
+}
+
+function drawBigLcrGridChart(rows) {
+  const canvas = $("bigLcrGridCanvas");
+  if (!canvas) return;
+  const { ctx, width, height } = canvasSetup(canvas);
+  ctx.clearRect(0, 0, width, height);
+  const data = rows.map((row) => ({
+    frequency: Number(row.frequency_hz),
+    vpp: Number(row.awg_drive_vpp),
+    impedance: Number(row.impedance_magnitude_ohm),
+  })).filter((row) => row.frequency > 0 && row.vpp > 0 && Number.isFinite(row.impedance));
+  if (!data.length) {
+    ctx.fillStyle = "#607781"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("没有可绘制的频率 × Vpp 阻抗数据", width / 2, height / 2); ctx.textAlign = "left"; return;
+  }
+  const frequencies = [...new Set(data.map((row) => row.frequency))].sort((a, b) => a - b);
+  const vpps = [...new Set(data.map((row) => row.vpp))].sort((a, b) => a - b);
+  const xCenters = frequencies.map((value) => Math.log10(value));
+  const edges = (values, halfWidth) => values.length === 1
+    ? [values[0] - halfWidth, values[0] + halfWidth]
+    : [values[0] - (values[1] - values[0]) / 2,
+      ...values.slice(1).map((value, index) => (values[index] + value) / 2),
+      values.at(-1) + (values.at(-1) - values.at(-2)) / 2];
+  const xEdges = edges(xCenters, 0.12);
+  const yEdges = edges(vpps, Math.max(vpps[0] * 0.08, 0.05));
+  yEdges[0] = Math.max(0, yEdges[0]);
+  const xMin = xEdges[0], xMax = xEdges.at(-1);
+  const yMin = yEdges[0], yMax = yEdges.at(-1);
+  const zValues = data.map((row) => row.impedance);
+  const zMin = Math.min(...zValues), zMax = Math.max(...zValues);
+  const left = 76, right = width - 64, top = 30, bottom = height - 36;
+  const pxX = (x) => left + (x - xMin) / Math.max(xMax - xMin, 1e-12) * (right - left);
+  const pxY = (y) => bottom - (y - yMin) / Math.max(yMax - yMin, 1e-12) * (bottom - top);
+  drawAxes(ctx, width, height, left, top, right, bottom,
+    (ratio) => lcrAxisNumber(10 ** (xMin + (xMax - xMin) * ratio) / 1000),
+    (ratio) => lcrAxisNumber(yMin + (yMax - yMin) * ratio), 70);
+  const fIndex = new Map(frequencies.map((value, index) => [value, index]));
+  const vIndex = new Map(vpps.map((value, index) => [value, index]));
+  data.forEach((row) => {
+    const xi = fIndex.get(row.frequency), yi = vIndex.get(row.vpp);
+    const x0 = pxX(xEdges[xi]), x1 = pxX(xEdges[xi + 1]);
+    const y0 = pxY(yEdges[yi + 1]), y1 = pxY(yEdges[yi]);
+    const ratio = zMax > zMin ? (row.impedance - zMin) / (zMax - zMin) : 0.5;
+    ctx.fillStyle = `hsl(${190 - 155 * ratio}, 76%, ${35 + 13 * ratio}%)`;
+    ctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+    ctx.strokeStyle = "rgba(9,19,26,.7)"; ctx.lineWidth = 1;
+    ctx.strokeRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+  });
+  const legend = ctx.createLinearGradient(0, bottom, 0, top);
+  legend.addColorStop(0, "hsl(190, 76%, 35%)"); legend.addColorStop(1, "hsl(35, 76%, 48%)");
+  ctx.fillStyle = legend; ctx.fillRect(width - 43, top + 4, 12, bottom - top - 8);
+  ctx.fillStyle = "#8299a2"; ctx.font = "10px Consolas"; ctx.textAlign = "left";
+  ctx.fillText(lcrAxisNumber(zMax), width - 27, top + 10);
+  ctx.fillText(lcrAxisNumber(zMin), width - 27, bottom - 1);
+  ctx.fillStyle = "#8ca1aa"; ctx.fillText("AWG Vpp / V", 7, top - 9);
+  ctx.textAlign = "right"; ctx.fillText("频率 / kHz（对数）", right, 17); ctx.textAlign = "left";
 }
 
 function drawBigLcrCharts() {
   if (document.body.dataset.page !== "lcr" || document.body.dataset.lcrMode !== "big" || !latestBigLcr?.summary_rows?.length) return;
-  const rows = [...latestBigLcr.summary_rows].sort((a, b) => Number(a.frequency_hz) - Number(b.frequency_hz));
-  drawBigFrequencyChart("bigLcrImpedanceCanvas", rows, [
+  const rows = [...latestBigLcr.summary_rows].sort((a, b) =>
+    Number(a.frequency_hz) - Number(b.frequency_hz) || Number(a.awg_drive_vpp) - Number(b.awg_drive_vpp));
+  drawBigLcrGridChart(rows);
+  const highestVpp = Math.max(...rows.map((row) => Number(row.awg_drive_vpp) || 0));
+  const curveRows = rows.filter((row) => Math.abs((Number(row.awg_drive_vpp) || 0) - highestVpp) < 1e-12);
+  drawBigFrequencyChart("bigLcrImpedanceCanvas", curveRows, [
     { key: "impedance_magnitude_ohm", label: "|Z|", color: "#35d0ba" },
     { key: "series_resistance_ohm", label: "Rs", color: "#ffb64d" },
     { key: "series_reactance_ohm", label: "Xs", color: "#b88cff" },
   ], { scale: 1, label: "Ω" }, "阻抗");
-  drawBigComponentChart(rows);
+  drawBigComponentChart(curveRows);
 }
 
 function drawBigLcrWaves() {
@@ -3153,6 +3489,10 @@ document.querySelectorAll("[data-nav], [data-route-link]").forEach((link) => {
   });
 });
 window.addEventListener("popstate", () => showPage(currentPage()));
+onElement("linearityAnalyzeBtn", "click", analyzeBigLinearity);
+onElement("linearityFrequency", "change", updateLinearityView);
+onElement("linearityRunSelect", "change", updateLinearityRun);
+onElement("bigLcrAutoRange", "change", updateBigLcrControls);
 $("analysisBrowseBtn").addEventListener("click", browseAnalysisPath);
 $("analysisFileList").addEventListener("change", loadSelectedAnalysisFile);
 $("analysisApplyBtn").addEventListener("click", refreshAnalysis);
