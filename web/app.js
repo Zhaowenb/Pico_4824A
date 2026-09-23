@@ -13,6 +13,9 @@ let latestBigLcr = null;
 let latestBigLcrWave = null;
 let latestLinearity = null;
 let latestLinearityWave = null;
+let latestLinearityMeasurement = null;
+let latestLinearityMeasurementWave = null;
+const lcrFolderStates = { big_lcr: null, linearity: null, small_lcr: null };
 let polling = null;
 let previewTimer = null;
 let previewRequest = 0;
@@ -21,6 +24,11 @@ let measureFilterRequest = 0;
 let scopeTimeStart = null;
 let scopeTimeEnd = null;
 let scopeAmplitudeScale = 1;
+let activeTripAlarmId = null;
+let tripAlarmMuted = false;
+let tripAlarmAudioContext = null;
+let tripAlarmSoundTimer = null;
+let tripAlarmSoundActive = false;
 const hiddenScopeChannels = new Set();
 
 function buildChannels() {
@@ -43,14 +51,15 @@ function buildChannels() {
   });
   trigger.value = "H";
   transmitter.value = "H";
-  ["lcrVoltageChannel", "lcrCurrentChannel", "bigLcrVoltageChannel", "bigLcrCurrentChannel"].forEach((id) => {
+  ["lcrVoltageChannel", "lcrCurrentChannel", "bigLcrVoltageChannel", "bigLcrCurrentChannel", "linearityReceiverChannel"].forEach((id) => {
     $(id).innerHTML = channelNames.map((name) => `<option value="${name}">CH ${name}</option>`).join("");
   });
   $("lcrVoltageChannel").value = "A";
   $("lcrCurrentChannel").value = "B";
   $("bigLcrVoltageChannel").value = "A";
   $("bigLcrCurrentChannel").value = "B";
-  ["lcrVoltageRange", "lcrCurrentRange", "bigLcrVoltageRange", "bigLcrCurrentRange"].forEach((id) => {
+  $("linearityReceiverChannel").value = "C";
+  ["lcrVoltageRange", "lcrCurrentRange", "bigLcrVoltageRange", "bigLcrCurrentRange", "linearityReceiverRange"].forEach((id) => {
     $(id).innerHTML = inputRanges.map((range) => `<option value="${range}">±${range}</option>`).join("");
     $(id).value = "2V";
   });
@@ -399,6 +408,69 @@ function buildBigLcrPayload() {
   };
 }
 
+function buildLinearityPayload() {
+  const voltageChannel = $("bigLcrVoltageChannel").value;
+  const currentChannel = $("bigLcrCurrentChannel").value;
+  const receiverChannel = $("linearityReceiverChannel").value;
+  if (new Set([voltageChannel, currentChannel, receiverChannel]).size !== 3) {
+    throw new Error("Voltage Monitor、Current Monitor 和 Receiver 必须选择三个不同通道");
+  }
+  const sampleRate = number("linearitySampleRate") * 1e6;
+  const duration = number("linearityCaptureDuration") * 1e-6;
+  const preSamples = Math.round(sampleRate * duration * number("linearityTriggerPosition") / 100);
+  const totalSamples = Math.max(2, Math.round(sampleRate * duration));
+  const triggerChannel = $("linearityTriggerSignal").value === "current" ? currentChannel : voltageChannel;
+  const frequencyHz = number("linearityFrequencyKHz") * 1000;
+  const cycles = Math.round(number("linearityCycles"));
+  const rampCycles = number("linearityRampCycles");
+  const channels = {};
+  channelNames.forEach((name) => {
+    const range = name === voltageChannel ? $("bigLcrVoltageRange").value
+      : name === currentChannel ? $("bigLcrCurrentRange").value
+        : name === receiverChannel ? $("linearityReceiverRange").value : "2V";
+    channels[name] = { enabled: [voltageChannel, currentChannel, receiverChannel].includes(name), range, coupling: "DC", analog_offset_v: 0 };
+  });
+  return {
+    safety_acknowledged: $("bigLcrSafetyAck").checked,
+    config: {
+      simulate: $("bigLcrSimulate").checked,
+      sample_rate_hz: sampleRate,
+      pre_trigger_samples: preSamples,
+      post_trigger_samples: Math.max(1, totalSamples - preSamples),
+      channels,
+      trigger: { enabled: true, source: triggerChannel, threshold_v: number("linearityTriggerLevel"), direction: "rising", auto_trigger_ms: 2000, delay_samples: 0 },
+      awg: { enabled: true, waveform: "lcr_tone", frequency_hz: frequencyHz, cycles, pk_to_pk_v: number("linearityVppStart"), offset_v: 0, buffer_samples: 8192, trigger_source: "software", tone_ramp_cycles: rampCycles },
+      capture_timeout_s: 10,
+    },
+    linearity: {
+      frequency_hz: frequencyHz, cycles, ramp_cycles: rampCycles,
+      vpp_start: number("linearityVppStart"), vpp_stop: number("linearityVppStop"), vpp_step: number("linearityVppStep"),
+      direction: $("linearityDirection").value, repeats: Math.round(number("linearityRepeats")), interval_s: number("linearityInterval"),
+      sample_rate_hz: sampleRate, capture_duration_us: number("linearityCaptureDuration"),
+      trigger_position_percent: number("linearityTriggerPosition"), trigger_signal: $("linearityTriggerSignal").value,
+      trigger_level_v: number("linearityTriggerLevel"), voltage_channel: voltageChannel, voltage_range: $("bigLcrVoltageRange").value,
+      current_channel: currentChannel, current_range: $("bigLcrCurrentRange").value,
+      receiver_channel: receiverChannel, receiver_range: $("linearityReceiverRange").value,
+      trip_detection_enabled: $("bigLcrTripDetection").checked,
+      trip_drop_ratio: number("bigLcrTripDrop") / 100,
+      trip_hold_cycles: number("bigLcrTripHold"),
+      minimum_monitor_rms_v: number("bigLcrMinMonitorRms") / 1000,
+      threshold_d_wave_pct: number("linearityMeasureLimitDwave"),
+      threshold_receiver_thd_pct: number("linearityMeasureLimitRxThd"),
+      threshold_current_thd_pct: number("linearityMeasureLimitIThd"),
+      threshold_compression_db: number("linearityMeasureLimitCompression"),
+      threshold_kme_deviation_pct: number("linearityMeasureLimitKme"),
+      threshold_correlation: number("linearityMeasureLimitCorrelation"),
+      voltage_scale_v_per_v: number("bigLcrVoltageScale"), voltage_offset_v: number("bigLcrVoltageOffset"),
+      current_scale_a_per_v: number("bigLcrCurrentScale"), current_offset_v: number("bigLcrCurrentOffset"),
+      current_polarity: Number($("bigLcrCurrentPolarity").value), ata_voltage_gain: number("bigLcrAtaGain") || 1,
+      noise_start_us: number("linearityNoiseStart"), noise_end_us: number("linearityNoiseEnd"),
+      direct_start_us: number("linearityDirectStart"), direct_end_us: number("linearityDirectEnd"),
+      echo_start_us: number("linearityEchoStart"), echo_end_us: number("linearityEchoEnd"),
+    },
+  };
+}
+
 async function refreshLcrCalibrations(preferredPath = null) {
   const select = $("lcrCalibrationFile");
   let savedPath = "";
@@ -595,6 +667,114 @@ async function api(path, options = {}) {
   return data;
 }
 
+function primeTripAlarmAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return false;
+  try {
+    if (!tripAlarmAudioContext) tripAlarmAudioContext = new AudioContextClass();
+    if (tripAlarmAudioContext.state === "suspended") tripAlarmAudioContext.resume().catch(() => {});
+    return true;
+  } catch (_) { return false; }
+}
+
+function playTripAlarmPattern() {
+  const context = tripAlarmAudioContext;
+  if (!context || context.state !== "running" || !tripAlarmSoundActive || tripAlarmMuted) return;
+  const start = context.currentTime + 0.015;
+  [0, 0.23].forEach((offset, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const at = start + offset;
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(index ? 660 : 880, at);
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(0.12, at + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+    oscillator.connect(gain); gain.connect(context.destination);
+    oscillator.start(at); oscillator.stop(at + 0.17);
+  });
+}
+
+function startTripAlarmSound() {
+  if (tripAlarmMuted || !primeTripAlarmAudio()) return;
+  tripAlarmSoundActive = true;
+  const ready = tripAlarmAudioContext.state === "running"
+    ? Promise.resolve()
+    : tripAlarmAudioContext.resume().catch(() => {});
+  ready.then(() => {
+    if (!tripAlarmSoundActive || tripAlarmMuted) return;
+    playTripAlarmPattern();
+    clearInterval(tripAlarmSoundTimer);
+    tripAlarmSoundTimer = setInterval(playTripAlarmPattern, 1150);
+  });
+}
+
+function stopTripAlarmSound() {
+  tripAlarmSoundActive = false;
+  clearInterval(tripAlarmSoundTimer);
+  tripAlarmSoundTimer = null;
+}
+
+function updateTripAlarm(status) {
+  const modal = $("tripAlarmModal");
+  if (!modal) return;
+  const alarm = status.trip_alarm;
+  if (status.state !== "paused" || !alarm) {
+    modal.hidden = true;
+    stopTripAlarmSound();
+    activeTripAlarmId = null;
+    return;
+  }
+  modal.hidden = false;
+  const newAlarm = alarm.alarm_id !== activeTripAlarmId;
+  if (newAlarm) {
+    activeTripAlarmId = alarm.alarm_id;
+    tripAlarmMuted = false;
+    startTripAlarmSound();
+    $("tripContinueBtn")?.focus({ preventScroll: true });
+  }
+  const taskName = alarm.task_kind === "big_lcr" ? "大信号 LCR" : "大信号线性度 / 波形畸变";
+  const run = Number(alarm.run_index), total = Number(alarm.total_runs);
+  const point = Number(alarm.point_index), points = Number(alarm.total_points);
+  const finalRun = Number.isFinite(run) && Number.isFinite(total) && total > 0 && run >= total;
+  const progress = Number.isFinite(run) && Number.isFinite(total)
+    ? `${run}/${total} 次 · 点 ${point}/${points} · 重复 ${alarm.repeat}/${alarm.repeats}` : "—";
+  const frequency = Number(alarm.frequency_hz);
+  const vpp = Number(alarm.awg_vpp);
+  const ratio = Number(alarm.monitor_min_ratio);
+  $("tripAlarmReason").textContent = alarm.reason || "检测到 Monitor 平顶区持续掉幅，请检查 ATA-2021B。";
+  $("tripAlarmTask").textContent = taskName;
+  $("tripAlarmProgress").textContent = progress;
+  $("tripAlarmFrequency").textContent = Number.isFinite(frequency) ? `${(frequency / 1000).toFixed(3)} kHz` : "—";
+  $("tripAlarmVpp").textContent = Number.isFinite(vpp) ? `${vpp.toFixed(3)} Vpp` : "—";
+  $("tripAlarmChannels").textContent = alarm.voltage_channel && alarm.current_channel
+    ? `Voltage ${alarm.voltage_channel} · Current ${alarm.current_channel}` : "—";
+  $("tripAlarmDrop").textContent = Number.isFinite(ratio) ? `${(ratio * 100).toFixed(1)}% 剩余` : "已持续低于设定阈值";
+  $("tripAlarmInstruction").textContent = finalRun
+    ? "请先检查 ATA-2021B 保护状态并完成合闸/复位。当前已是本次任务的最后一次采集；确认设备已恢复且无需继续更多点后，点击按钮结束任务。"
+    : "请先检查 ATA-2021B 保护状态并完成合闸/复位。点击“已解决，继续扫描”表示你已确认设备恢复且可以安全继续；系统会从下一次采集继续。";
+  $("tripContinueBtn").textContent = finalRun ? "已解决，结束任务" : "已解决，继续扫描";
+  const muteButton = $("tripMuteBtn");
+  if (muteButton) {
+    muteButton.textContent = tripAlarmMuted ? "恢复声音" : "停止声音";
+    muteButton.setAttribute("aria-pressed", String(tripAlarmMuted));
+  }
+}
+
+async function continueAfterTrip() {
+  const button = $("tripContinueBtn");
+  if (button) button.disabled = true;
+  try {
+    await api("/api/trip/resolve", { method: "POST", body: "{}" });
+    stopTripAlarmSound();
+    setEvent("已确认疑似跳闸问题解决，扫描从下一测量点继续。", "running");
+  } catch (error) {
+    setEvent(error.message, "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function updateAwgControls() {
   const waveform = $("waveform").value;
   $("cancelControls").hidden = waveform !== "hann_cancel";
@@ -680,14 +860,14 @@ function drawAwgPreview(preview) {
 
 function setEvent(message, state = "idle") {
   $("messageText").textContent = message;
-  $("stateText").textContent = state === "running" ? "任务运行中" : state === "error" ? "运行异常" : state === "complete" ? "任务完成" : state === "stopped" ? "任务已停止" : "系统就绪";
+  $("stateText").textContent = state === "running" ? "任务运行中" : state === "paused" ? "扫描已暂停" : state === "error" ? "运行异常" : state === "complete" ? "任务完成" : state === "stopped" ? "任务已停止" : "系统就绪";
   $("statusDot").className = `status-dot ${state}`;
   $("eventTime").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 
 async function startCapture() {
   try {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn"].forEach((id) => setDisabled(id, true));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn"].forEach((id) => setDisabled(id, true));
     latestResult = null;
     $("emptyState").style.display = "flex";
     const reply = await api("/api/capture", { method: "POST", body: JSON.stringify(buildPayload()) });
@@ -695,7 +875,7 @@ async function startCapture() {
     setEvent(`采集任务 #${reply.capture_id} 已启动，正在等待触发。`, "running");
     polling = setInterval(pollStatus, 350);
   } catch (error) {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
     setDisabled("stopBtn", true);
     setEvent(error.message, "error");
   }
@@ -703,7 +883,7 @@ async function startCapture() {
 
 async function startSweep() {
   try {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn"].forEach((id) => setDisabled(id, true));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn"].forEach((id) => setDisabled(id, true));
     latestSweep = null;
     $("sweepResultPanel").hidden = true;
     $("sweepProgressBar").style.width = "0%";
@@ -714,7 +894,7 @@ async function startSweep() {
     clearInterval(polling);
     polling = setInterval(pollStatus, 350);
   } catch (error) {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
     setDisabled("sweepStopBtn", true);
     setEvent(error.message, "error");
   }
@@ -722,7 +902,7 @@ async function startSweep() {
 
 async function startLcr() {
   try {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "lcrStopBtn", "bigLcrStopBtn", "stopBtn", "sweepStopBtn"].forEach((id) => setDisabled(id, true));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn", "stopBtn", "sweepStopBtn"].forEach((id) => setDisabled(id, true));
     latestLcr = null;
     latestLcrWave = null;
     $("lcrProgressBar").style.width = "0%";
@@ -736,7 +916,7 @@ async function startLcr() {
     clearInterval(polling);
     polling = setInterval(pollStatus, 350);
   } catch (error) {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
     setDisabled("lcrStopBtn", true);
     setEvent(error.message, "error");
   }
@@ -748,7 +928,7 @@ async function startLcrCalibration() {
     payload.standard_resistance_ohm = number("lcrCalibrationResistance");
     payload.lcr.calibration_enabled = false;
     payload.lcr.calibration_file = null;
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "lcrStopBtn", "bigLcrStopBtn", "stopBtn", "sweepStopBtn"].forEach((id) => setDisabled(id, true));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn", "stopBtn", "sweepStopBtn"].forEach((id) => setDisabled(id, true));
     latestLcr = null;
     latestLcrWave = null;
     $("lcrProgressBar").style.width = "0%";
@@ -762,7 +942,7 @@ async function startLcrCalibration() {
     clearInterval(polling);
     polling = setInterval(pollStatus, 350);
   } catch (error) {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
     setDisabled("lcrStopBtn", true);
     setEvent(error.message, "error");
   }
@@ -770,11 +950,12 @@ async function startLcrCalibration() {
 
 async function startBigLcr() {
   try {
+    primeTripAlarmAudio();
     if (!( $("bigLcrSafetyAck")?.checked )) {
       updateBigSafetyStatus();
       throw new Error("请先确认 ATA-2021B 安全参数");
     }
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "lcrStopBtn", "bigLcrStopBtn", "stopBtn", "sweepStopBtn"].forEach((id) => setDisabled(id, true));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn", "stopBtn", "sweepStopBtn"].forEach((id) => setDisabled(id, true));
     latestBigLcr = null; latestBigLcrWave = null;
     setWidth("bigLcrProgressBar", "0%");
     const reply = await api("/api/big-lcr/start", {
@@ -787,22 +968,195 @@ async function startBigLcr() {
     clearInterval(polling);
     polling = setInterval(pollStatus, 350);
   } catch (error) {
-    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
     setDisabled("bigLcrStopBtn", true);
     updateBigSafetyStatus();
     setEvent(error.message, "error");
   }
 }
 
+async function startLinearityTest() {
+  try {
+    primeTripAlarmAudio();
+    if (!$("bigLcrSafetyAck").checked) throw new Error("请先确认 ATA-2021B 安全参数");
+    const payload = buildLinearityPayload();
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn"].forEach((id) => setDisabled(id, true));
+    latestLinearityMeasurement = null;
+    setWidth("linearityProgressBar", "0%");
+    const reply = await api("/api/lcr-linearity/start", { method: "POST", body: JSON.stringify(payload) });
+    setDisabled("linearityStopBtn", false);
+    $("linearityProgressText").textContent = `线性度任务 #${reply.task_id} 已启动`;
+    setEvent("大信号线性度与波形畸变测试已启动。", "running");
+    clearInterval(polling); polling = setInterval(pollStatus, 350);
+  } catch (error) {
+    ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
+    setDisabled("linearityStopBtn", true);
+    setEvent(error.message, "error");
+  }
+}
+
+function renderLinearityMeasurement() {
+  const data = latestLinearityMeasurement;
+  if (!data || !$("linMeasurementTableBody")) return;
+  const rows = data.run_rows || [];
+  const last = rows.at(-1) || {};
+  $("linMeasurementPath").textContent = data.directory || "—";
+  $("linMeasurementDriveMetric").textContent = `${Number(last.awg_vpp || 0).toFixed(3)} Vpp / ${lcrNumeric(last.current_peak_a)?.toPrecision(4) || "—"} A`;
+  $("linMeasurementReceiverMetric").textContent = `${lcrNumeric(last.receiver_peak_v)?.toPrecision(4) || "—"} V / ${lcrNumeric(last.K_ME_v_per_a)?.toPrecision(4) || "—"} V/A`;
+  $("linMeasurementThdMetric").textContent = `${lcrNumeric(last.current_thd_pct)?.toPrecision(3) || "—"}% / ${lcrNumeric(last.receiver_thd_pct)?.toPrecision(3) || "—"}%`;
+  $("linMeasurementShapeMetric").textContent = `${lcrNumeric(last.D_wave_pct)?.toPrecision(3) || "—"}% / ${lcrNumeric(last.correlation)?.toPrecision(4) || "—"}`;
+  $("linMeasurementCompressionMetric").textContent = `${lcrNumeric(last.compression_db)?.toPrecision(4) || "—"} dB`;
+  $("linMeasurementEchoMetric").textContent = last.echo_available
+    ? `${cell(last.echo_peak_v, 4)} V · D_echo ${cell(last.D_echo_pct, 4)}%`
+    : "回波窗未配置或采样不足";
+  const state = last.status === "OK" ? (last.engineering_state || "有效") : `${last.status || "—"}${last.clipped ? " · clipped" : ""}${last.overflow ? " · overflow" : ""}`;
+  $("linMeasurementStateMetric").textContent = state;
+  $("linMeasurementStateMetric").style.color = last.valid ? "#35d0ba" : "#ffb64d";
+  $("linMeasurementSafetyMetric").textContent = last.safety_state === "WARN" ? (last.safety_message || "WARN") : "OK · 未超过程序提醒阈值";
+  $("linMeasurementSafetyMetric").style.color = last.safety_state === "WARN" ? "#ffb64d" : "#35d0ba";
+  const pointSummary = new Map((data.summary_rows || []).map((item) => [`${item.direction}:${Number(item.awg_vpp)}`, item]));
+  $("linMeasurementTableBody").innerHTML = rows.map((row) => {
+    const summary = pointSummary.get(`${row.direction}:${Number(row.awg_vpp)}`);
+    return `<tr><td>${row.direction || "—"}</td><td>${cell(row.awg_vpp, 4)}</td><td>${cell(row.current_peak_a, 5)}</td><td>${cell(row.voltage_peak_v, 5)}</td><td>${cell(row.receiver_peak_v, 5)}</td><td>${cell(row.current_thd_pct, 4)}</td><td>${cell(row.receiver_thd_pct, 4)}</td><td>${cell(row.K_ME_v_per_a, 5)}</td><td>${cell(row.D_wave_pct, 4)}</td><td>${cell(row.correlation, 5)}</td><td>${cell(row.compression_db, 4)}</td><td>${cell(summary?.sweep_difference_receiver_pct, 4)}</td><td>${monitorWindowLabel(row)}</td><td>${row.monitor_state || "—"}${row.monitor_valid ? " · valid" : row.monitor_valid === false ? " · invalid" : ""}${row.suspected_trip ? " · 疑似跳闸" : ""}</td><td>${row.status || "—"}${row.engineering_state ? ` · ${row.engineering_state}` : ""}</td><td>${row.safety_state || "OK"}${row.safety_state === "WARN" ? ` · ${row.safety_message || ""}` : ""}</td></tr>`;
+  }).join("");
+  const selector = $("linMeasurementRunSelect");
+  const previous = selector.value;
+  selector.replaceChildren(...rows.map((row) => new Option(`${row.direction} · ${Number(row.awg_vpp).toFixed(3)} Vpp · #${row.repeat}${row.valid ? "" : ` · ${row.status}`}`, String(row.run_index))));
+  if (rows.some((row) => String(row.run_index) === previous)) selector.value = previous;
+  else if (rows.length) selector.value = String(last.run_index);
+  drawLinearityMeasurementCharts();
+  loadLinearityMeasurementWave();
+}
+
+function cell(value, digits = 5) {
+  const numberValue = lcrNumeric(value);
+  return Number.isFinite(numberValue) ? numberValue.toPrecision(digits) : "—";
+}
+
+function monitorWindowLabel(row) {
+  const start = lcrNumeric(row.monitor_analysis_start_us);
+  const end = lcrNumeric(row.monitor_analysis_end_us);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return "—";
+  return `${start.toFixed(2)}–${end.toFixed(2)} μs · ${row.monitor_analysis_cycles ?? "—"} 周期`;
+}
+
+function drawLinearityScatter(canvasId, rows, xKey, series, unit, emptyText = "尚无有效数据") {
+  const canvas = $(canvasId);
+  if (!canvas) return;
+  const { ctx, width, height } = canvasSetup(canvas);
+  ctx.clearRect(0, 0, width, height);
+  const points = rows.flatMap((row) => series.map((item) => [lcrNumeric(row[xKey]), lcrNumeric(row[item.key])]))
+    .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+  if (!points.length) {
+    ctx.fillStyle = "#78909c"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(emptyText, width / 2, height / 2); ctx.textAlign = "left"; return;
+  }
+  let xMin = Math.min(...points.map((p) => p[0])), xMax = Math.max(...points.map((p) => p[0]));
+  let yMin = Math.min(...points.map((p) => p[1])), yMax = Math.max(...points.map((p) => p[1]));
+  if (xMin === xMax) { const p = Math.max(Math.abs(xMin) * .08, .01); xMin -= p; xMax += p; }
+  if (yMin === yMax) { const p = Math.max(Math.abs(yMin) * .08, 1e-9); yMin -= p; yMax += p; }
+  else { const p = (yMax - yMin) * .08; yMin -= p; yMax += p; }
+  const left = 66, right = width - 18, top = 34, bottom = height - 38;
+  drawAxes(ctx, width, height, left, top, right, bottom,
+    (r) => (xMin + r * (xMax - xMin)).toPrecision(3),
+    (r) => (yMin + r * (yMax - yMin)).toPrecision(3), 65);
+  series.forEach((item, index) => {
+    ["up", "down"].forEach((direction) => {
+      const group = rows.filter((row) => (row.direction || "up") === direction)
+        .map((row) => ({ x: lcrNumeric(row[xKey]), y: lcrNumeric(row[item.key]) }))
+        .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)).sort((a, b) => a.x - b.x);
+      if (!group.length) return;
+      ctx.strokeStyle = item.color || colors[index]; ctx.fillStyle = item.color || colors[index]; ctx.lineWidth = 1.6;
+      ctx.setLineDash(direction === "down" ? [5, 3] : []); ctx.beginPath();
+      group.forEach((p, pointIndex) => {
+        const x = left + (p.x - xMin) / (xMax - xMin) * (right - left);
+        const y = bottom - (p.y - yMin) / (yMax - yMin) * (bottom - top);
+        if (pointIndex) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+        ctx.fillRect(x - 2, y - 2, 4, 4);
+      }); ctx.stroke(); ctx.setLineDash([]);
+    });
+    ctx.fillStyle = item.color || colors[index]; ctx.font = "10px sans-serif"; ctx.fillText(item.label, left + index * 130, 16);
+  });
+  ctx.fillStyle = "#78909c"; ctx.textAlign = "right"; ctx.fillText("I_peak / A", right, 16); ctx.textAlign = "left"; ctx.fillText(unit, 7, top - 8);
+}
+
+function drawLinearityMeasurementCharts() {
+  if (!latestLinearityMeasurement) return;
+  const rows = latestLinearityMeasurement.run_rows || [];
+  const valid = rows.filter((row) => row.valid);
+  drawLinearityScatter("linMeasurementAmplitudeCanvas", valid, "current_peak_a", [{ key: "receiver_peak_v", label: "Receiver peak", color: "#35d0ba" }], "V");
+  drawLinearityScatter("linMeasurementKmeCanvas", valid, "current_peak_a", [{ key: "K_ME_v_per_a", label: "K_ME", color: "#68a8ff" }], "V/A");
+  drawLinearityScatter("linMeasurementThdCanvas", valid, "current_peak_a", [{ key: "current_thd_pct", label: "THD_I", color: "#ffb64d" }, { key: "receiver_thd_pct", label: "THD_RX", color: "#35d0ba" }], "%");
+  drawLinearityScatter("linMeasurementShapeCanvas", valid, "current_peak_a", [{ key: "D_wave_pct", label: "D_wave", color: "#b88cff" }], "%");
+  drawLinearityScatter("linMeasurementCorrCanvas", valid, "current_peak_a", [{ key: "correlation", label: "Correlation", color: "#68a8ff" }], "r");
+  drawLinearityScatter("linMeasurementCompressionCanvas", valid, "current_peak_a", [{ key: "compression_db", label: "Compression", color: "#ff6f82" }], "dB");
+  const direction = (latestLinearityMeasurement.summary_rows || []).filter((row) => row.direction === "up" && row.sweep_difference_receiver_pct != null)
+    .map((row) => ({ direction: "up", current_peak_a: row.current_peak_a_mean, sweep_difference_receiver_pct: row.sweep_difference_receiver_pct }));
+  drawLinearityScatter("linMeasurementDirectionCanvas", direction, "current_peak_a", [{ key: "sweep_difference_receiver_pct", label: "正反扫差异", color: "#ffb64d" }], "%");
+}
+
+async function loadLinearityMeasurementWave() {
+  if (!latestLinearityMeasurement || !$("linMeasurementRunSelect")) return;
+  const runIndex = $("linMeasurementRunSelect").value;
+  if (!runIndex) return;
+  try {
+    latestLinearityMeasurementWave = await api("/api/lcr-analysis/run-preview", { method: "POST",
+      body: JSON.stringify({ mode: "linearity", directory: latestLinearityMeasurement.directory, run_index: Number(runIndex) }) });
+    drawLinearityMeasurementWave();
+  } catch (error) { setEvent(`线性度波形预览失败：${error.message}`, "error"); }
+}
+
+function drawLinearityMeasurementWave() {
+  const wave = latestLinearityMeasurementWave;
+  const canvas = $("linMeasurementWaveCanvas");
+  if (!wave || !canvas || !wave.time_s?.length) return;
+  const { ctx, width, height } = canvasSetup(canvas); ctx.clearRect(0, 0, width, height);
+  const t = wave.time_s, left = 70, right = width - 18, top = 30, bottom = height - 24;
+  const tMin = t[0], tMax = t.at(-1), entries = Object.entries(wave.channels || {}).slice(0, 3);
+  const reference = wave.reference_receiver_v || [], refTime = wave.reference_time_s || [];
+  const aligned = wave.current_receiver_aligned_v || [], alignedTime = wave.current_receiver_aligned_time_s || [];
+  const hasOverlay = reference.length && aligned.length && refTime.length === reference.length && alignedTime.length === aligned.length;
+  const overlayHeight = hasOverlay ? Math.min(86, (bottom - top) * 0.30) : 0;
+  const rawBottom = bottom - overlayHeight, band = (rawBottom - top) / Math.max(entries.length, 1);
+  entries.forEach((entry, index) => {
+    const [name, values] = entry; if (!Array.isArray(values) || !values.length) return;
+    const yMin = Math.min(...values), yMax = Math.max(...values);
+    const span = Math.max(yMax - yMin, 1e-9);
+    const y0 = top + index * band;
+    ctx.strokeStyle = "rgba(120,144,156,.16)"; ctx.beginPath(); ctx.moveTo(left, y0 + band); ctx.lineTo(right, y0 + band); ctx.stroke();
+    ctx.strokeStyle = colors[index]; ctx.lineWidth = 1.2; ctx.beginPath();
+    values.forEach((value, i) => { const x = left + (t[i] - tMin) / Math.max(tMax - tMin, 1e-15) * (right - left); const y = y0 + band - 8 - (value - yMin) / span * Math.max(band - 20, 1); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
+    ctx.fillStyle = colors[index]; ctx.font = "10px sans-serif"; ctx.fillText(`${name} raw V · [${yMin.toPrecision(3)}, ${yMax.toPrecision(3)}]`, 5, y0 + 12);
+  });
+  if (hasOverlay) {
+    const overlayTop = rawBottom + 6, overlayBottom = bottom - 8;
+    const xMin = Math.min(refTime[0], alignedTime[0]), xMax = Math.max(refTime.at(-1), alignedTime.at(-1));
+    const yMin = Math.min(...reference, ...aligned), yMax = Math.max(...reference, ...aligned), ySpan = Math.max(yMax - yMin, 1e-12);
+    ctx.strokeStyle = "rgba(120,144,156,.25)"; ctx.beginPath(); ctx.moveTo(left, overlayTop); ctx.lineTo(right, overlayTop); ctx.stroke();
+    [[refTime, reference, "#f0f4f5", [5, 3]], [alignedTime, aligned, "#b88cff", []]].forEach(([times, values, color, dash]) => {
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash); ctx.beginPath();
+      values.forEach((value, i) => { const x = left + (times[i] - xMin) / Math.max(xMax - xMin, 1e-15) * (right - left); const y = overlayBottom - (value - yMin) / ySpan * (overlayBottom - overlayTop); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.stroke(); ctx.setLineDash([]);
+    });
+    ctx.fillStyle = "#f0f4f5"; ctx.font = "10px sans-serif"; ctx.fillText("Reference Receiver", left, overlayTop + 11);
+    ctx.fillStyle = "#b88cff"; ctx.fillText("Current Receiver · aligned", left + 118, overlayTop + 11);
+    ctx.fillStyle = "#78909c"; ctx.textAlign = "left"; ctx.fillText(`${(xMin * 1e6).toPrecision(4)} μs · direct-wave zoom`, left, height - 5); ctx.textAlign = "right"; ctx.fillText(`${(xMax * 1e6).toPrecision(4)} μs`, right, height - 5); ctx.textAlign = "left";
+  }
+  if (!hasOverlay) { ctx.fillStyle = "#78909c"; ctx.textAlign = "right"; ctx.fillText(`${(tMax * 1e6).toPrecision(4)} μs`, right, height - 6); ctx.textAlign = "left"; }
+}
+
 async function pollStatus() {
   try {
     const status = await api("/api/status");
     setEvent(status.message, status.state);
-    const running = status.state === "running";
+    updateTripAlarm(status);
+    const running = ["running", "paused"].includes(status.state);
+    if (running && !polling) polling = setInterval(pollStatus, 350);
     setDisabled("stopBtn", !(running && status.task_kind === "capture"));
     setDisabled("sweepStopBtn", !(running && status.task_kind === "sweep"));
     setDisabled("lcrStopBtn", !(running && ["lcr", "lcr_calibration"].includes(status.task_kind)));
     setDisabled("bigLcrStopBtn", !(running && status.task_kind === "big_lcr"));
+    setDisabled("linearityStopBtn", !(running && status.task_kind === "lcr_linearity"));
     if (status.task_kind === "sweep" && status.progress) {
       const progress = status.progress;
       const percent = progress.total_runs ? progress.run_index / progress.total_runs * 100 : 0;
@@ -827,11 +1181,19 @@ async function pollStatus() {
         ? `${progress.run_index}/${progress.total_runs} 次 · ${(Number(progress.frequency_hz) / 1000).toFixed(3).replace(/\.000$/, "")} kHz · ${Number(progress.awg_drive_vpp).toFixed(3)} Vpp · 重复 ${progress.repeat}/${progress.repeats}${progress.safety_state ? ` · ${progress.safety_state}` : ""}`
         : `共 ${progress.total_points} 个频率/Vpp 组合点，${progress.total_runs} 次采集`;
     }
+    if (status.task_kind === "lcr_linearity" && status.progress) {
+      const progress = status.progress;
+      const percent = progress.total_runs ? progress.run_index / progress.total_runs * 100 : 0;
+      setWidth("linearityProgressBar", `${Math.min(100, percent)}%`);
+      if ($("linearityProgressText")) $("linearityProgressText").textContent = progress.run_index
+        ? `${progress.run_index}/${progress.total_runs} 次 · ${(Number(progress.awg_vpp)).toFixed(3)} Vpp · ${progress.direction} 扫 · 重复 ${progress.repeat}/${progress.repeats}`
+        : `共 ${progress.total_runs} 次三通道同步采集`;
+    }
     if (["complete", "stopped"].includes(status.state)) {
       clearInterval(polling);
       polling = null;
-      ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
-      ["stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn"].forEach((id) => setDisabled(id, true));
+      ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
+      ["stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn"].forEach((id) => setDisabled(id, true));
       if (status.task_kind === "sweep" && status.has_sweep_result) {
         latestSweep = await api("/api/sweep/result");
         updateSweepResult(latestSweep);
@@ -868,14 +1230,18 @@ async function pollStatus() {
         }
         updateBigLcrResult();
         if (status.state === "complete") setWidth("bigLcrProgressBar", "100%");
+      } else if (status.task_kind === "lcr_linearity" && status.has_lcr_linearity_result) {
+        latestLinearityMeasurement = await api("/api/lcr-linearity/result");
+        renderLinearityMeasurement();
+        if (status.state === "complete") setWidth("linearityProgressBar", "100%");
       }
     } else if (status.state === "error") {
       clearInterval(polling);
       polling = null;
-      ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn"].forEach((id) => setDisabled(id, false));
-      ["stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn"].forEach((id) => setDisabled(id, true));
+      ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
+      ["stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn"].forEach((id) => setDisabled(id, true));
     }
-    if (status.state !== "running") updateBigSafetyStatus(latestBigLcr?.run_rows?.at(-1) || null);
+    if (!running) updateBigSafetyStatus(latestBigLcr?.run_rows?.at(-1) || null);
   } catch (error) {
     setEvent(error.message, "error");
   }
@@ -883,7 +1249,7 @@ async function pollStatus() {
 
 async function stopCapture() {
   try {
-    ["stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn"].forEach((id) => setDisabled(id, true));
+    ["stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn", "tripStopBtn"].forEach((id) => setDisabled(id, true));
     await api("/api/stop", { method: "POST", body: "{}" });
     setEvent("已发送停止命令，已完成的数据会保留。", "running");
   } catch (error) { setEvent(error.message, "error"); }
@@ -1482,61 +1848,181 @@ function updateBigLcrResult() {
   drawBigLcrCharts(); drawBigLcrWaves();
 }
 
-async function analyzeBigLinearity() {
-  const button = $("linearityAnalyzeBtn");
-  button.disabled = true;
-  $("linearityStatus").textContent = "正在读取原始 NPZ 并拟合平顶区谐波…";
+function linearityAnalysisSettings() {
+  return {
+    harmonic_order: Math.round(number("linearityHarmonicOrder")),
+    alignment_max_shift_us: number("linearityAlignShift"),
+    low_current_reference_count: Math.round(number("linearityReferenceCount")),
+    low_current_reference_max_a: number("linearityReferenceMaxCurrent"),
+    force_origin: $("linearityForceOrigin").checked,
+    noise_start_us: number("linearityAnalysisNoiseStart"), noise_end_us: number("linearityAnalysisNoiseEnd"),
+    direct_start_us: number("linearityAnalysisDirectStart"), direct_end_us: number("linearityAnalysisDirectEnd"),
+    echo_start_us: number("linearityAnalysisEchoStart"), echo_end_us: number("linearityAnalysisEchoEnd"),
+    threshold_d_wave_pct: number("linearityLimitDwave"),
+    threshold_receiver_thd_pct: number("linearityLimitRxThd"),
+    threshold_current_thd_pct: number("linearityLimitIThd"),
+    threshold_compression_db: number("linearityLimitCompression"),
+    threshold_kme_deviation_pct: number("linearityLimitKme"),
+    threshold_correlation: number("linearityLimitCorrelation"),
+  };
+}
+
+async function analyzeBigLinearity(reanalyze = false) {
+  const button = reanalyze ? $("linearityReanalyzeBtn") : $("linearityAnalyzeBtn");
+  if (button) button.disabled = true;
+  $("linearityStatus").textContent = reanalyze ? "正在读取 NPZ 并按当前设置重新计算…" : "正在加载已保存的线性度结果…";
   try {
-    latestLinearity = await api("/api/big-lcr/linearity", {
+    latestLinearity = await api("/api/lcr-analysis/load", {
       method: "POST",
-      body: JSON.stringify({
-        directory: $("linearityDirectory").value.trim(),
-        harmonic_order: Math.round(number("linearityHarmonicOrder")),
-      }),
+      body: JSON.stringify({ mode: "linearity", directory: $("linearityDirectory").value.trim(), reanalyze,
+        settings: linearityAnalysisSettings() }),
     });
     latestLinearityWave = null;
     $("linearityDirectory").value = latestLinearity.directory;
-    const frequencies = [...new Set((latestLinearity.summary_rows || []).map((row) => Number(row.frequency_hz)))].sort((a, b) => a - b);
+    const frequencies = [...new Set((latestLinearity.run_rows || []).map((row) => Number(row.frequency_hz)).filter(Number.isFinite))].sort((a, b) => a - b);
     const select = $("linearityFrequency");
+    const previous = select.value;
     select.replaceChildren(...frequencies.map((frequency) => new Option(`${(frequency / 1000).toPrecision(6)} kHz`, String(frequency))));
-    if (frequencies.length) select.value = String(frequencies[0]);
+    if (frequencies.some((frequency) => String(frequency) === previous)) select.value = previous;
+    else if (frequencies.length) select.value = String(frequencies[0]);
     updateLinearityView();
-    $("linearityStatus").textContent = `完成：${latestLinearity.valid_runs}/${latestLinearity.total_runs} 次有效；${latestLinearity.warnings.length} 条诊断（只显示前 30 条）`;
-    if (latestLinearity.warnings.length) setEvent(latestLinearity.warnings[0], "warning");
+    $("linearityStatus").textContent = `${reanalyze ? "重新分析完成" : "已加载"}：${latestLinearity.valid_runs}/${latestLinearity.total_runs} 次有效；${(latestLinearity.warnings || []).length} 条诊断`;
+    if (latestLinearity.warnings?.length) setEvent(latestLinearity.warnings[0], "warning");
   } catch (error) {
     $("linearityStatus").textContent = `分析失败：${error.message}`;
     setEvent(error.message, "error");
-  } finally {
-    button.disabled = false;
+  } finally { if (button) button.disabled = false; }
+}
+
+async function loadLcrFolder(mode, reanalyze = false) {
+  const ids = { big_lcr: ["bigFolderDirectory", "bigFolderStatus"], small_lcr: ["smallFolderDirectory", "smallFolderStatus"] };
+  if (mode === "linearity") return analyzeBigLinearity(reanalyze);
+  const [pathId, statusId] = ids[mode];
+  const buttonId = mode === "big_lcr" ? (reanalyze ? "bigFolderReanalyzeBtn" : "bigFolderLoadBtn")
+    : (reanalyze ? "smallFolderReanalyzeBtn" : "smallFolderLoadBtn");
+  $(buttonId).disabled = true;
+  $(statusId).textContent = reanalyze ? "正在重新计算原始 NPZ…" : "正在读取已保存结果…";
+  try {
+    const data = await api("/api/lcr-analysis/load", { method: "POST", body: JSON.stringify({ mode, directory: $(pathId).value.trim(), reanalyze }) });
+    lcrFolderStates[mode] = data;
+    $(pathId).value = data.directory;
+    renderLcrFolder(mode);
+    $(statusId).textContent = `${reanalyze ? "raw 重算完成" : "加载完成"}：${data.run_rows.length} 次记录，${data.summary_rows.length} 个参数点`;
+  } catch (error) {
+    $(statusId).textContent = `分析失败：${error.message}`; setEvent(error.message, "error");
+  } finally { $(buttonId).disabled = false; }
+}
+
+function renderLcrFolder(mode) {
+  const data = lcrFolderStates[mode]; if (!data) return;
+  const big = mode === "big_lcr", prefix = big ? "bigFolder" : "smallFolder";
+  $(`${prefix}ResultPath`).textContent = data.directory;
+  $(`${prefix}Count`).textContent = `${data.valid_runs ?? data.run_rows.length} / ${data.total_runs ?? data.run_rows.length}`;
+  $(`${prefix}PointCount`).textContent = String(data.summary_rows.length);
+  if (!big) {
+    const lcrConfig = data.config?.lcr || {};
+    $("smallFolderCalibration").textContent = lcrConfig.calibration_enabled ? "精准电阻复数校准" : "未使用校准";
   }
+  const rows = data.summary_rows || [];
+  if (big) {
+    $("bigFolderTableBody").innerHTML = rows.map((r) => `<tr><td>${cell(Number(r.frequency_hz) / 1000, 5)}</td><td>${cell(r.awg_drive_vpp, 4)}</td><td>${cell(r.impedance_magnitude_ohm)}</td><td>${cell(r.phase_deg, 5)}</td><td>${cell(r.series_resistance_ohm)}</td><td>${cell(r.series_reactance_ohm)}</td><td>${cell(r.effective_inductance_h)}</td><td>${cell(r.quality_factor)}</td><td>${cell(r.voltage_rms_v)}</td><td>${cell(r.current_rms_a)}</td><td>${cell(r.voltage_vpp_v)}</td><td>${cell(r.current_peak_a)}</td><td>${cell(r.voltage_snr_db)}</td><td>${cell(r.current_snr_db)}</td><td>${r.safety_state || "—"}</td></tr>`).join("");
+    const maxVpp = Math.max(...rows.map((r) => Number(r.awg_drive_vpp || 0)));
+    const curve = rows.filter((r) => Number(r.awg_drive_vpp || 0) === maxVpp).sort((a, b) => Number(a.frequency_hz) - Number(b.frequency_hz));
+    drawFolderFrequencyCurve("bigFolderCurveCanvas", curve, [{ key: "impedance_magnitude_ohm", label: "|Z|", color: "#35d0ba" }, { key: "series_resistance_ohm", label: "Rs", color: "#ffb64d" }, { key: "series_reactance_ohm", label: "Xs", color: "#68a8ff" }]);
+    drawBigFolderGrid(rows);
+  } else {
+    $("smallFolderTableBody").innerHTML = rows.map((r) => `<tr><td>${cell(Number(r.frequency_hz) / 1000, 5)}</td><td>${cell(r.repeats_completed, 3)}</td><td>${cell(r.impedance_magnitude_ohm)}</td><td>${cell(r.phase_deg, 5)}</td><td>${cell(r.impedance_real_ohm ?? r.series_resistance_ohm)}</td><td>${cell(r.impedance_imag_ohm ?? r.series_reactance_ohm)}</td><td>${cell(r.series_capacitance_f)}</td><td>${cell(r.series_inductance_h)}</td><td>${cell(r.parallel_resistance_ohm)}</td><td>${cell(r.parallel_capacitance_f)}</td><td>${cell(r.parallel_inductance_h)}</td><td>${cell(r.quality_factor)}</td><td>${cell(r.dissipation_factor)}</td><td>${cell(r.voltage_snr_db)}</td><td>${cell(r.current_snr_db)}</td></tr>`).join("");
+    drawFolderFrequencyCurve("smallFolderCurveCanvas", rows, [{ key: "impedance_magnitude_ohm", label: "|Z|", color: "#35d0ba" }, { key: "impedance_real_ohm", label: "R", color: "#ffb64d" }, { key: "impedance_imag_ohm", label: "X", color: "#68a8ff" }]);
+  }
+  const selector = $(`${prefix}RunSelect`), oldValue = selector.value;
+  selector.replaceChildren(...data.run_rows.map((r) => new Option(`#${r.run_index} · ${(Number(r.frequency_hz) / 1000).toPrecision(5)} kHz`, String(r.run_index))));
+  if (data.run_rows.some((r) => String(r.run_index) === oldValue)) selector.value = oldValue;
+  else if (data.run_rows.length) selector.value = String(data.run_rows.at(-1).run_index);
+  loadLcrFolderRun(mode);
+}
+
+function drawFolderFrequencyCurve(canvasId, rows, series) {
+  const values = rows.map((row) => ({ ...row, frequency_hz: Number(row.frequency_hz) }));
+  const numeric = values.flatMap((row) => series.map((item) => lcrNumeric(row[item.key]))).filter(Number.isFinite);
+  const canvas = $(canvasId); const { ctx, width, height } = canvasSetup(canvas); ctx.clearRect(0, 0, width, height);
+  if (!values.length || !numeric.length) { ctx.fillStyle = "#78909c"; ctx.textAlign = "center"; ctx.fillText("没有可绘制的已保存指标", width / 2, height / 2); ctx.textAlign = "left"; return; }
+  let xMin = Math.min(...values.map((r) => r.frequency_hz)), xMax = Math.max(...values.map((r) => r.frequency_hz));
+  let yMin = Math.min(...numeric), yMax = Math.max(...numeric);
+  if (xMin === xMax) { xMin *= .95; xMax *= 1.05; } if (yMin === yMax) { const d = Math.max(Math.abs(yMin) * .1, 1e-9); yMin -= d; yMax += d; }
+  const left = 64, right = width - 16, top = 32, bottom = height - 34;
+  drawAxes(ctx, width, height, left, top, right, bottom, (r) => ((xMin + r * (xMax - xMin)) / 1000).toPrecision(3), (r) => (yMin + r * (yMax - yMin)).toPrecision(3), 65);
+  series.forEach((item, index) => {
+    ctx.strokeStyle = item.color; ctx.lineWidth = 1.5; ctx.beginPath(); let connected = false;
+    values.forEach((row) => { const yv = lcrNumeric(row[item.key]); if (!Number.isFinite(yv)) { connected = false; return; } const x = left + (row.frequency_hz - xMin) / (xMax - xMin) * (right - left); const y = bottom - (yv - yMin) / (yMax - yMin) * (bottom - top); if (connected) ctx.lineTo(x, y); else ctx.moveTo(x, y); connected = true; }); ctx.stroke();
+    ctx.fillStyle = item.color; ctx.font = "10px sans-serif"; ctx.fillText(item.label, left + index * 60, 14);
+  });
+}
+
+function drawBigFolderGrid(rows) {
+  const canvas = $("bigFolderGridCanvas"); const { ctx, width, height } = canvasSetup(canvas); ctx.clearRect(0, 0, width, height);
+  const f = [...new Set(rows.map((r) => Number(r.frequency_hz)))].sort((a, b) => a - b);
+  const v = [...new Set(rows.map((r) => Number(r.awg_drive_vpp)))].sort((a, b) => a - b);
+  const z = rows.map((r) => Number(r.impedance_magnitude_ohm)).filter(Number.isFinite);
+  if (!f.length || !v.length || !z.length) { ctx.fillStyle = "#78909c"; ctx.textAlign = "center"; ctx.fillText("没有可显示的 |Z| 网格", width / 2, height / 2); ctx.textAlign = "left"; return; }
+  const left = 55, right = width - 12, top = 15, bottom = height - 36, cellW = (right - left) / f.length, cellH = (bottom - top) / v.length;
+  const min = Math.min(...z), max = Math.max(...z);
+  rows.forEach((r) => { const fi = f.indexOf(Number(r.frequency_hz)), vi = v.indexOf(Number(r.awg_drive_vpp)); const value = Number(r.impedance_magnitude_ohm); if (!Number.isFinite(value)) return; const q = (value - min) / Math.max(max - min, 1e-12); ctx.fillStyle = `hsl(${190 - q * 170} 72% ${25 + q * 32}%)`; ctx.fillRect(left + fi * cellW, bottom - (vi + 1) * cellH, Math.max(1, cellW - 1), Math.max(1, cellH - 1)); });
+  ctx.fillStyle = "#78909c"; ctx.font = "10px Consolas"; ctx.fillText(`${(Math.min(...f) / 1000).toPrecision(3)} kHz`, left, height - 8); ctx.textAlign = "right"; ctx.fillText(`${(Math.max(...f) / 1000).toPrecision(3)} kHz`, right, height - 8); ctx.textAlign = "left"; ctx.fillText(`${Math.max(...v).toPrecision(3)} Vpp`, 3, top + 8); ctx.fillText(`${Math.min(...v).toPrecision(3)} Vpp`, 3, bottom);
+}
+
+async function loadLcrFolderRun(mode) {
+  const data = lcrFolderStates[mode]; if (!data) return;
+  const big = mode === "big_lcr", prefix = big ? "bigFolder" : "smallFolder";
+  const runIndex = $(`${prefix}RunSelect`).value; if (!runIndex) return;
+  try {
+    const wave = await api("/api/lcr-analysis/run-preview", { method: "POST", body: JSON.stringify({ mode, directory: data.directory, run_index: Number(runIndex) }) });
+    drawFolderRawWave(big ? "bigFolderWaveCanvas" : "smallFolderWaveCanvas", wave);
+  } catch (error) { $(big ? "bigFolderStatus" : "smallFolderStatus").textContent = `波形预览失败：${error.message}`; }
+}
+
+function drawFolderRawWave(canvasId, wave) {
+  const canvas = $(canvasId); if (!wave?.time_s?.length) return;
+  const { ctx, width, height } = canvasSetup(canvas); ctx.clearRect(0, 0, width, height);
+  const names = Object.keys(wave.channels || {}), t = wave.time_s;
+  const left = 72, right = width - 16, top = 10, bottom = height - 18, band = (bottom - top) / Math.max(names.length, 1);
+  names.forEach((name, index) => { const arr = wave.channels[name]; const ymin = Math.min(...arr), ymax = Math.max(...arr), span = Math.max(ymax - ymin, 1e-12), y0 = top + index * band; ctx.strokeStyle = colors[index]; ctx.beginPath(); arr.forEach((value, j) => { const x = left + (t[j] - t[0]) / Math.max(t.at(-1) - t[0], 1e-15) * (right - left), y = y0 + band - 3 - (value - ymin) / span * Math.max(band - 8, 1); if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke(); ctx.fillStyle = colors[index]; ctx.font = "10px sans-serif"; ctx.fillText(`${name} raw V [${ymin.toPrecision(3)}, ${ymax.toPrecision(3)}]`, 4, y0 + 10); });
 }
 
 function updateLinearityView() {
   if (!latestLinearity || document.body.dataset.page !== "lcr-linearity") return;
   const frequency = Number($("linearityFrequency").value);
-  const rows = latestLinearity.summary_rows.filter((row) => Number(row.frequency_hz) === frequency)
-    .sort((a, b) => Number(a.awg_drive_vpp) - Number(b.awg_drive_vpp));
-  const cell = (value, digits = 5) => Number.isFinite(lcrNumeric(value)) ? Number(value).toPrecision(digits) : "—";
+  const rows = (latestLinearity.run_rows || []).filter((row) => Number(row.frequency_hz) === frequency)
+    .sort((a, b) => Number(a.current_peak_a ?? a.awg_vpp ?? a.awg_drive_vpp) - Number(b.current_peak_a ?? b.awg_vpp ?? b.awg_drive_vpp));
   $("linearityResultPath").textContent = latestLinearity.directory;
   $("linearityRunCount").textContent = `${latestLinearity.valid_runs} / ${latestLinearity.total_runs}`;
-  $("linearityOrderMetric").textContent = `${latestLinearity.harmonic_order} 阶`;
+  $("linearityOrderMetric").textContent = `${latestLinearity.analysis_settings?.harmonic_order ?? latestLinearity.harmonic_order ?? "—"} 阶`;
   $("linearityFrequencyMetric").textContent = frequency ? `${(frequency / 1000).toPrecision(6)} kHz` : "—";
-  $("linearityTableBody").innerHTML = rows.map((row) => `<tr><td>${cell(Number(row.frequency_hz) / 1000)}</td><td>${cell(row.awg_drive_vpp)}</td><td>${row.repeats}</td><td>${cell(row.voltage_thd_pct)}</td><td>${cell(row.current_thd_pct)}</td><td>${cell(row.voltage_h2_dbc)}</td><td>${cell(row.current_h2_dbc)}</td><td>${cell(row.voltage_h3_dbc)}</td><td>${cell(row.current_h3_dbc)}</td><td>${cell(row.voltage_gain_deviation_db)}</td><td>${cell(row.current_gain_deviation_db)}</td><td>${cell(row.voltage_fundamental_rms_v)}</td><td>${cell(row.current_fundamental_rms_a)}</td></tr>`).join("");
-  const runs = latestLinearity.run_rows.filter((row) => row.analysis_state === "OK" && Number(row.frequency_hz) === frequency)
-    .sort((a, b) => Number(a.awg_drive_vpp) - Number(b.awg_drive_vpp) || Number(a.repeat) - Number(b.repeat));
+  const pointSummaries = new Map((latestLinearity.summary_rows || []).map((item) =>
+    [`${item.direction || "up"}:${Number(item.frequency_hz)}:${Number(item.awg_vpp ?? item.awg_drive_vpp)}`, item]));
+  $("linearityTableBody").innerHTML = rows.map((row) => {
+    const summary = pointSummaries.get(`${row.direction || "up"}:${Number(row.frequency_hz)}:${Number(row.awg_vpp ?? row.awg_drive_vpp)}`);
+    return `<tr><td>${row.direction || "—"}</td><td>${cell(Number(row.frequency_hz) / 1000, 5)}</td><td>${cell(row.awg_vpp ?? row.awg_drive_vpp, 4)}</td><td>${cell(row.current_peak_a)}</td><td>${cell(row.receiver_peak_v ?? row.current_fundamental_rms_a)}</td><td>${cell(row.K_ME_v_per_a)}</td><td>${cell(row.current_thd_pct)}</td><td>${cell(row.receiver_thd_pct ?? row.voltage_thd_pct)}</td><td>${cell(row.D_wave_pct)}</td><td>${cell(row.correlation)}</td><td>${cell(row.compression_db)}</td><td>${cell(summary?.sweep_difference_receiver_pct, 4)}</td><td>${cell(row.echo_peak_v)}</td><td>${cell(row.D_echo_pct)}</td><td>${monitorWindowLabel(row)}</td><td>${row.monitor_state || "—"}${row.monitor_valid ? " · valid" : row.monitor_valid === false ? " · invalid" : ""}${row.suspected_trip ? " · 疑似跳闸" : ""}</td><td>${row.status || row.analysis_state || "—"}${row.engineering_state ? ` · ${row.engineering_state}` : ""}</td><td>${row.safety_state || "—"}${row.safety_state === "WARN" ? ` · ${row.safety_message || ""}` : ""}</td><td>${cell(row.voltage_thd_pct)}</td><td>${cell(row.current_thd_pct)}</td><td>${cell(row.voltage_gain_deviation_db)}</td></tr>`;
+  }).join("");
+  const runs = rows;
   const runSelect = $("linearityRunSelect");
   const previous = runSelect.value;
-  runSelect.replaceChildren(...runs.map((row) => new Option(`${Number(row.awg_drive_vpp).toPrecision(5)} Vpp · 第 ${row.repeat} 次`, String(row.run_index))));
+  runSelect.replaceChildren(...runs.map((row) => new Option(`${row.direction || ""} · ${Number(row.awg_vpp ?? row.awg_drive_vpp ?? 0).toPrecision(5)} Vpp · 第 ${row.repeat || 1} 次${row.valid === false || row.analysis_state === "ERROR" ? " · 无效" : ""}`, String(row.run_index))));
   if (runs.some((row) => String(row.run_index) === previous)) runSelect.value = previous;
   else if (runs.length) runSelect.value = String(runs.at(-1).run_index);
-  drawLinearityXY("linearityThdCanvas", rows, [
-    { key: "voltage_thd_pct", label: "电压 THD", color: "#35d0ba" },
-    { key: "current_thd_pct", label: "电流 THD", color: "#ffb64d" },
-  ], "%");
-  drawLinearityXY("linearityGainCanvas", rows, [
-    { key: "voltage_gain_deviation_db", label: "电压基波", color: "#35d0ba" },
-    { key: "current_gain_deviation_db", label: "电流基波", color: "#ffb64d" },
-  ], "dB");
+  const xKey = rows.some((row) => Number.isFinite(lcrNumeric(row.current_peak_a))) ? "current_peak_a" : "awg_drive_vpp";
+  const receiverKey = rows.some((row) => Number.isFinite(lcrNumeric(row.receiver_peak_v))) ? "receiver_peak_v" : "current_fundamental_rms_a";
+  const rxThdKey = rows.some((row) => Number.isFinite(lcrNumeric(row.receiver_thd_pct))) ? "receiver_thd_pct" : "voltage_thd_pct";
+  drawLinearityScatter("linearityReceiveCanvas", rows, xKey, [{ key: receiverKey, label: receiverKey === "receiver_peak_v" ? "Receiver peak" : "旧数据 Current fundamental", color: "#35d0ba" }], receiverKey === "receiver_peak_v" ? "V" : "A RMS");
+  drawLinearityScatter("linearityKmeCanvas", rows, xKey, [{ key: "K_ME_v_per_a", label: "K_ME", color: "#68a8ff" }], "V/A");
+  drawLinearityScatter("linearityShapeCanvas", rows, xKey, [{ key: "D_wave_pct", label: "D_wave", color: "#b88cff" }], "%");
+  drawLinearityScatter("linearityCorrCanvas", rows, xKey, [{ key: "correlation", label: "Correlation", color: "#68a8ff" }], "r");
+  drawLinearityScatter("linearityCompressionCanvas", rows, xKey, [{ key: "compression_db", label: "Compression", color: "#ff6f82" }], "dB");
+  drawLinearityScatter("linearityEchoCanvas", rows, xKey, [{ key: "echo_peak_v", label: "Echo peak", color: "#ffb64d" }], "V");
+  drawLinearityScatter("linearityEchoShapeCanvas", rows, xKey, [{ key: "D_echo_pct", label: "D_echo", color: "#b88cff" }], "%");
+  drawLinearityScatter("linearityThdCanvas", rows, xKey, [{ key: "current_thd_pct", label: "THD_I", color: "#ffb64d" }, { key: rxThdKey, label: rxThdKey === "receiver_thd_pct" ? "THD_RX" : "Legacy V THD", color: "#35d0ba" }], "%");
+  const directionRows = (latestLinearity.summary_rows || []).filter((row) => Number(row.frequency_hz) === frequency && row.direction === "up");
+  drawLinearityScatter("linearityDirectionCanvas", directionRows, "current_peak_a_mean", [{ key: "sweep_difference_receiver_pct", label: "正反扫幅值差异", color: "#ffb64d" }], "%");
+  drawLinearityScatter("linearityGainCanvas", rows, xKey, [{ key: "voltage_gain_deviation_db", label: "Legacy voltage", color: "#35d0ba" }, { key: "current_gain_deviation_db", label: "Legacy current", color: "#ffb64d" }], "dB");
   updateLinearityRun();
 }
 
@@ -1583,9 +2069,9 @@ async function updateLinearityRun() {
   if (!run) return;
   const requested = run.run_index;
   try {
-    const wave = await api("/api/big-lcr/linearity/run", {
-      method: "POST", body: JSON.stringify({ directory: latestLinearity.directory, run_index: requested }),
-    });
+    const wave = await api("/api/lcr-analysis/run-preview", { method: "POST",
+      body: JSON.stringify({ mode: "linearity", directory: latestLinearity.directory, run_index: requested,
+        settings: linearityAnalysisSettings() }) });
     if (String(requested) !== $("linearityRunSelect").value) return;
     latestLinearityWave = wave;
     drawLinearityWave();
@@ -1598,7 +2084,7 @@ function drawLinearityHarmonics(run) {
   const { ctx, width, height } = canvasSetup($("linearityHarmonicCanvas"));
   ctx.clearRect(0, 0, width, height);
   if (!run) return;
-  const voltage = run.voltage_harmonics_rms_v || [];
+  const voltage = run.receiver_harmonics_rms_v || run.voltage_harmonics_rms_v || [];
   const current = run.current_harmonics_rms_a || [];
   const count = Math.min(voltage.length, current.length);
   const floorDb = -100;
@@ -1615,8 +2101,8 @@ function drawLinearityHarmonics(run) {
       ctx.fillRect(center + (side ? 1 : -7), y, 6, bottom - y);
     });
   }
-  ctx.fillStyle = "#35d0ba"; ctx.fillText("电压", left, 17);
-  ctx.fillStyle = "#ffb64d"; ctx.fillText("电流", left + 44, 17);
+  ctx.fillStyle = "#35d0ba"; ctx.fillText(run.receiver_harmonics_rms_v ? "Receiver" : "旧电压", left, 17);
+  ctx.fillStyle = "#ffb64d"; ctx.fillText("Current", left + 65, 17);
   ctx.fillStyle = "#78909c"; ctx.fillText("dBc", 6, top - 8); ctx.textAlign = "right"; ctx.fillText("谐波阶数", right, 17); ctx.textAlign = "left";
 }
 
@@ -1628,6 +2114,29 @@ function drawLinearityWave() {
   if (!wave.time_s?.length) return;
   const t = wave.time_s, left = 60, right = width - 20, top = 32, bottom = height - 34;
   const tMin = t[0], tMax = t.at(-1);
+  if (wave.channels) {
+    const names = Object.keys(wave.channels), band = (bottom - top) / Math.max(names.length, 1);
+    names.forEach((name, index) => {
+      const values = wave.channels[name];
+      const isReceiver = index === names.length - 1;
+      const reference = isReceiver ? wave.reference_receiver_v : null;
+      const aligned = isReceiver ? wave.current_receiver_aligned_v : null;
+      const low = Math.min(...values, ...(reference || []), ...(aligned || [])), high = Math.max(...values, ...(reference || []), ...(aligned || []));
+      const span = Math.max(high - low, 1e-12), y0 = top + index * band;
+      ctx.strokeStyle = colors[index]; ctx.lineWidth = 1.2; ctx.beginPath();
+      values.forEach((value, i) => { const x = left + (t[i] - tMin) / Math.max(tMax - tMin, 1e-15) * (right - left); const y = y0 + band - 4 - (value - low) / span * Math.max(band - 12, 1); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
+      if (reference?.length) {
+        const refTime = wave.reference_time_s || []; ctx.strokeStyle = "#f0f4f5"; ctx.setLineDash([4, 3]); ctx.beginPath();
+        reference.forEach((value, i) => { const x = left + ((refTime[i] ?? tMin) - tMin) / Math.max(tMax - tMin, 1e-15) * (right - left); const y = y0 + band - 4 - (value - low) / span * Math.max(band - 12, 1); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke(); ctx.setLineDash([]);
+      }
+      if (aligned?.length) {
+        const alignedTime = wave.current_receiver_aligned_time_s || []; ctx.strokeStyle = "#b88cff"; ctx.setLineDash([]); ctx.lineWidth = 1.4; ctx.beginPath();
+        aligned.forEach((value, i) => { const x = left + ((alignedTime[i] ?? tMin) - tMin) / Math.max(tMax - tMin, 1e-15) * (right - left); const y = y0 + band - 4 - (value - low) / span * Math.max(band - 12, 1); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
+      }
+      ctx.fillStyle = colors[index]; ctx.font = "10px sans-serif"; ctx.fillText(`${name} raw V`, 4, y0 + 11);
+    });
+    ctx.fillStyle = "#f0f4f5"; ctx.fillText("浅色虚线：同频参考 Receiver", left, 15); ctx.fillStyle = "#b88cff"; ctx.fillText("紫色：当前 Receiver 已对齐波形", left + 190, 15); return;
+  }
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => ((tMin + ratio * (tMax - tMin)) * 1e6).toFixed(1),
     (ratio) => (2 * ratio - 1).toFixed(1), 70);
@@ -1934,9 +2443,9 @@ async function handleLcrModeChange() {
   const previous = document.body.dataset.lcrMode || "big";
   try {
     const status = await api("/api/status");
-    if (status.state === "running" && ["lcr", "lcr_calibration", "big_lcr"].includes(status.task_kind)) {
+    if (["running", "paused"].includes(status.state) && ["lcr", "lcr_calibration", "big_lcr", "lcr_linearity"].includes(status.task_kind)) {
       $("lcrMeasurementMode").value = previous;
-      setEvent("当前 LCR 任务正在运行，完成或停止后才能切换模式。", "running");
+      setEvent(status.state === "paused" ? "疑似跳闸处置期间不能切换 LCR 模式。" : "当前 LCR 任务正在运行，完成或停止后才能切换模式。", status.state);
       return;
     }
   } catch (_) {
@@ -1964,6 +2473,20 @@ function bindLcrModeListeners() {
   onElement("lcrMeasurementMode", "change", handleLcrModeChange);
   onElement("bigLcrStartBtn", "click", startBigLcr);
   onElement("bigLcrStopBtn", "click", stopCapture);
+  onElement("linearityStartBtn", "click", startLinearityTest);
+  onElement("linearityStopBtn", "click", stopCapture);
+  onElement("tripContinueBtn", "click", continueAfterTrip);
+  onElement("tripStopBtn", "click", stopCapture);
+  onElement("tripMuteBtn", "click", () => {
+    tripAlarmMuted = !tripAlarmMuted;
+    if (tripAlarmMuted) stopTripAlarmSound();
+    else startTripAlarmSound();
+    const button = $("tripMuteBtn");
+    if (button) {
+      button.textContent = tripAlarmMuted ? "恢复声音" : "停止声音";
+      button.setAttribute("aria-pressed", String(tripAlarmMuted));
+    }
+  });
   onElement("bigLcrScanMode", "change", updateBigLcrControls);
   onElement("bigLcrMode", "change", updateBigLcrControls);
   [
@@ -2039,8 +2562,10 @@ function showPage(page, push = false) {
       updateBigLcrResult();
     }
   } else if (page === "lcr-linearity") {
-    if (!$("linearityDirectory").value && latestBigLcr?.directory) $("linearityDirectory").value = latestBigLcr.directory;
+    document.body.dataset.lcrAnalysisMode = $("lcrAnalysisMode")?.value || "big_lcr";
     if (latestLinearity) updateLinearityView();
+    if (lcrFolderStates.big_lcr) renderLcrFolder("big_lcr");
+    if (lcrFolderStates.small_lcr) renderLcrFolder("small_lcr");
   }
 }
 
@@ -2082,7 +2607,16 @@ const persistedIds = [
   "bigLcrCurrentPolarity", "bigLcrCurrentOffset", "bigLcrMaxDrive", "bigLcrAlertVoltageVpp", "bigLcrAlertCurrentPeak",
   "bigLcrMaxFrequency", "bigLcrSafetyAck", "bigLcrAtaGain", "bigLcrAutoRange",
   "bigLcrTripDetection", "bigLcrTripDrop", "bigLcrTripHold", "bigLcrMinMonitorRms",
-  "linearityDirectory", "linearityHarmonicOrder",
+  "linearityDirectory", "linearityHarmonicOrder", "linearityAlignShift", "linearityReferenceCount", "linearityReferenceMaxCurrent",
+  "linearityAnalysisNoiseStart", "linearityAnalysisNoiseEnd", "linearityAnalysisDirectStart", "linearityAnalysisDirectEnd",
+  "linearityAnalysisEchoStart", "linearityAnalysisEchoEnd", "linearityForceOrigin", "linearityLimitDwave", "linearityLimitRxThd",
+  "linearityLimitIThd", "linearityLimitCompression", "linearityLimitKme", "linearityLimitCorrelation", "lcrAnalysisMode",
+  "bigFolderDirectory", "smallFolderDirectory", "linearityReceiverChannel", "linearityReceiverRange", "linearityFrequencyKHz",
+  "linearitySampleRate", "linearityCaptureDuration", "linearityTriggerPosition", "linearityTriggerSignal", "linearityTriggerLevel",
+  "linearityCycles", "linearityRampCycles", "linearityVppStart", "linearityVppStop", "linearityVppStep", "linearityDirection",
+  "linearityRepeats", "linearityInterval", "linearityNoiseStart", "linearityNoiseEnd", "linearityDirectStart", "linearityDirectEnd",
+  "linearityEchoStart", "linearityEchoEnd", "linearityMeasureLimitDwave", "linearityMeasureLimitRxThd",
+  "linearityMeasureLimitIThd", "linearityMeasureLimitCompression", "linearityMeasureLimitKme", "linearityMeasureLimitCorrelation",
 ];
 
 function restoreSettings() {
@@ -3490,8 +4024,22 @@ document.querySelectorAll("[data-nav], [data-route-link]").forEach((link) => {
 });
 window.addEventListener("popstate", () => showPage(currentPage()));
 onElement("linearityAnalyzeBtn", "click", analyzeBigLinearity);
+onElement("linearityReanalyzeBtn", "click", () => analyzeBigLinearity(true));
 onElement("linearityFrequency", "change", updateLinearityView);
 onElement("linearityRunSelect", "change", updateLinearityRun);
+onElement("linMeasurementRunSelect", "change", loadLinearityMeasurementWave);
+onElement("lcrAnalysisMode", "change", () => {
+  document.body.dataset.lcrAnalysisMode = $("lcrAnalysisMode").value;
+  if ($("lcrAnalysisMode").value === "linearity" && latestLinearity) updateLinearityView();
+  if (lcrFolderStates.big_lcr) renderLcrFolder("big_lcr");
+  if (lcrFolderStates.small_lcr) renderLcrFolder("small_lcr");
+});
+onElement("bigFolderLoadBtn", "click", () => loadLcrFolder("big_lcr", false));
+onElement("bigFolderReanalyzeBtn", "click", () => loadLcrFolder("big_lcr", true));
+onElement("smallFolderLoadBtn", "click", () => loadLcrFolder("small_lcr", false));
+onElement("smallFolderReanalyzeBtn", "click", () => loadLcrFolder("small_lcr", true));
+onElement("bigFolderRunSelect", "change", () => loadLcrFolderRun("big_lcr"));
+onElement("smallFolderRunSelect", "change", () => loadLcrFolderRun("small_lcr"));
 onElement("bigLcrAutoRange", "change", updateBigLcrControls);
 $("analysisBrowseBtn").addEventListener("click", browseAnalysisPath);
 $("analysisFileList").addEventListener("change", loadSelectedAnalysisFile);
@@ -3657,3 +4205,4 @@ updateSweepBaseSummary();
 syncSweepReceiverChannels();
 updateTimeFrequencyControls();
 setEvent("系统就绪，可以开始配置。", "idle");
+pollStatus();

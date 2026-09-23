@@ -1,6 +1,15 @@
 __pycache__/
 *.py[cod]
 .venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+# Local machine settings; keep config.example.json as the shareable template.
+/config.json
+/config.local.json
 # Captures, sweeps, calibration results and generated analysis artifacts stay
 # local; the repository stores only the empty data directory marker.
 data/**

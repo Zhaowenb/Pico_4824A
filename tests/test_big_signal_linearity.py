@@ -83,6 +83,43 @@ class BigSignalProtectionAndLinearityTests(unittest.TestCase):
             self.assertEqual(outcome.summary_rows[0]["valid_repeats"], 0)
             self.assertTrue((outcome.directory / outcome.run_rows[0]["npz_file"]).is_file())
 
+    def test_suspected_trip_continues_only_after_operator_callback(self) -> None:
+        class CollapsingDevice:
+            calls = 0
+
+            def capture(self, acquisition: AcquisitionConfig) -> CaptureResult:
+                self.calls += 1
+                rate = acquisition.sample_rate_hz
+                time_s = (np.arange(acquisition.total_samples) - acquisition.pre_trigger_samples) / rate
+                frequency = acquisition.awg.frequency_hz
+                inside = (time_s >= 0) & (time_s < acquisition.awg.cycles / frequency)
+                gain = np.where(time_s >= 17 / frequency, 0.03, 1.0)
+                signal = np.where(inside, gain * np.sin(2 * np.pi * frequency * time_s), 0.0)
+                return CaptureResult(time_s, {"A": signal, "B": signal * 0.1}, 1 / rate,
+                                     rate, rate, (), acquisition, True)
+
+        acquisition = AcquisitionConfig(sample_rate_hz=2_000_000)
+        for name in acquisition.channels:
+            acquisition.channels[name].enabled = name in {"A", "B"}
+        config = BigSignalLcrConfig(
+            scan_mode="voltage", frequency_hz=50_000, awg_vpp_start=0.5,
+            awg_vpp_stop=1.0, awg_vpp_step=0.5, repeats=1, interval_s=0,
+            burst_cycles=30, ramp_cycles=2, analysis_cycles=10,
+        )
+        device = CollapsingDevice()
+        trip_rows = []
+        with tempfile.TemporaryDirectory() as temporary:
+            outcome = execute_big_signal_lcr(
+                acquisition, config, device, Path(temporary), threading.Event(),
+                on_trip=lambda row: trip_rows.append(dict(row)) or True,
+            )
+        self.assertFalse(outcome.stopped)
+        self.assertTrue(outcome.safety_tripped)
+        self.assertEqual(device.calls, 2)
+        self.assertEqual(len(trip_rows), 2)
+        self.assertEqual(len(outcome.run_rows), 2)
+        self.assertTrue(all(row["safety_state"] == "SUSPECT_TRIP" for row in outcome.run_rows))
+
     def test_no_monitor_signal_is_not_reexcited_by_auto_range(self) -> None:
         class SilentDevice:
             calls = 0

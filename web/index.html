@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>PicoScope 4824A 控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260923-big-trip-layout5" />
+    <link rel="stylesheet" href="/styles.css?v=20260923-lcr-folder-analysis1" />
   </head>
   <body data-page="measure">
     <header class="topbar">
@@ -20,7 +20,7 @@
         <a href="/measure" data-nav="measure">实时测量</a>
         <a href="/sweep" data-nav="sweep">参数扫描</a>
         <a href="/lcr" data-nav="lcr">LCR测量</a>
-        <a href="/lcr-linearity" data-nav="lcr-linearity">大信号线性度</a>
+        <a href="/lcr-linearity" data-nav="lcr-linearity">LCR数据分析</a>
         <a href="/file-analysis" data-nav="file-analysis">单数据分析</a>
         <a href="/sweep-analysis" data-nav="sweep-analysis">参数数据分析</a>
       </nav>
@@ -296,11 +296,11 @@
           <p class="wiring-note"><span>!</span> 提醒值初始为 400 Vpp / 2 Apeak，超出只记录 WARN 并继续扫描。ATA-2021B 官网标称 200 Vpp / 0.5 Apeak；软件不是硬件保护，请核对设备。</p>
           <div class="big-trip-heading">
             <div><strong>疑似跳闸识别</strong><small>Monitor 波形推断 · 非硬件状态</small></div>
-            <label class="big-trip-toggle"><input id="bigLcrTripDetection" type="checkbox" checked aria-label="启用疑似跳闸掉幅停扫" /><span>启用</span></label>
+            <label class="big-trip-toggle"><input id="bigLcrTripDetection" type="checkbox" checked aria-label="启用疑似跳闸暂停和告警" /><span>启用</span></label>
           </div>
           <div class="big-trip-rows">
             <label class="big-trip-row"><span>掉幅阈值</span><span class="big-trip-value"><input id="bigLcrTripDrop" type="number" value="20" min="2" max="80" step="1" /><small>%</small></span></label>
-            <label class="big-trip-row"><span>持续时间</span><span class="big-trip-value"><input id="bigLcrTripHold" type="number" value="3" min="1" max="20" step="1" /><small>周期</small></span></label>
+            <label class="big-trip-row"><span>持续时间</span><span class="big-trip-value"><input id="bigLcrTripHold" type="number" value="1" min="1" max="20" step="1" /><small>周期</small></span></label>
             <label class="big-trip-row"><span>最低有效监测幅值</span><span class="big-trip-value"><input id="bigLcrMinMonitorRms" type="number" value="2" min="0.001" step="0.1" /><small>mVrms</small></span></label>
           </div>
           <div class="big-preflight">
@@ -310,6 +310,50 @@
           </div>
           <div class="sweep-action-row"><button id="bigLcrStartBtn" class="sweep-start" disabled><span class="play"></span>开始大信号 LCR</button><button id="bigLcrStopBtn" class="sweep-stop" disabled>停止</button></div>
           <div class="progress-track"><i id="bigLcrProgressBar"></i></div><small id="bigLcrProgressText" class="progress-text">尚未开始</small>
+        </section>
+
+        <section class="panel hero-control page-only linearity-acquisition-panel" data-pages="lcr" data-lcr-mode="big">
+          <div class="panel-heading"><div><span class="step">TEST</span><h2>大信号线性度与波形畸变测试</h2></div><small>独立任务 · 三路同步</small></div>
+          <p class="wiring-note"><span>i</span> 与大信号 LCR 共用 ATA、Monitor 通道及换算系数；Receiver 使用独立通道。保存三路原始 ADC 电压，不做 AGC 或幅值归一化。</p>
+          <div class="form-grid three">
+            <label>Receiver 通道<select id="linearityReceiverChannel"></select></label>
+            <label>Receiver 量程<select id="linearityReceiverRange"></select></label>
+            <label>频率 <span>kHz</span><input id="linearityFrequencyKHz" type="number" value="60" min="0.001" max="1000" step="1" /></label>
+            <label>采样率 <span>MS/s</span><input id="linearitySampleRate" type="number" value="20" min="0.001" max="80" step="0.1" /></label>
+            <label>采集时间 <span>μs</span><input id="linearityCaptureDuration" type="number" value="1000" min="1" step="10" /></label>
+            <label>触发位置 <span>%</span><input id="linearityTriggerPosition" type="number" value="15" min="0" max="99.9" step="1" /></label>
+            <label>触发来源<select id="linearityTriggerSignal"><option value="voltage">Voltage Monitor</option><option value="current">Current Monitor</option></select></label>
+            <label>触发电平 <span>V</span><input id="linearityTriggerLevel" type="number" value="0.02" step="0.005" /></label>
+            <label>Burst 周期数<input id="linearityCycles" type="number" value="5" min="1" step="1" /></label>
+            <label>缓升/缓降 <span>周期</span><input id="linearityRampCycles" type="number" value="1" min="0" step="0.25" /></label>
+            <label>AWG Vpp 起始<input id="linearityVppStart" type="number" value="0.2" min="0.001" max="4" step="0.1" /></label>
+            <label>AWG Vpp 停止<input id="linearityVppStop" type="number" value="4" min="0.001" max="4" step="0.1" /></label>
+            <label>AWG Vpp 步长<input id="linearityVppStep" type="number" value="0.2" min="0.001" max="4" step="0.1" /></label>
+            <label>扫描方向<select id="linearityDirection"><option value="up" selected>正扫</option><option value="down">反扫</option><option value="both">正扫 + 反扫</option></select></label>
+            <label>每点重复<input id="linearityRepeats" type="number" value="3" min="1" max="100" step="1" /></label>
+            <label>测量间隔 <span>s</span><input id="linearityInterval" type="number" value="0.5" min="0" max="3600" step="0.1" /></label>
+          </div>
+          <div class="subhead"><span>分析时间窗</span><small>所有时间相对 Pico 触发点，可按实际传播延迟调整</small></div>
+          <div class="form-grid three">
+            <label>Noise 起点 <span>μs</span><input id="linearityNoiseStart" type="number" value="-120" step="1" /></label>
+            <label>Noise 终点 <span>μs</span><input id="linearityNoiseEnd" type="number" value="-20" step="1" /></label>
+            <label>直达波起点 <span>μs</span><input id="linearityDirectStart" type="number" value="0" step="1" /></label>
+            <label>直达波终点 <span>μs</span><input id="linearityDirectEnd" type="number" value="250" step="1" /></label>
+            <label>Echo 起点 <span>μs</span><input id="linearityEchoStart" type="number" value="500" step="1" /></label>
+            <label>Echo 终点 <span>μs</span><input id="linearityEchoEnd" type="number" value="800" step="1" /></label>
+          </div>
+          <div class="subhead"><span>工程状态阈值</span><small>可调辅助分类，不代表材料物理定论</small></div>
+          <div class="form-grid three">
+            <label>D_wave 限值 <span>%</span><input id="linearityMeasureLimitDwave" type="number" value="10" min="0" step="0.5" /></label>
+            <label>THD_RX 限值 <span>%</span><input id="linearityMeasureLimitRxThd" type="number" value="5" min="0" step="0.5" /></label>
+            <label>THD_I 限值 <span>%</span><input id="linearityMeasureLimitIThd" type="number" value="5" min="0" step="0.5" /></label>
+            <label>Compression 限值 <span>dB</span><input id="linearityMeasureLimitCompression" type="number" value="1" min="0" step="0.1" /></label>
+            <label>K_ME 偏差限值 <span>%</span><input id="linearityMeasureLimitKme" type="number" value="10" min="0" step="0.5" /></label>
+            <label>Correlation 下限<input id="linearityMeasureLimitCorrelation" type="number" value="0.98" min="0.01" max="1" step="0.01" /></label>
+          </div>
+          <p class="wiring-note"><span>!</span> 检查三路通道互不相同，并为大电流 Monitor 选择足够量程（可选 ±5 V 或更大）。ADC overflow/clipping 数据仍保存，但不会进入线性参考模型。</p>
+          <div class="sweep-action-row"><button id="linearityStartBtn" class="sweep-start"><span class="play"></span>开始线性度测试</button><button id="linearityStopBtn" class="sweep-stop" disabled>停止</button></div>
+          <div class="progress-track"><i id="linearityProgressBar"></i></div><small id="linearityProgressText" class="progress-text">尚未开始；结果保存在 data/lcr_linearity</small>
         </section>
 
         <section class="panel hero-control page-only" data-pages="lcr" data-lcr-mode="small">
@@ -578,16 +622,50 @@
           <button id="captureBtn" class="primary"><span class="play"></span>开始同步采集</button>
           <button id="stopBtn" class="secondary" disabled>停止</button>
         </section>
-        <section class="panel hero-control page-only" data-pages="lcr-linearity">
-          <div class="panel-heading"><div><span class="step">01</span><h2>大信号线性度 / 波形畸变</h2></div></div>
-          <label>大信号 LCR 测量文件夹<input id="linearityDirectory" type="text" placeholder="留空分析最近一次大信号 LCR 扫描" /></label>
-          <div class="form-grid">
+        <section class="panel hero-control page-only lcr-folder-mode-panel" data-pages="lcr-linearity">
+          <div class="panel-heading"><div><span class="step">MODE</span><h2>LCR 分析模式</h2></div><small>仅读取已保存文件夹</small></div>
+          <label>分析类型<select id="lcrAnalysisMode"><option value="big_lcr" selected>大信号 LCR 文件夹分析</option><option value="linearity">大信号线性度与波形畸变文件夹分析</option><option value="small_lcr">小信号 LCR 文件夹分析</option></select></label>
+          <p class="wiring-note"><span>i</span> 三种模式互斥，切换会保留各自文件夹路径；分析页面不会启动 PicoScope 或 AWG。</p>
+        </section>
+        <section class="panel page-only lcr-folder-source" data-pages="lcr-linearity" data-lcr-analysis-mode="big_lcr">
+          <div class="panel-heading compact"><div><span class="step">SOURCE</span><h2>大信号 LCR 文件夹</h2></div></div>
+          <label>测量文件夹<input id="bigFolderDirectory" type="text" placeholder="留空加载 data/lcr_big 最近文件夹" /></label>
+          <div class="analysis-button-row"><button id="bigFolderLoadBtn" class="sweep-start">加载已保存结果</button><button id="bigFolderReanalyzeBtn" class="secondary">从 raw 重算</button></div>
+          <small id="bigFolderStatus" class="progress-text">读取 config、runs、summary 和 raw NPZ</small>
+        </section>
+        <section class="panel page-only lcr-folder-source" data-pages="lcr-linearity" data-lcr-analysis-mode="linearity">
+          <div class="panel-heading compact"><div><span class="step">SOURCE</span><h2>线性度测试文件夹</h2></div></div>
+          <label>测量文件夹<input id="linearityDirectory" type="text" placeholder="留空加载 data/lcr_linearity 最近文件夹" /></label>
+          <div class="form-grid three">
             <label>最高谐波阶数<input id="linearityHarmonicOrder" type="number" value="5" min="2" max="15" step="1" /></label>
-            <label>查看频率<select id="linearityFrequency"><option value="">分析后选择</option></select></label>
+            <label>最大对齐时间 <span>μs</span><input id="linearityAlignShift" type="number" value="10" min="0" step="0.5" /></label>
+            <label>低电流参考点数<input id="linearityReferenceCount" type="number" value="3" min="2" step="1" /></label>
+            <label>低电流最大值 <span>A</span><input id="linearityReferenceMaxCurrent" type="number" value="0" min="0" step="0.01" /></label>
+            <label>Noise 起/止 <span>μs</span><input id="linearityAnalysisNoiseStart" type="number" value="-120" step="1" /></label>
+            <label>Noise 终点 <span>μs</span><input id="linearityAnalysisNoiseEnd" type="number" value="-20" step="1" /></label>
+            <label>直达起点 <span>μs</span><input id="linearityAnalysisDirectStart" type="number" value="0" step="1" /></label>
+            <label>直达终点 <span>μs</span><input id="linearityAnalysisDirectEnd" type="number" value="250" step="1" /></label>
+            <label>Echo 起点 <span>μs</span><input id="linearityAnalysisEchoStart" type="number" value="500" step="1" /></label>
+            <label>Echo 终点 <span>μs</span><input id="linearityAnalysisEchoEnd" type="number" value="800" step="1" /></label>
           </div>
-          <button id="linearityAnalyzeBtn" class="sweep-start">分析已保存的 Monitor 波形</button>
-          <small id="linearityStatus" class="progress-text">不占用 PicoScope；首次分析大型文件夹可能较慢</small>
-          <p class="wiring-note"><span>i</span> 谐波只从平顶拟合窗计算；跳闸、监测故障及 ADC 溢出点不参与线性度参考。增益偏差以同频最低 AWG Vpp 为基准，不等于独立的功放线性度标定。</p>
+          <label class="safety-ack-label"><input id="linearityForceOrigin" type="checkbox" />Compression 低电流模型强制过原点</label>
+          <div class="analysis-button-row"><button id="linearityAnalyzeBtn" class="sweep-start">加载已保存结果</button><button id="linearityReanalyzeBtn" class="secondary">重新分析全部 raw</button></div>
+          <small id="linearityStatus" class="progress-text">重新分析仅生成内存派生结果，不覆盖原始文件</small>
+          <div class="subhead"><span>工程状态阈值</span><small>只用于辅助分类，不是物理定论</small></div>
+          <div class="form-grid three">
+            <label>D_wave 限值 <span>%</span><input id="linearityLimitDwave" type="number" value="10" min="0" step="0.5" /></label>
+            <label>THD_RX 限值 <span>%</span><input id="linearityLimitRxThd" type="number" value="5" min="0" step="0.5" /></label>
+            <label>THD_I 限值 <span>%</span><input id="linearityLimitIThd" type="number" value="5" min="0" step="0.5" /></label>
+            <label>Compression 限值 <span>dB</span><input id="linearityLimitCompression" type="number" value="1" min="0" step="0.1" /></label>
+            <label>K_ME 偏差限值 <span>%</span><input id="linearityLimitKme" type="number" value="10" min="0" step="0.5" /></label>
+            <label>Correlation 下限<input id="linearityLimitCorrelation" type="number" value="0.98" min="0.01" max="1" step="0.01" /></label>
+          </div>
+        </section>
+        <section class="panel page-only lcr-folder-source" data-pages="lcr-linearity" data-lcr-analysis-mode="small_lcr">
+          <div class="panel-heading compact"><div><span class="step">SOURCE</span><h2>小信号 LCR 文件夹</h2></div></div>
+          <label>测量文件夹<input id="smallFolderDirectory" type="text" placeholder="留空加载 data/lcr 最近文件夹" /></label>
+          <div class="analysis-button-row"><button id="smallFolderLoadBtn" class="sweep-start">加载已保存结果</button><button id="smallFolderReanalyzeBtn" class="secondary">从 raw 重算</button></div>
+          <small id="smallFolderStatus" class="progress-text">保留原有小信号阻抗和精准电阻校准字段</small>
         </section>
       </aside>
 
@@ -676,7 +754,7 @@
         </section>
 
         <section id="bigLcrResultPanel" class="scope-panel lcr-result-panel big-lcr-result-panel page-only" data-pages="lcr" data-lcr-mode="big">
-          <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B LARGE-SIGNAL</p><h2>大信号 LCR 结果</h2><small id="bigLcrResultPath" class="scope-interaction-help">等待首次测量</small><small id="bigLcrLastPoint" class="scope-interaction-help">当前显示点：—</small></div><a class="panel-link" href="/lcr-linearity" data-route-link="lcr-linearity">分析线性度与畸变 →</a></div>
+          <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B LARGE-SIGNAL</p><h2>大信号 LCR 结果</h2><small id="bigLcrResultPath" class="scope-interaction-help">等待首次测量</small><small id="bigLcrLastPoint" class="scope-interaction-help">当前显示点：—</small></div><a class="panel-link" href="/lcr-linearity" data-route-link="lcr-linearity">LCR数据分析 →</a></div>
           <div class="lcr-metrics big-lcr-metrics">
             <article><span>|Z|</span><strong id="bigLcrMagnitudeMetric">—</strong><small>Ω</small></article>
             <article><span>Phase</span><strong id="bigLcrPhaseMetric">—</strong><small>°</small></article>
@@ -693,13 +771,55 @@
           <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>AWG Vpp/V</th><th>有效/总次数</th><th>|Z|/Ω</th><th>Phase/°</th><th>Rs/Ω</th><th>Xs/Ω</th><th>Leff/H</th><th>Q</th><th>Vrms/V</th><th>Irms/A</th><th>Vpp/V</th><th>Ipeak/A</th><th>电压SNR/dB</th><th>电流SNR/dB</th><th>状态</th></tr></thead><tbody id="bigLcrTableBody"></tbody></table></div>
         </section>
 
-        <section class="scope-panel page-only linearity-result-panel" data-pages="lcr-linearity">
+        <section id="linearityMeasurementResult" class="scope-panel lcr-result-panel big-lcr-result-panel page-only" data-pages="lcr" data-lcr-mode="big">
+          <div class="scope-toolbar"><div><p class="eyebrow">THREE-CHANNEL LINEARITY TEST</p><h2>大信号线性度与波形畸变结果</h2><small id="linMeasurementPath" class="scope-interaction-help">等待线性度测试</small></div></div>
+          <div class="big-lcr-status-grid">
+            <div><span>当前 Vpp / Ipeak</span><strong id="linMeasurementDriveMetric">—</strong></div>
+            <div><span>Receiver peak / K_ME</span><strong id="linMeasurementReceiverMetric">—</strong></div>
+            <div><span>THD_I / THD_RX</span><strong id="linMeasurementThdMetric">—</strong></div>
+            <div><span>D_wave / Correlation</span><strong id="linMeasurementShapeMetric">—</strong></div>
+            <div><span>Compression</span><strong id="linMeasurementCompressionMetric">—</strong></div>
+            <div><span>端面回波 / D_echo</span><strong id="linMeasurementEchoMetric">—</strong></div>
+            <div><span>线性 / 有效状态</span><strong id="linMeasurementStateMetric">—</strong></div>
+            <div><span>安全提醒（独立于线性状态）</span><strong id="linMeasurementSafetyMetric">—</strong></div>
+          </div>
+          <div class="lcr-chart-grid big-lcr-chart-grid">
+            <div><div class="subhead"><span>Receiver amplitude vs I_peak</span><small>正扫/反扫分别显示</small></div><div class="lcr-canvas-wrap"><canvas id="linMeasurementAmplitudeCanvas"></canvas></div></div>
+            <div><div class="subhead"><span>K_ME vs I_peak</span><small>Receiver peak / I_peak</small></div><div class="lcr-canvas-wrap"><canvas id="linMeasurementKmeCanvas"></canvas></div></div>
+            <div><div class="subhead"><span>THD_I / THD_RX vs I_peak</span><small>Percent</small></div><div class="lcr-canvas-wrap"><canvas id="linMeasurementThdCanvas"></canvas></div></div>
+            <div><div class="subhead"><span>D_wave vs I_peak</span><small>同频参考、对齐和幅值拟合后</small></div><div class="lcr-canvas-wrap"><canvas id="linMeasurementShapeCanvas"></canvas></div></div>
+            <div><div class="subhead"><span>Correlation vs I_peak</span><small>对齐后的带符号相关系数</small></div><div class="lcr-canvas-wrap"><canvas id="linMeasurementCorrCanvas"></canvas></div></div>
+            <div><div class="subhead"><span>Gain Compression vs I_peak</span><small>低电流参考模型</small></div><div class="lcr-canvas-wrap"><canvas id="linMeasurementCompressionCanvas"></canvas></div></div>
+            <div><div class="subhead"><span>正反扫差异 vs I_peak</span><small>同 Vpp 点的 up/down receiver amplitude difference</small></div><div class="lcr-canvas-wrap"><canvas id="linMeasurementDirectionCanvas"></canvas></div></div>
+          </div>
+          <div class="subhead"><span>Voltage Monitor、Current Monitor、Receiver 原始波形</span><label>运行<select id="linMeasurementRunSelect"><option value="">测试后选择</option></select></label></div>
+          <div class="lcr-wave-wrap linearity-wave-wrap"><canvas id="linMeasurementWaveCanvas"></canvas></div>
+          <div class="subhead"><span>每次采集明细</span><small>clipped / overflow 数据保留并标记无效</small></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>方向</th><th>AWG Vpp</th><th>Ipeak/A</th><th>Vpeak/V</th><th>Receiver peak/V</th><th>THD_I/%</th><th>THD_RX/%</th><th>K_ME</th><th>D_wave/%</th><th>Correlation</th><th>Compression/dB</th><th>正反扫幅值差异/%</th><th>Monitor THD平顶窗</th><th>Monitor / 疑似跳闸</th><th>线性状态</th><th>安全提醒</th></tr></thead><tbody id="linMeasurementTableBody"></tbody></table></div>
+        </section>
+
+        <section class="scope-panel lcr-result-panel page-only lcr-folder-result" data-pages="lcr-linearity" data-lcr-analysis-mode="big_lcr">
+          <div class="scope-toolbar"><div><p class="eyebrow">LCR FOLDER · LARGE SIGNAL</p><h2>大信号 LCR 文件夹分析</h2><small id="bigFolderResultPath" class="scope-interaction-help">等待加载测量文件夹</small></div></div>
+          <div class="big-lcr-status-grid"><div><span>测量记录</span><strong id="bigFolderCount">—</strong></div><div><span>参数点</span><strong id="bigFolderPointCount">—</strong></div><div><span>显示字段</span><strong>summary / runs</strong></div></div>
+          <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>已保存指标曲线</span><small>按文件夹 summary 读取</small></div><div class="lcr-canvas-wrap"><canvas id="bigFolderCurveCanvas"></canvas></div></div><div><div class="subhead"><span>二维 frequency × AWG Vpp</span><small>|Z| / Ω</small></div><div class="lcr-canvas-wrap"><canvas id="bigFolderGridCanvas"></canvas></div></div></div>
+          <div class="subhead"><span>单次 Voltage / Current Monitor 原始波形</span><label>运行<select id="bigFolderRunSelect"><option value="">加载后选择</option></select></label></div><div class="lcr-wave-wrap"><canvas id="bigFolderWaveCanvas"></canvas></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>AWG Vpp/V</th><th>|Z|/Ω</th><th>Phase/°</th><th>Rs/Ω</th><th>Xs/Ω</th><th>Leff/H</th><th>Q</th><th>Vrms/V</th><th>Irms/A</th><th>Vpp/V</th><th>Ipeak/A</th><th>电压SNR/dB</th><th>电流SNR/dB</th><th>状态</th></tr></thead><tbody id="bigFolderTableBody"></tbody></table></div>
+        </section>
+
+        <section class="scope-panel page-only linearity-result-panel" data-pages="lcr-linearity" data-lcr-analysis-mode="linearity">
           <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B MONITOR ANALYSIS</p><h2>大信号线性度 / 波形畸变分析</h2><small id="linearityResultPath" class="scope-interaction-help">等待加载测量文件夹</small></div></div>
           <div class="big-lcr-status-grid"><div><span>有效运行 / 总运行</span><strong id="linearityRunCount">—</strong></div><div><span>最高谐波阶数</span><strong id="linearityOrderMetric">—</strong></div><div><span>当前频率</span><strong id="linearityFrequencyMetric">—</strong></div></div>
-          <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>THD 对 AWG Vpp</span><small>Voltage / Current Monitor 对应的线圈量</small></div><div class="lcr-canvas-wrap"><canvas id="linearityThdCanvas"></canvas></div></div><div><div class="subhead"><span>基波增益偏差对 AWG Vpp</span><small>同频最低 Vpp 作为 0 dB 参考</small></div><div class="lcr-canvas-wrap"><canvas id="linearityGainCanvas"></canvas></div></div></div>
+          <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>Receiver amplitude vs I_peak</span><small>旧文件回退显示基波指标</small></div><div class="lcr-canvas-wrap"><canvas id="linearityReceiveCanvas"></canvas></div></div><div><div class="subhead"><span>K_ME vs I_peak</span><small>低电流参考区作为 0% 偏差基准</small></div><div class="lcr-canvas-wrap"><canvas id="linearityKmeCanvas"></canvas></div></div><div><div class="subhead"><span>THD_I / THD_RX</span><small>旧文件缺 Receiver 时展示 Voltage Monitor THD</small></div><div class="lcr-canvas-wrap"><canvas id="linearityThdCanvas"></canvas></div></div><div><div class="subhead"><span>D_wave vs I_peak</span><small>对齐同频参考波形</small></div><div class="lcr-canvas-wrap"><canvas id="linearityShapeCanvas"></canvas></div></div><div><div class="subhead"><span>Correlation vs I_peak</span><small>保留正负号</small></div><div class="lcr-canvas-wrap"><canvas id="linearityCorrCanvas"></canvas></div></div><div><div class="subhead"><span>Gain Compression vs I_peak</span><small>低电流参考模型</small></div><div class="lcr-canvas-wrap"><canvas id="linearityCompressionCanvas"></canvas></div></div><div><div class="subhead"><span>正反扫差异</span><small>不称作磁滞；兼容 up/down 数据</small></div><div class="lcr-canvas-wrap"><canvas id="linearityDirectionCanvas"></canvas></div></div><div><div class="subhead"><span>端面回波幅值</span><small>用户定义 Echo 时间窗</small></div><div class="lcr-canvas-wrap"><canvas id="linearityEchoCanvas"></canvas></div></div><div><div class="subhead"><span>端面回波形状</span><small>D_echo 和相关系数</small></div><div class="lcr-canvas-wrap"><canvas id="linearityEchoShapeCanvas"></canvas></div></div><div><div class="subhead"><span>旧版 Monitor 基波增益偏差</span><small>兼容旧 big_lcr 线性度文件夹</small></div><div class="lcr-canvas-wrap"><canvas id="linearityGainCanvas"></canvas></div></div></div>
           <div class="subhead"><span>单次运行的电压/电流谐波</span><label>运行<select id="linearityRunSelect"><option value="">分析后选择</option></select></label></div><div class="lcr-canvas-wrap"><canvas id="linearityHarmonicCanvas"></canvas></div>
           <div class="subhead"><span>平顶区电压 / 电流波形</span><small>两轴独立归一化，仅用于观察形状；数值请看下表</small></div><div class="lcr-wave-wrap"><canvas id="linearityWaveCanvas"></canvas></div>
-          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>AWG Vpp/V</th><th>有效次数</th><th>电压 THD/%</th><th>电流 THD/%</th><th>电压 H2/dBc</th><th>电流 H2/dBc</th><th>电压 H3/dBc</th><th>电流 H3/dBc</th><th>电压增益偏差/dB</th><th>电流增益偏差/dB</th><th>基波 Vrms/V</th><th>基波 Irms/A</th></tr></thead><tbody id="linearityTableBody"></tbody></table></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>方向</th><th>频率/kHz</th><th>AWG Vpp/V</th><th>Ipeak/A</th><th>Receiver peak/V</th><th>K_ME</th><th>THD_I/%</th><th>THD_RX/%</th><th>D_wave/%</th><th>Correlation</th><th>Compression/dB</th><th>方向差异/%</th><th>Echo peak/V</th><th>D_echo/%</th><th>Monitor THD平顶窗</th><th>Monitor / 疑似跳闸</th><th>线性状态</th><th>安全提醒</th><th>旧电压THD/%</th><th>旧电流THD/%</th><th>旧电压增益/dB</th></tr></thead><tbody id="linearityTableBody"></tbody></table></div>
+        </section>
+
+        <section class="scope-panel lcr-result-panel page-only lcr-folder-result" data-pages="lcr-linearity" data-lcr-analysis-mode="small_lcr">
+          <div class="scope-toolbar"><div><p class="eyebrow">LCR FOLDER · SMALL SIGNAL</p><h2>小信号 LCR 文件夹分析</h2><small id="smallFolderResultPath" class="scope-interaction-help">等待加载测量文件夹</small></div></div>
+          <div class="big-lcr-status-grid"><div><span>运行 / 有效记录</span><strong id="smallFolderCount">—</strong></div><div><span>阻抗参数点</span><strong id="smallFolderPointCount">—</strong></div><div><span>校准设置</span><strong id="smallFolderCalibration">—</strong></div></div>
+          <div class="lcr-chart-grid"><div><div class="subhead"><span>|Z|、R、X vs Frequency</span><small>保留已保存小信号字段</small></div><div class="lcr-canvas-wrap"><canvas id="smallFolderCurveCanvas"></canvas></div></div><div><div class="subhead"><span>单次原始电压/电流波形</span><label>运行<select id="smallFolderRunSelect"><option value="">加载后选择</option></select></label></div><div class="lcr-wave-wrap"><canvas id="smallFolderWaveCanvas"></canvas></div></div></div>
+          <div class="result-table-wrap lcr-table-wrap"><table><thead><tr><th>频率/kHz</th><th>次数</th><th>|Z|/Ω</th><th>相位/°</th><th>R/Ω</th><th>X/Ω</th><th>Cs/F</th><th>Ls/H</th><th>Rp/Ω</th><th>Cp/F</th><th>Lp/H</th><th>Q</th><th>D</th><th>电压SNR/dB</th><th>电流SNR/dB</th></tr></thead><tbody id="smallFolderTableBody"></tbody></table></div>
         </section>
 
         <section id="lcrResultPanel" class="scope-panel lcr-result-panel page-only" data-pages="lcr" data-lcr-mode="small">
@@ -846,6 +966,29 @@
         </section>
       </section>
     </main>
-    <script src="/app.js?v=20260923-big-lcr-alert4"></script>
+    <div id="tripAlarmModal" class="trip-alarm-overlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="tripAlarmTitle" aria-describedby="tripAlarmReason">
+      <section class="trip-alarm-dialog">
+        <div class="trip-alarm-kicker"><span class="trip-alarm-pulse" aria-hidden="true"></span><span>扫描已暂停 · 疑似跳闸</span></div>
+        <h2 id="tripAlarmTitle">检测到 Monitor 持续掉幅</h2>
+        <p class="trip-alarm-reason"><strong>检测原因</strong><span id="tripAlarmReason">等待设备状态信息…</span></p>
+        <div class="trip-alarm-facts" aria-label="当前测量点信息">
+          <div><span>任务</span><strong id="tripAlarmTask">—</strong></div>
+          <div><span>扫描进度</span><strong id="tripAlarmProgress">—</strong></div>
+          <div><span>频率</span><strong id="tripAlarmFrequency">—</strong></div>
+          <div><span>AWG 输入</span><strong id="tripAlarmVpp">—</strong></div>
+          <div><span>监测通道</span><strong id="tripAlarmChannels">—</strong></div>
+          <div><span>最低剩余幅值</span><strong id="tripAlarmDrop">—</strong></div>
+        </div>
+        <p id="tripAlarmInstruction" class="trip-alarm-instruction">请先检查 ATA-2021B 保护状态并完成合闸/复位。点击“已解决，继续扫描”表示你已确认设备恢复且可以安全继续；系统会从下一次采集继续。</p>
+        <div class="trip-alarm-actions">
+          <button id="tripMuteBtn" class="trip-muted-button" type="button">停止声音</button>
+          <span class="trip-alarm-action-spacer"></span>
+          <button id="tripStopBtn" class="trip-stop-button" type="button">停止扫描</button>
+          <button id="tripContinueBtn" class="trip-continue-button" type="button">已解决，继续扫描</button>
+        </div>
+        <small class="trip-alarm-footnote">这是基于监测波形的“疑似跳闸”判断，不是 ATA 硬件状态回读；本次已完成采集及原始数据已保存。</small>
+      </section>
+    </div>
+    <script src="/app.js?v=20260923-linearity-fixes1"></script>
   </body>
 </html>

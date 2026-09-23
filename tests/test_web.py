@@ -25,6 +25,7 @@ class WebApiTests(unittest.TestCase):
             sweep_output_root=output_root / "sweeps",
             lcr_output_root=output_root / "lcr",
             big_lcr_output_root=output_root / "lcr_big",
+            lcr_linearity_output_root=output_root / "lcr_linearity",
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -111,6 +112,14 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual(len(result["summary_rows"]), 1)
         self.assertAlmostEqual(result["summary_rows"][0]["frequency_hz"], 100_000.0)
         self.assertTrue(Path(result["directory"], "runs.csv").is_file())
+        with patch("pico4824a.lcr.analyze_impedance",
+                   side_effect=ValueError("synthetic reanalysis failure")):
+            reanalyzed = self.post_json("/api/lcr-analysis/load", {
+                "mode": "small_lcr", "directory": result["directory"], "reanalyze": True,
+            })
+        self.assertEqual(reanalyzed["valid_runs"], 0)
+        self.assertEqual(reanalyzed["total_runs"], 1)
+        self.assertEqual(reanalyzed["run_rows"][0]["reanalysis_state"], "ERROR")
         saved_config = json.loads(Path(result["directory"], "lcr_config.json").read_text(encoding="utf-8"))
         enabled = [
             name for name, channel in saved_config["base_config"]["channels"].items()
@@ -173,11 +182,75 @@ class WebApiTests(unittest.TestCase):
         )
         self.assertEqual(linearity["valid_runs"], 1)
         self.assertEqual(len(linearity["summary_rows"]), 1)
+        with patch("pico4824a.big_signal_lcr.analyze_big_signal_impedance",
+                   side_effect=ValueError("synthetic reanalysis failure")):
+            reanalyzed = self.post_json("/api/lcr-analysis/load", {
+                "mode": "big_lcr", "directory": result["directory"], "reanalyze": True,
+            })
+        self.assertEqual(reanalyzed["valid_runs"], 0)
+        self.assertEqual(reanalyzed["total_runs"], 1)
+        self.assertEqual(reanalyzed["run_rows"][0]["reanalysis_state"], "ERROR")
         preview = self.post_json(
             "/api/big-lcr/linearity/run",
             {"directory": result["directory"], "run_index": 1},
         )
         self.assertTrue(preview["time_s"])
+
+    def test_three_channel_linearity_task_and_folder_analysis_api(self) -> None:
+        config = AcquisitionConfig(sample_rate_hz=2_000_000, pre_trigger_samples=300, post_trigger_samples=1700).to_dict()
+        config["simulate"] = True
+        for name, channel in config["channels"].items():
+            channel["enabled"] = name in {"A", "B", "C"}
+            channel["range"] = "2V" if name == "C" else "5V"
+        config["trigger"].update({"enabled": True, "source": "A", "threshold_v": 0.01})
+        config["awg"].update({"enabled": True, "waveform": "lcr_tone", "frequency_hz": 60_000,
+                              "cycles": 5, "pk_to_pk_v": 0.2, "trigger_source": "software",
+                              "tone_ramp_cycles": 0.5})
+        linearity = {
+            "frequency_hz": 60_000, "cycles": 5, "ramp_cycles": 0.5,
+            "vpp_start": 0.2, "vpp_stop": 0.4, "vpp_step": 0.2,
+            "direction": "both", "repeats": 1, "interval_s": 0,
+            "sample_rate_hz": 2_000_000, "capture_duration_us": 1000,
+            "trigger_position_percent": 15, "trigger_signal": "voltage", "trigger_level_v": 0.01,
+            "voltage_channel": "A", "voltage_range": "5V", "current_channel": "B", "current_range": "5V",
+            "receiver_channel": "C", "receiver_range": "2V", "harmonic_order": 3,
+            "direct_start_us": 0, "direct_end_us": 250, "noise_start_us": -120, "noise_end_us": -20,
+            "echo_start_us": 500, "echo_end_us": 800, "low_current_reference_count": 2,
+            "voltage_scale_v_per_v": 50, "current_scale_a_per_v": 0.5, "ata_voltage_gain": 1,
+        }
+        reply = self.post_json("/api/lcr-linearity/start", {"config": config, "linearity": linearity,
+                                                               "safety_acknowledged": True})
+        self.assertEqual(reply["task_id"], 1)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            status = self.get_json("/api/status")
+            if status["state"] != "running": break
+            time.sleep(0.01)
+        self.assertEqual(status["state"], "complete", status.get("message"))
+        self.assertEqual(status["task_kind"], "lcr_linearity")
+        result = self.get_json("/api/lcr-linearity/result")
+        self.assertEqual(len(result["run_rows"]), 4)
+        folder = Path(result["directory"])
+        self.assertTrue((folder / "linearity_config.json").is_file())
+        preview = self.post_json("/api/lcr-analysis/run-preview", {
+            "mode": "linearity", "directory": result["directory"], "run_index": 1,
+        })
+        self.assertEqual(set(preview["channels"]), {"A", "B", "C"})
+        self.assertTrue(preview["current_receiver_aligned_v"])
+        loaded = self.post_json("/api/lcr-analysis/load", {"mode": "linearity", "directory": result["directory"]})
+        self.assertEqual(loaded["total_runs"], 4)
+        recalculated = self.post_json("/api/lcr-analysis/load", {
+            "mode": "linearity", "directory": result["directory"], "reanalyze": True,
+            "settings": {"harmonic_order": 3, "direct_start_us": 2, "direct_end_us": 240,
+                         "low_current_reference_count": 2},
+        })
+        self.assertTrue(recalculated["reanalysis"])
+        preview_reanalyzed = self.post_json("/api/lcr-analysis/run-preview", {
+            "mode": "linearity", "directory": result["directory"], "run_index": 1,
+            "settings": {"harmonic_order": 3, "direct_start_us": 2, "direct_end_us": 240,
+                         "low_current_reference_count": 2},
+        })
+        self.assertTrue(preview_reanalyzed["current_receiver_aligned_v"])
 
     def test_precision_resistor_calibration_through_http_api(self) -> None:
         config = AcquisitionConfig(
@@ -329,6 +402,15 @@ class WebApiTests(unittest.TestCase):
         self.assertIn('id="bigLcrVoltageScale"', html)
         self.assertIn('id="bigLcrCurrentScale"', html)
         self.assertIn('id="bigLcrSafetyAck"', html)
+        self.assertIn('data-lcr-mode="big"', html)
+        self.assertIn('id="linearityMeasurementResult"', html)
+        self.assertIn("大信号线性度与波形畸变测试", html)
+        self.assertIn('id="lcrAnalysisMode"', html)
+        self.assertIn('value="big_lcr"', html)
+        self.assertIn('value="linearity"', html)
+        self.assertIn('value="small_lcr"', html)
+        self.assertIn('data-nav="lcr-linearity">LCR数据分析', html)
+        self.assertNotIn('data-nav="linearity"', html)
         self.assertIn('id="bigLcrVoltageWaveCanvas"', html)
         self.assertIn('id="bigLcrCurrentWaveCanvas"', html)
         self.assertIn('id="bigLcrTableBody"', html)
@@ -464,6 +546,62 @@ class WebApiTests(unittest.TestCase):
         result = self.get_json("/api/sweep/result")
         self.assertGreaterEqual(len(result["run_rows"]), 1)
         self.assertLess(len(result["run_rows"]), 100)
+
+    def test_suspected_trip_pauses_until_explicit_continue(self) -> None:
+        control = self.server.control
+        with control._lock:
+            control.status.capture_id = 77
+            control.status.state = "running"
+            control.status.task_kind = "big_lcr"
+            control._stop_event.clear()
+            control._resume_event.set()
+        result = []
+        waiter = threading.Thread(
+            target=lambda: result.append(control._pause_for_trip(77, {
+                "task_kind": "big_lcr", "reason": "Voltage Monitor 持续掉幅",
+                "frequency_hz": 80_000, "awg_vpp": 0.5,
+            })),
+            daemon=True,
+        )
+        waiter.start()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and control.snapshot()["state"] != "paused":
+            time.sleep(0.01)
+        paused = self.get_json("/api/status")
+        self.assertEqual(paused["state"], "paused")
+        self.assertEqual(paused["trip_alarm"]["reason"], "Voltage Monitor 持续掉幅")
+        self.assertEqual(paused["trip_alarm"]["frequency_hz"], 80_000)
+        self.post_json("/api/trip/resolve", {})
+        waiter.join(timeout=2)
+        self.assertFalse(waiter.is_alive())
+        self.assertEqual(result, [True])
+        self.assertEqual(control.snapshot()["state"], "running")
+
+    def test_suspected_trip_can_be_stopped_while_paused(self) -> None:
+        control = self.server.control
+        with control._lock:
+            control.status.capture_id = 78
+            control.status.state = "running"
+            control.status.task_kind = "lcr_linearity"
+            control._stop_event.clear()
+            control._resume_event.set()
+        result = []
+        waiter = threading.Thread(
+            target=lambda: result.append(control._pause_for_trip(78, {
+                "task_kind": "lcr_linearity", "reason": "Current Monitor 持续掉幅",
+            })),
+            daemon=True,
+        )
+        waiter.start()
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and control.snapshot()["state"] != "paused":
+            time.sleep(0.01)
+        self.assertEqual(control.snapshot()["state"], "paused")
+        self.post_json("/api/stop", {})
+        waiter.join(timeout=2)
+        self.assertFalse(waiter.is_alive())
+        self.assertEqual(result, [False])
+        self.assertTrue(control._stop_event.is_set())
 
     def test_d_receiver_h_trigger_sweep_through_http_api(self) -> None:
         config = AcquisitionConfig(

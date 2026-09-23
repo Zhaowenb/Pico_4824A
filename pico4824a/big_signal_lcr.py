@@ -68,7 +68,7 @@ class BigSignalLcrConfig:
     auto_range_max_retries: int = 2
     trip_detection_enabled: bool = True
     trip_drop_ratio: float = 0.20
-    trip_hold_cycles: float = 3.0
+    trip_hold_cycles: float = 1.0
     min_monitor_rms_v: float = 0.002
     max_drive_vpp: float = 2.0
     alert_voltage_vpp_v: float = 400.0
@@ -602,6 +602,7 @@ def aggregate_big_signal_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 BigSignalProgress = Callable[[dict[str, Any], CaptureResult | None], None]
+BigSignalTripHandler = Callable[[dict[str, Any]], bool]
 
 
 def execute_big_signal_lcr(
@@ -611,6 +612,7 @@ def execute_big_signal_lcr(
     output_root: Path,
     stop_event: threading.Event,
     progress: BigSignalProgress | None = None,
+    on_trip: BigSignalTripHandler | None = None,
 ) -> BigSignalLcrOutcome:
     base_config.validate()
     config.validate()
@@ -633,6 +635,7 @@ def execute_big_signal_lcr(
     points = config.parameter_points
     total_runs = len(points) * config.repeats
     run_index = 0
+    safety_tripped = False
     current_ranges = {
         name: base_config.channels[name].range
         for name in (config.voltage_channel, config.current_channel)
@@ -643,7 +646,7 @@ def execute_big_signal_lcr(
                 summary = aggregate_big_signal_rows(rows)
                 _write_csv(directory / "runs.csv", rows)
                 _write_csv(directory / "summary.csv", summary)
-                return BigSignalLcrOutcome(directory, rows, summary, True)
+                return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped)
             run_index += 1
             capture_config = AcquisitionConfig.from_dict(base_config.to_dict())
             capture_config.awg.enabled = True
@@ -687,7 +690,7 @@ def execute_big_signal_lcr(
                     summary = aggregate_big_signal_rows(rows)
                     _write_csv(directory / "runs.csv", rows)
                     _write_csv(directory / "summary.csv", summary)
-                    return BigSignalLcrOutcome(directory, rows, summary, True)
+                    return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped)
                 attempts = attempt + 1
                 if progress:
                     progress({
@@ -704,7 +707,7 @@ def execute_big_signal_lcr(
                         summary = aggregate_big_signal_rows(rows)
                         _write_csv(directory / "runs.csv", rows)
                         _write_csv(directory / "summary.csv", summary)
-                        return BigSignalLcrOutcome(directory, rows, summary, True)
+                        return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped)
                     raise
                 path = save_npz(
                     capture,
@@ -788,11 +791,17 @@ def execute_big_signal_lcr(
                     "safety_state": metrics["safety_state"],
                 }, capture)
             if metrics["safety_state"] not in {"OK", "WARN"}:
-                return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped=True)
+                safety_tripped = True
+                if metrics["safety_state"] != "SUSPECT_TRIP":
+                    return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped=True)
+                # Without an operator-controlled pause handler, fail closed as
+                # before. The Web UI waits here before any next excitation.
+                if on_trip is None or not on_trip(row) or stop_event.is_set():
+                    return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped=True)
             if run_index < total_runs and stop_event.wait(config.interval_s):
-                return BigSignalLcrOutcome(directory, rows, summary, True)
+                return BigSignalLcrOutcome(directory, rows, summary, True, safety_tripped)
     summary = aggregate_big_signal_rows(rows)
-    return BigSignalLcrOutcome(directory, rows, summary, False)
+    return BigSignalLcrOutcome(directory, rows, summary, False, safety_tripped)
 
 
 def json_dumps(value: Any) -> str:

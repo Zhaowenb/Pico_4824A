@@ -7,6 +7,7 @@ device remain on the instrument computer; the browser is only the UI.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import csv
 import json
 from pathlib import Path
 from http import HTTPStatus
@@ -42,6 +43,16 @@ from .big_signal_lcr import (
     execute_big_signal_lcr,
 )
 from .big_signal_linearity import analyze_linearity_directory, linearity_run_preview
+from .lcr_linearity import (
+    LinearityConfig,
+    analyze_linearity_directory as analyze_lcr_linearity_directory,
+    execute_linearity_test,
+    linearity_run_preview as lcr_linearity_run_preview,
+    load_lcr_folder,
+)
+from .storage import load_npz
+from .lcr import analyze_impedance, load_lcr_calibration
+from .big_signal_lcr import analyze_big_signal_impedance
 from .storage import default_stem, save_csv, save_npz
 from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
@@ -69,6 +80,7 @@ class WebControlState:
         sweep_output_root: Path | None = None,
         lcr_output_root: Path | None = None,
         big_lcr_output_root: Path | None = None,
+        lcr_linearity_output_root: Path | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self.status = WebStatus()
@@ -76,13 +88,18 @@ class WebControlState:
         self.sweep_result: SweepOutcome | None = None
         self.lcr_result: LcrOutcome | None = None
         self.big_lcr_result: BigSignalLcrOutcome | None = None
+        self.lcr_linearity_result: dict[str, Any] | None = None
         self.device: Pico4824A | None = None
         self._hardware_device: Pico4824A | None = None
         self._worker_thread: threading.Thread | None = None
         self.sweep_output_root = sweep_output_root or PROJECT_DIR / "data" / "sweeps"
         self.lcr_output_root = lcr_output_root or PROJECT_DIR / "data" / "lcr"
         self.big_lcr_output_root = big_lcr_output_root or PROJECT_DIR / "data" / "lcr_big"
+        self.lcr_linearity_output_root = lcr_linearity_output_root or PROJECT_DIR / "data" / "lcr_linearity"
         self._stop_event = threading.Event()
+        self._resume_event = threading.Event()
+        self._resume_event.set()
+        self._trip_alarm: dict[str, Any] | None = None
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -94,10 +111,12 @@ class WebControlState:
                 "capture_id": self.status.capture_id,
                 "task_kind": self.status.task_kind,
                 "progress": self.status.progress,
+                "trip_alarm": dict(self._trip_alarm) if self._trip_alarm else None,
                 "has_result": self.result is not None,
                 "has_sweep_result": self.sweep_result is not None,
                 "has_lcr_result": self.lcr_result is not None,
                 "has_big_lcr_result": self.big_lcr_result is not None,
+                "has_lcr_linearity_result": self.lcr_linearity_result is not None,
             }
 
     def start_capture(self, raw: dict[str, Any]) -> int:
@@ -105,9 +124,11 @@ class WebControlState:
         simulate = bool(values.pop("simulate", False))
         config = AcquisitionConfig.from_dict(values)
         with self._lock:
-            if self.status.state == "running":
+            if self.status.state in {"running", "paused"}:
                 raise RuntimeError("已有采集任务正在运行")
             self._stop_event.clear()
+            self._resume_event.set()
+            self._trip_alarm = None
             self.status.capture_id += 1
             capture_id = self.status.capture_id
             self.status.state = "running"
@@ -141,9 +162,11 @@ class WebControlState:
         if len(points) * sweep.repeats > 10_000:
             raise ValueError("一次扫描最多允许 10,000 次采集")
         with self._lock:
-            if self.status.state == "running":
+            if self.status.state in {"running", "paused"}:
                 raise RuntimeError("已有采集或扫描任务正在运行")
             self._stop_event.clear()
+            self._resume_event.set()
+            self._trip_alarm = None
             self.status.capture_id += 1
             task_id = self.status.capture_id
             self.status.state = "running"
@@ -195,9 +218,11 @@ class WebControlState:
         config = AcquisitionConfig.from_dict(config_values)
         lcr = LcrConfig.from_dict(lcr_raw)
         with self._lock:
-            if self.status.state == "running":
+            if self.status.state in {"running", "paused"}:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
+            self._resume_event.set()
+            self._trip_alarm = None
             self.status.capture_id += 1
             task_id = self.status.capture_id
             self.status.state = "running"
@@ -248,9 +273,11 @@ class WebControlState:
         total_points = len(big_lcr.parameter_points)
         total_runs = total_points * big_lcr.repeats
         with self._lock:
-            if self.status.state == "running":
+            if self.status.state in {"running", "paused"}:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
+            self._resume_event.set()
+            self._trip_alarm = None
             self.status.capture_id += 1
             task_id = self.status.capture_id
             self.status.state = "running"
@@ -279,6 +306,121 @@ class WebControlState:
             self._worker_thread = worker
         worker.start()
         return task_id
+
+    def start_lcr_linearity(self, raw: dict[str, Any]) -> int:
+        """Start a separate three-channel linearity test inside the big LCR mode."""
+        config_raw = raw.get("config")
+        linearity_raw = raw.get("linearity")
+        if not isinstance(config_raw, dict) or not isinstance(linearity_raw, dict):
+            raise ValueError("线性度测试请求必须包含 config 和 linearity")
+        if raw.get("safety_acknowledged") is not True:
+            raise ValueError("开始大信号线性度测试前必须确认 ATA-2021B 安全参数")
+        config_values = dict(config_raw)
+        simulate = bool(config_values.pop("simulate", False))
+        config = AcquisitionConfig.from_dict(config_values)
+        linearity = LinearityConfig.from_dict(linearity_raw)
+        with self._lock:
+            if self.status.state in {"running", "paused"}:
+                raise RuntimeError("已有仪器任务正在运行")
+            self._stop_event.clear()
+            self._resume_event.set()
+            self._trip_alarm = None
+            self.status.capture_id += 1
+            task_id = self.status.capture_id
+            self.status.state = "running"
+            self.status.task_kind = "lcr_linearity"
+            self.status.message = "大信号线性度测试已启动"
+            self.status.started_at = time.time()
+            self.status.finished_at = None
+            total_points = len(linearity.scan_plan)
+            self.status.progress = {"phase": "starting", "run_index": 0,
+                                    "total_runs": total_points * linearity.repeats,
+                                    "point_index": 0, "total_points": total_points}
+            self.lcr_linearity_result = None
+        worker = threading.Thread(target=self._lcr_linearity_worker,
+                                  args=(task_id, config, linearity, simulate),
+                                  daemon=True, name=f"pico-lcr-linearity-{task_id}")
+        with self._lock:
+            self._worker_thread = worker
+        worker.start()
+        return task_id
+
+    def _lcr_linearity_worker(self, task_id: int, config: AcquisitionConfig,
+                              linearity: LinearityConfig, simulate: bool) -> None:
+        device: Pico4824A | None = None
+
+        def update(progress: dict[str, Any], result: CaptureResult | None) -> None:
+            with self._lock:
+                if self.status.capture_id != task_id:
+                    return
+                self.status.progress = progress
+                if result is not None:
+                    self.result = result
+                self.status.message = (
+                    f"线性度 {progress['run_index']}/{progress['total_runs']}："
+                    f"{progress.get('direction', '')} · {progress.get('awg_vpp', 0):g} Vpp · "
+                    f"重复 {progress['repeat']}/{progress['repeats']}"
+                )
+
+        def on_trip(row: dict[str, Any]) -> bool:
+            run_index = int(row.get("run_index") or 1)
+            return self._pause_for_trip(task_id, {
+                "task_kind": "lcr_linearity",
+                "reason": row.get("monitor_message") or "Voltage / Current Monitor 检测到持续掉幅",
+                "monitor_state": row.get("monitor_state", "SUSPECT_TRIP"),
+                "run_index": row.get("run_index"),
+                "total_runs": len(linearity.scan_plan) * linearity.repeats,
+                "point_index": (run_index - 1) // linearity.repeats + 1,
+                "total_points": len(linearity.scan_plan),
+                "repeat": row.get("repeat"),
+                "repeats": linearity.repeats,
+                "frequency_hz": row.get("frequency_hz"),
+                "awg_vpp": row.get("awg_vpp"),
+                "monitor_min_ratio": row.get("monitor_min_ratio"),
+                "voltage_channel": linearity.voltage_channel,
+                "current_channel": linearity.current_channel,
+            })
+        try:
+            device, temporary = self._device_for_task(simulate)
+            with self._lock:
+                self.device = device
+            if temporary:
+                with device:
+                    outcome = execute_linearity_test(config, linearity, device,
+                                                     self.lcr_linearity_output_root,
+                                                     self._stop_event, update, on_trip)
+            else:
+                device.open()
+                outcome = execute_linearity_test(config, linearity, device,
+                                                 self.lcr_linearity_output_root,
+                                                 self._stop_event, update, on_trip)
+            with self._lock:
+                if self.status.capture_id == task_id:
+                    self.lcr_linearity_result = outcome
+                    self.status.state = "stopped" if outcome.get("stopped") else "complete"
+                    if outcome.get("safety_tripped") and not outcome.get("stopped"):
+                        self.status.message = (
+                            f"大信号线性度测试已恢复扫描并完成，期间处理过疑似跳闸；"
+                            f"保存 {len(outcome['run_rows'])} 次采集：{outcome['directory']}"
+                        )
+                    else:
+                        self.status.message = (
+                            f"大信号线性度测试{'已停止' if outcome.get('stopped') else '完成'}，"
+                            f"已保存 {len(outcome['run_rows'])} 次采集：{outcome['directory']}"
+                        )
+                    self.status.finished_at = time.time()
+        except Exception as exc:
+            with self._lock:
+                if self.status.capture_id == task_id:
+                    self.status.state = "stopped" if self._stop_event.is_set() else "error"
+                    self.status.message = "大信号线性度测试已停止" if self._stop_event.is_set() else str(exc)
+                    self.status.finished_at = time.time()
+        finally:
+            with self._lock:
+                if self.device is device:
+                    self.device = None
+                if self._worker_thread is threading.current_thread():
+                    self._worker_thread = None
 
     def _device_for_task(self, simulate: bool) -> tuple[Pico4824A, bool]:
         """Return a task device and whether it is temporary.
@@ -511,9 +653,7 @@ class WebControlState:
         big_lcr: BigSignalLcrConfig,
         simulate: bool,
     ) -> None:
-        device, temporary = self._device_for_task(simulate)
-        with self._lock:
-            self.device = device
+        device: Pico4824A | None = None
 
         def update(progress: dict[str, Any], result: CaptureResult | None) -> None:
             with self._lock:
@@ -534,7 +674,29 @@ class WebControlState:
                     f"第 {progress['repeat']}/{progress['repeats']} 次，{phase}{suffix}"
                 )
 
+        def on_trip(row: dict[str, Any]) -> bool:
+            run_index = int(row.get("run_index") or 1)
+            return self._pause_for_trip(task_id, {
+                "task_kind": "big_lcr",
+                "reason": row.get("safety_message") or "Monitor 检测到平顶区持续掉幅",
+                "monitor_state": row.get("safety_state", "SUSPECT_TRIP"),
+                "run_index": run_index,
+                "total_runs": len(big_lcr.parameter_points) * big_lcr.repeats,
+                "point_index": (run_index - 1) // big_lcr.repeats + 1,
+                "total_points": len(big_lcr.parameter_points),
+                "repeat": row.get("repeat"),
+                "repeats": big_lcr.repeats,
+                "frequency_hz": row.get("frequency_hz"),
+                "awg_vpp": row.get("awg_drive_vpp"),
+                "monitor_min_ratio": row.get("monitor_min_ratio"),
+                "voltage_channel": big_lcr.voltage_channel,
+                "current_channel": big_lcr.current_channel,
+            })
+
         try:
+            device, temporary = self._device_for_task(simulate)
+            with self._lock:
+                self.device = device
             if temporary:
                 with device:
                     outcome = execute_big_signal_lcr(
@@ -544,6 +706,7 @@ class WebControlState:
                         self.big_lcr_output_root,
                         self._stop_event,
                         update,
+                        on_trip,
                     )
             else:
                 device.open()
@@ -554,12 +717,13 @@ class WebControlState:
                     self.big_lcr_output_root,
                     self._stop_event,
                     update,
+                    on_trip,
                 )
             with self._lock:
                 if self.status.capture_id == task_id:
                     self.big_lcr_result = outcome
                     self.status.state = "stopped" if outcome.stopped else "complete"
-                    if outcome.safety_tripped:
+                    if outcome.safety_tripped and outcome.stopped and not self._stop_event.is_set():
                         reason = outcome.run_rows[-1].get("safety_message", "") if outcome.run_rows else ""
                         self.status.message = (
                             f"大信号 LCR 保护性停止（{reason}），已保留 {len(outcome.run_rows)} 次测量："
@@ -569,6 +733,11 @@ class WebControlState:
                         self.status.message = (
                             f"大信号 LCR 已停止，已保留 {len(outcome.run_rows)} 次测量："
                             f"{outcome.directory}"
+                        )
+                    elif outcome.safety_tripped:
+                        self.status.message = (
+                            f"大信号 LCR 已恢复扫描并完成，期间处理过疑似跳闸；"
+                            f"共保存 {len(outcome.run_rows)} 次测量：{outcome.directory}"
                         )
                     else:
                         self.status.message = (
@@ -591,25 +760,61 @@ class WebControlState:
                 if self._worker_thread is threading.current_thread():
                     self._worker_thread = None
 
+    def _pause_for_trip(self, task_id: int, alarm: dict[str, Any]) -> bool:
+        """Pause between measurements and wait for an explicit operator decision."""
+        with self._lock:
+            if self.status.capture_id != task_id or self._stop_event.is_set():
+                return False
+            alarm["alarm_id"] = f"{task_id}-{time.time_ns()}"
+            self._trip_alarm = alarm
+            self._resume_event.clear()
+            self.status.state = "paused"
+            self.status.message = "疑似功放跳闸：扫描已暂停，等待人工检查并确认"
+        while True:
+            self._resume_event.wait(0.2)
+            with self._lock:
+                if self.status.capture_id != task_id or self._stop_event.is_set():
+                    self._trip_alarm = None
+                    return False
+                if self.status.state == "running":
+                    return True
+
+    def resolve_trip(self) -> None:
+        """Resume only after the operator explicitly confirms the problem is resolved."""
+        with self._lock:
+            if self.status.state != "paused" or self._trip_alarm is None:
+                raise RuntimeError("当前没有等待处理的疑似跳闸")
+            self._trip_alarm = None
+            self.status.state = "running"
+            self.status.message = "已人工确认问题解决，扫描将从下一测量点继续"
+            self._resume_event.set()
+
     def stop(self) -> None:
         with self._lock:
             device = self.device
-            if self.status.state != "running":
+            was_paused = self.status.state == "paused"
+            if self.status.state not in {"running", "paused"}:
                 raise RuntimeError("当前没有正在运行的采集")
             self._stop_event.set()
+            self._resume_event.set()
+            if was_paused:
+                self._trip_alarm = None
             self.status.message = {
                 "sweep": "正在停止扫描",
                 "lcr": "正在停止 LCR 测量",
                 "lcr_calibration": "正在停止精准电阻校准",
                 "big_lcr": "正在停止大信号 LCR 测量",
+                "lcr_linearity": "正在停止大信号线性度测试",
             }.get(self.status.task_kind, "正在停止采集")
-        if device is not None:
+        if device is not None and not was_paused:
             device.stop()
 
     def shutdown(self) -> None:
         """Safely zero and close the persistent hardware when Web exits."""
         with self._lock:
             self._stop_event.set()
+            self._resume_event.set()
+            self._trip_alarm = None
             active = self.device
             worker = self._worker_thread
             hardware = self._hardware_device
@@ -716,6 +921,78 @@ class WebControlState:
         if outcome is None:
             raise RuntimeError("尚无大信号 LCR 测量结果")
         return outcome.payload()
+
+    def lcr_linearity_result_payload(self) -> dict[str, Any]:
+        with self._lock:
+            outcome = self.lcr_linearity_result
+        if outcome is None:
+            raise RuntimeError("尚无线性度测试结果")
+        return outcome
+
+    def _lcr_analysis_directory(self, mode: str, supplied: str) -> Path:
+        roots = {"big_lcr": self.big_lcr_output_root, "linearity": self.lcr_linearity_output_root,
+                 "small_lcr": self.lcr_output_root}
+        if mode not in roots:
+            raise ValueError("未知 LCR 文件夹分析模式")
+        allowed_roots = [roots[mode].resolve()]
+        if mode == "linearity":
+            # Legacy Monitor-only analyses lived inside ordinary big_lcr_* folders.
+            allowed_roots.append(self.big_lcr_output_root.resolve())
+        if supplied.strip():
+            directory = Path(supplied).resolve()
+        else:
+            prefix = {"big_lcr": "big_lcr_*", "linearity": "linearity_*", "small_lcr": "lcr_*"}[mode]
+            root = allowed_roots[0]
+            folders = sorted((p.resolve() for p in root.glob(prefix) if p.is_dir()), reverse=True) if root.is_dir() else []
+            if mode == "linearity" and not folders and allowed_roots[1].is_dir():
+                folders = sorted((p.resolve() for p in allowed_roots[1].glob("big_lcr_*") if p.is_dir()), reverse=True)
+            if not folders:
+                raise ValueError(f"{mode} 数据目录中没有可分析的测量文件夹")
+            directory = folders[0]
+        if not any(directory.is_relative_to(root) for root in allowed_roots):
+            raise ValueError("文件夹必须位于本项目对应的 data/lcr_big、data/lcr_linearity 或 data/lcr 目录内")
+        if not directory.is_dir():
+            raise ValueError("所选 LCR 文件夹不存在")
+        return directory
+
+    def lcr_folder_analysis_payload(self, raw: dict[str, Any]) -> dict[str, Any]:
+        mode = str(raw.get("mode", ""))
+        directory = self._lcr_analysis_directory(mode, str(raw.get("directory", "")))
+        reanalyze = bool(raw.get("reanalyze", False))
+        settings = raw.get("settings", {})
+        if not isinstance(settings, dict):
+            raise ValueError("分析参数必须是 JSON 对象")
+        return load_lcr_folder(mode, directory, reanalyze, settings)
+
+    def lcr_folder_run_payload(self, raw: dict[str, Any]) -> dict[str, Any]:
+        mode = str(raw.get("mode", ""))
+        directory = self._lcr_analysis_directory(mode, str(raw.get("directory", "")))
+        run_index = int(raw.get("run_index", -1))
+        if mode == "linearity":
+            settings = raw.get("settings", {})
+            if not isinstance(settings, dict):
+                raise ValueError("分析参数必须是 JSON 对象")
+            if not (directory / "linearity_config.json").is_file():
+                return linearity_run_preview(directory, run_index)
+            return lcr_linearity_run_preview(directory, run_index, settings=settings or None)
+        prefix = "big_lcr" if mode == "big_lcr" else "lcr"
+        saved = json.loads((directory / f"{prefix}_config.json").read_text(encoding="utf-8"))
+        with (directory / "runs.csv").open("r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        row = next((item for item in rows if int(float(item.get("run_index", -1))) == run_index), None)
+        if row is None:
+            raise ValueError("找不到所选的原始运行记录")
+        relative = Path(row.get("npz_file", ""))
+        path = (directory / relative).resolve()
+        if relative.is_absolute() or ".." in relative.parts or not path.is_relative_to((directory / "raw").resolve()) or not path.is_file():
+            raise ValueError("原始 NPZ 路径无效")
+        capture = load_npz(path)
+        step = max(1, int(np.ceil(capture.samples / 5000)))
+        indices = np.arange(0, capture.samples, step)
+        return {"run": row, "directory": str(directory), "time_s": capture.time_s[indices].tolist(),
+                "channels": {name: capture.volts[name][indices].tolist() for name in capture.volts},
+                "metadata": {"sample_rate_hz": capture.actual_sample_rate_hz, "overflow_channels": capture.overflow_channels,
+                             "config": saved.get("base_config", {})}}
 
     def _linearity_directory(self, supplied: str) -> Path:
         root = self.big_lcr_output_root.resolve()
@@ -865,6 +1142,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json(self.control.lcr_result_payload())
             elif path == "/api/big-lcr/result":
                 self._send_json(self.control.big_lcr_result_payload())
+            elif path == "/api/lcr-linearity/result":
+                self._send_json(self.control.lcr_linearity_result_payload())
             elif path == "/api/lcr/calibrations":
                 self._send_json(self.control.lcr_calibrations_payload())
             elif path == "/api/sweep/run":
@@ -895,6 +1174,13 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             elif path == "/api/big-lcr/start":
                 task_id = self.control.start_big_lcr(payload)
                 self._send_json({"task_id": task_id}, HTTPStatus.ACCEPTED)
+            elif path == "/api/lcr-linearity/start":
+                task_id = self.control.start_lcr_linearity(payload)
+                self._send_json({"task_id": task_id}, HTTPStatus.ACCEPTED)
+            elif path == "/api/lcr-analysis/load":
+                self._send_json(self.control.lcr_folder_analysis_payload(payload))
+            elif path == "/api/lcr-analysis/run-preview":
+                self._send_json(self.control.lcr_folder_run_payload(payload))
             elif path == "/api/big-lcr/linearity":
                 self._send_json(self.control.big_lcr_linearity_payload(payload))
             elif path == "/api/big-lcr/linearity/run":
@@ -1008,6 +1294,9 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             elif path == "/api/stop":
                 self.control.stop()
                 self._send_json({"ok": True})
+            elif path == "/api/trip/resolve":
+                self.control.resolve_trip()
+                self._send_json({"ok": True, "resumed": True})
             elif path == "/api/save":
                 saved = self.control.save(str(payload.get("format", "npz")))
                 self._send_json({"path": str(saved)})
