@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>PicoScope 4824A 控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260923-big-lcr-alert4" />
+    <link rel="stylesheet" href="/styles.css?v=20260923-big-trip-layout5" />
   </head>
   <body data-page="measure">
     <header class="topbar">
@@ -294,12 +294,14 @@
             <label>最大测量频率 <span>kHz</span><input id="bigLcrMaxFrequency" type="number" value="1000" min="0.001" max="1000" step="1" /></label>
           </div>
           <p class="wiring-note"><span>!</span> 提醒值初始为 400 Vpp / 2 Apeak，超出只记录 WARN 并继续扫描。ATA-2021B 官网标称 200 Vpp / 0.5 Apeak；软件不是硬件保护，请核对设备。</p>
-          <div class="big-trip-heading"><strong>疑似跳闸识别</strong><small>由 Monitor 波形推断，不读取 ATA 面板状态</small></div>
-          <label class="big-trip-toggle"><input id="bigLcrTripDetection" type="checkbox" checked /><span><strong>启用掉幅停扫</strong><small>平顶区持续掉幅时停止后续激励</small></span></label>
-          <div class="big-trip-grid">
-            <label class="big-trip-field"><span>掉幅阈值 <small>%</small></span><input id="bigLcrTripDrop" type="number" value="20" min="2" max="80" step="1" /></label>
-            <label class="big-trip-field"><span>持续时间 <small>周期</small></span><input id="bigLcrTripHold" type="number" value="3" min="1" max="20" step="1" /></label>
-            <label class="big-trip-field wide"><span>最低有效监测幅值 <small>mVrms</small></span><input id="bigLcrMinMonitorRms" type="number" value="2" min="0.001" step="0.1" /></label>
+          <div class="big-trip-heading">
+            <div><strong>疑似跳闸识别</strong><small>Monitor 波形推断 · 非硬件状态</small></div>
+            <label class="big-trip-toggle"><input id="bigLcrTripDetection" type="checkbox" checked aria-label="启用疑似跳闸掉幅停扫" /><span>启用</span></label>
+          </div>
+          <div class="big-trip-rows">
+            <label class="big-trip-row"><span>掉幅阈值</span><span class="big-trip-value"><input id="bigLcrTripDrop" type="number" value="20" min="2" max="80" step="1" /><small>%</small></span></label>
+            <label class="big-trip-row"><span>持续时间</span><span class="big-trip-value"><input id="bigLcrTripHold" type="number" value="3" min="1" max="20" step="1" /><small>周期</small></span></label>
+            <label class="big-trip-row"><span>最低有效监测幅值</span><span class="big-trip-value"><input id="bigLcrMinMonitorRms" type="number" value="2" min="0.001" step="0.1" /><small>mVrms</small></span></label>
           </div>
           <div class="big-preflight">
             <div class="big-preflight-heading"><strong>启动前确认</strong><small>必填</small></div>
