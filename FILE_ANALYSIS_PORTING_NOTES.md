@@ -61,3 +61,10 @@
 - HTTP 服务日志：页面与静态资源 GET、各分析 API 与导出请求均返回 HTTP 200，无服务端异常。运行环境的 NumPy 在首次计算时输出一条 `longdouble` 类型探测 `UserWarning`；分析接口及响应签名均通过，未改算法或抑制该警告。
 - 浏览器控制台与实际截图：本轮未进行浏览器渲染/控制台实测；上述结论来自 HTTP、API 签名、JavaScript 语法、HTML/CSS 静态检查和尺寸核算。
 - SOURCE_ROOT 保护复核：移植的 18 个后端/项目清单/数据夹具文件 SHA-256 与 SOURCE_ROOT 相同；本轮没有对 SOURCE_ROOT 执行写入命令。
+
+### 视觉微调：Lens 参数位置
+
+- Git 基线提交 `e1543f9` 保存了调整前的可运行版本。
+- FFT 与 STFT / WPD / CWT 参数区通过 `web/app.js` 移入 Lens 导航栏的“参数设置”浮层，原 DOM ID 与事件绑定保留；原侧栏不再堆叠这些参数区。
+- 浮层锚定在 Lens 导航栏右侧并覆盖内容层，不进入页面文档流，因此打开设置不会增加页面高度；Raw、Filtered、Experimental 下隐藏该入口。
+- 本次仅调整 TARGET 的 `web/index.html`、`web/styles.css`、`web/app.js` 与本说明；数据计算、API 请求和 SOURCE_ROOT 均未改动。

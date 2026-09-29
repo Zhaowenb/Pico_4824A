@@ -4187,7 +4187,17 @@ function drawExperimentalModes() {
   ctx.fillStyle = "#718892"; ctx.fillText("相关系数", 7, mTop + 10);
 }
 
+function mountAnalysisLensControls() {
+  const target = $("analysisLensSettingsPopover");
+  if (!target) return;
+  [".analysis-spectrum-controls", ".analysis-transform-controls"].forEach((selector) => {
+    const panel = document.querySelector(selector);
+    if (panel) target.appendChild(panel);
+  });
+}
+
 buildChannels();
+mountAnalysisLensControls();
 restoreSettings();
 updateMeasureFilterStatus();
 showPage(currentPage());

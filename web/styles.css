@@ -646,3 +646,55 @@ body[data-page="file-analysis"] .page-only[hidden] { display:none!important; }
   body[data-page="file-analysis"] .experimental-result-panel,
   body[data-page="file-analysis"] .analysis-view-state::before { animation:none!important; transition:none!important; }
 }
+
+/* Lens-specific controls live in an anchored overlay, keeping the workspace height stable. */
+body[data-page="file-analysis"] .analysis-lens-bar {
+  position:relative; z-index:24; min-width:0;
+}
+body[data-page="file-analysis"] .analysis-lenses { padding-right:112px; }
+body[data-page="file-analysis"] .analysis-lens-settings {
+  position:absolute; top:9px; right:9px; z-index:3;
+}
+body[data-page="file-analysis"] .analysis-lens-settings>summary {
+  display:inline-flex; min-height:34px; align-items:center; justify-content:center; gap:7px; padding:0 12px;
+  color:#41516a; background:rgba(251,252,253,.96); border:1px solid #dce3eb; border-radius:10px;
+  box-shadow:0 2px 7px rgba(24,39,57,.055); cursor:pointer; list-style:none; font-size:10px; font-weight:620;
+  white-space:nowrap; user-select:none;
+}
+body[data-page="file-analysis"] .analysis-lens-settings>summary::-webkit-details-marker { display:none; }
+body[data-page="file-analysis"] .analysis-lens-settings>summary::marker { content:""; }
+body[data-page="file-analysis"] .analysis-lens-settings>summary:hover { color:#1f5bd3; border-color:#b9cdf7; background:#fff; }
+body[data-page="file-analysis"] .analysis-lens-settings>summary:focus-visible { outline:2px solid rgba(47,115,255,.35); outline-offset:2px; }
+body[data-page="file-analysis"] .analysis-lens-settings>summary svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.2; stroke-linecap:round; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover {
+  position:absolute; top:calc(100% + 10px); right:0; width:min(450px,calc(100vw - 30px)); max-height:min(72vh,680px);
+  overflow:auto; overscroll-behavior:contain; padding:15px; color:#27333f; background:rgba(251,252,253,.985);
+  border:1px solid rgba(184,197,211,.8); border-radius:16px; box-shadow:0 18px 48px rgba(20,34,50,.19),0 3px 10px rgba(20,34,50,.08);
+  scrollbar-width:thin; scrollbar-color:#c5cfdb transparent;
+}
+body[data-page="file-analysis"] #analysisLensSettingsPopover .analysis-spectrum-controls,
+body[data-page="file-analysis"] #analysisLensSettingsPopover .analysis-transform-controls {
+  margin:0!important; padding:0!important; background:transparent!important; border:0!important; border-radius:0!important;
+  box-shadow:none!important; animation:none!important;
+}
+body[data-page="file-analysis"] #analysisLensSettingsPopover .panel-heading { margin:0 0 13px!important; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover .panel-heading h2 { font-size:12px; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover .panel-heading .step { display:none; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 12px; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover .analysis-transform-controls>.form-grid:nth-child(2)>label:first-child { display:none; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover .subhead { margin:13px 0 8px; padding-top:10px; border-top:1px solid #e8ecf0; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover .analysis-button-row { gap:7px; margin-top:11px; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover #calculateTimeFrequencyBtn { width:100%; min-height:36px; margin-top:13px; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover .wiring-note { margin:11px 0 0; font-size:9px; line-height:1.55; }
+body[data-page="file-analysis"]:not([data-analysis-lens="fft"]):not([data-analysis-lens="stft"]):not([data-analysis-lens="wpd"]):not([data-analysis-lens="cwt"]) #analysisLensSettings { display:none!important; }
+
+@media (max-width:900px) {
+  body[data-page="file-analysis"] .analysis-lenses { padding-right:106px; }
+}
+@media (max-width:680px) {
+  body[data-page="file-analysis"] .analysis-lens-settings { top:7px; right:7px; }
+  body[data-page="file-analysis"] .analysis-lens-settings>summary { min-height:32px; gap:5px; padding:0 9px; }
+  body[data-page="file-analysis"] .analysis-lens-settings>summary span { font-size:9px; }
+  body[data-page="file-analysis"] .analysis-lenses { padding-right:99px; }
+  body[data-page="file-analysis"] #analysisLensSettingsPopover { width:min(430px,calc(100vw - 24px)); max-height:68vh; padding:13px; }
+}
