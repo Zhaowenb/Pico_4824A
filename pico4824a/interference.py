@@ -16,7 +16,7 @@ from .config import AcquisitionConfig
 from .storage import load_npz, save_npz
 
 
-ROOT = Path(__file__).resolve().parent.parent.parent / "Pico_4824A_error" / "data"
+ROOT = Path(__file__).resolve().parent.parent / "data" / "interference"
 _LOCK = threading.RLock()
 _ID = re.compile(r"^[0-9a-f]{32}$")
 

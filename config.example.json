@@ -1,0 +1,44 @@
+{
+  "sample_rate_hz": 20000000.0,
+  "capture_duration_us": 10000.0,
+  "trigger_position_percent": 10.0,
+  "channels": {
+    "A": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0},
+    "B": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0},
+    "C": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0},
+    "D": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0},
+    "E": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0},
+    "F": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0},
+    "G": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0},
+    "H": {"enabled": true, "range": "5V", "coupling": "DC", "analog_offset_v": 0.0}
+  },
+  "trigger": {
+    "enabled": true,
+    "source": "A",
+    "threshold_v": 0.1,
+    "direction": "rising",
+    "auto_trigger_ms": 2000,
+    "delay_samples": 0
+  },
+  "awg": {
+    "enabled": true,
+    "waveform": "hann_burst",
+    "frequency_hz": 100000.0,
+    "cycles": 5,
+    "pk_to_pk_v": 2.0,
+    "offset_v": 0.0,
+    "buffer_samples": 8192,
+    "trigger_source": "software",
+    "custom_csv": null,
+    "cancel_amplitude_ratio": 0.25,
+    "cancel_frequency_hz": 60000.0,
+    "cancel_cycles": 4,
+    "cancel_phase_deg": 180.0,
+    "cancel_delay_cycles": 0.0,
+    "ramp_up_cycles": 3.0,
+    "hold_cycles": 8.0,
+    "ramp_down_cycles": 3.0,
+    "hold_level_ratio": 1.0
+  },
+  "capture_timeout_s": 10.0
+}

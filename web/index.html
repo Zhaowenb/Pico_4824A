@@ -4,16 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>PicoScope 4824A 控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260929-signal-lab-theme6" />
+    <title>WaveGuard · 实时测量</title>
+    <link rel="stylesheet" href="/styles.css?v=20260929-waveguard-workstation2" />
   </head>
-  <body data-page="measure">
+  <body data-page="measure" data-analysis-theme="light">
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark"><span></span><span></span><span></span></div>
         <div>
-          <p id="productBrandEyebrow" class="eyebrow">GUIDED WAVE LAB</p>
-          <h1 id="productBrandTitle">PicoScope 4824A</h1>
+          <p id="productBrandEyebrow" class="eyebrow">SCIENTIFIC SIGNAL WORKSTATION</p>
+          <h1 id="productBrandTitle">WaveGuard</h1>
         </div>
       </div>
       <nav class="page-nav" aria-label="主功能">
@@ -23,9 +23,10 @@
         <a href="/lcr-linearity" data-nav="lcr-linearity">LCR数据分析</a>
         <a href="/file-analysis" data-nav="file-analysis">单数据分析</a>
         <a href="/sweep-analysis" data-nav="sweep-analysis">参数数据分析</a>
+        <a href="/interference" data-nav="interference">干扰实验</a>
       </nav>
       <div class="connection">
-        <div class="analysis-global-tools page-only" data-pages="file-analysis">
+        <div class="analysis-global-tools">
           <span>APPEARANCE</span>
           <div class="analysis-theme-switch" role="group" aria-label="界面主题">
             <button type="button" data-analysis-theme-choice="light" aria-pressed="true">Light</button>
@@ -675,14 +676,14 @@
       </aside>
 
       <section class="monitor-stack">
-        <section class="analysis-intro page-only" data-pages="file-analysis" aria-label="WaveGuard Signal Lab">
+        <section class="analysis-intro workstation-intro" aria-label="WaveGuard 工作区">
           <div class="analysis-app-title">
-            <p class="eyebrow">ANALYSIS WORKSPACE</p>
-            <h2>单数据分析</h2>
+            <p id="workspaceEyebrow" class="eyebrow">LIVE ACQUISITION</p>
+            <h2 id="workspaceTitle">实时测量</h2>
           </div>
           <div class="analysis-app-status">
-            <span class="analysis-instrument-id">PicoScope 4824A · OFFLINE ANALYSIS</span>
-            <span id="analysisViewState" class="analysis-view-state">待载入 · EMPTY</span>
+            <span id="workspaceInstrument" class="analysis-instrument-id">PicoScope 4824A · 8CH BLOCK CAPTURE</span>
+            <span id="analysisViewState" class="analysis-view-state">系统就绪 · READY</span>
           </div>
         </section>
         <div class="analysis-lens-bar page-only" data-pages="file-analysis">
@@ -730,6 +731,20 @@
             </div>
           </div>
           <div class="timebar"><span id="timeStart">—</span><span class="trigger-mark">触发点 t = 0</span><span id="timeEnd">—</span></div>
+        </section>
+
+        <section id="sweepIdleStage" class="scope-panel workspace-idle-stage page-only" data-pages="sweep" aria-live="polite">
+          <div class="workspace-idle-copy">
+            <p id="sweepIdleEyebrow" class="eyebrow">PARAMETER SWEEP · IDLE</p>
+            <h2 id="sweepIdleTitle">扫描数据舞台</h2>
+            <p id="sweepIdleDescription">配置左侧参数网格并启动扫描。首个有效参数点完成后，这里将呈现评价结果与逐次采集波形。</p>
+          </div>
+          <div class="workspace-idle-axis" aria-hidden="true"><span></span><i></i><b></b></div>
+          <div class="workspace-idle-chain" aria-label="扫描处理链状态">
+            <span><small>01</small>AWG PROGRAM<strong>WAITING</strong></span>
+            <span><small>02</small>ADC BLOCK<strong>WAITING</strong></span>
+            <span><small>03</small>EVALUATION<strong>WAITING</strong></span>
+          </div>
         </section>
 
         <section id="sweepResultPanel" class="scope-panel sweep-result-panel page-only" data-pages="sweep" hidden>
@@ -904,6 +919,20 @@
           <div class="analysis-help">滚轮：时间缩放　拖动：时间平移　Shift＋滚轮：幅值缩放　双击：恢复全时段</div>
         </section>
 
+        <section id="archiveIdleStage" class="scope-panel workspace-idle-stage page-only" data-pages="sweep-analysis" aria-live="polite">
+          <div class="workspace-idle-copy">
+            <p class="eyebrow">SAVED PARAMETER SWEEP · EMPTY</p>
+            <h2>等待扫描归档</h2>
+            <p>读取左侧扫描文件夹后，将在同一数据舞台中建立参数热图、评价表格和逐次采集波形。</p>
+          </div>
+          <div class="workspace-idle-axis" aria-hidden="true"><span></span><i></i><b></b></div>
+          <div class="workspace-idle-chain" aria-label="归档分析链状态">
+            <span><small>01</small>CONFIG<strong>WAITING</strong></span>
+            <span><small>02</small>RUNS<strong>WAITING</strong></span>
+            <span><small>03</small>SUMMARY<strong>WAITING</strong></span>
+          </div>
+        </section>
+
         <section id="scanArchivePanel" class="scope-panel scan-archive-panel page-only" data-pages="sweep-analysis" hidden>
           <div class="scope-toolbar">
             <div>
@@ -1025,6 +1054,6 @@
         <small class="trip-alarm-footnote">这是基于监测波形的“疑似跳闸”判断，不是 ATA 硬件状态回读；本次已完成采集及原始数据已保存。</small>
       </section>
     </div>
-    <script src="/app.js?v=20260929-signal-lab-theme6"></script>
+    <script src="/app.js?v=20260929-waveguard-workstation2"></script>
   </body>
 </html>

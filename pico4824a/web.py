@@ -62,7 +62,7 @@ from . import interference
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = PROJECT_DIR / "web"
-INTERFERENCE_DIR = PROJECT_DIR.parent / "Pico_4824A_error"
+INTERFERENCE_DIR = WEB_DIR / "interference"
 
 
 @dataclass(slots=True)
