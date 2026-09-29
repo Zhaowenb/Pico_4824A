@@ -558,7 +558,7 @@ body[data-page="file-analysis"] .experimental-result-panel {
   animation:lens-surface-arrive .22s ease-out both;
 }
 @keyframes lens-surface-arrive { from { opacity:.78; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
-body[data-page="file-analysis"]:not([data-analysis-lens="raw"]):not([data-analysis-lens="filtered"]) .analysis-workbench { display:none!important; }
+body[data-page="file-analysis"]:not([data-analysis-lens="raw"]):not([data-analysis-lens="filtered"]):not([data-analysis-lens="mix"]) .analysis-workbench { display:none!important; }
 body[data-page="file-analysis"]:not([data-analysis-lens="fft"]) .spectrum-panel { display:none!important; }
 body[data-page="file-analysis"]:not([data-analysis-lens="stft"]):not([data-analysis-lens="wpd"]):not([data-analysis-lens="cwt"]) .time-frequency-panel { display:none!important; }
 body[data-page="file-analysis"]:not([data-analysis-lens="experimental"]) .experimental-result-panel { display:none!important; }
@@ -655,17 +655,6 @@ body[data-page="file-analysis"] .analysis-lenses { padding-right:112px; }
 body[data-page="file-analysis"] .analysis-lens-settings {
   position:absolute; top:9px; right:9px; z-index:3;
 }
-body[data-page="file-analysis"] .analysis-lens-settings>summary {
-  display:inline-flex; min-height:34px; align-items:center; justify-content:center; gap:7px; padding:0 12px;
-  color:#41516a; background:rgba(251,252,253,.96); border:1px solid #dce3eb; border-radius:10px;
-  box-shadow:0 2px 7px rgba(24,39,57,.055); cursor:pointer; list-style:none; font-size:10px; font-weight:620;
-  white-space:nowrap; user-select:none;
-}
-body[data-page="file-analysis"] .analysis-lens-settings>summary::-webkit-details-marker { display:none; }
-body[data-page="file-analysis"] .analysis-lens-settings>summary::marker { content:""; }
-body[data-page="file-analysis"] .analysis-lens-settings>summary:hover { color:#1f5bd3; border-color:#b9cdf7; background:#fff; }
-body[data-page="file-analysis"] .analysis-lens-settings>summary:focus-visible { outline:2px solid rgba(47,115,255,.35); outline-offset:2px; }
-body[data-page="file-analysis"] .analysis-lens-settings>summary svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.2; stroke-linecap:round; }
 body[data-page="file-analysis"] #analysisLensSettingsPopover {
   position:absolute; top:calc(100% + 10px); right:0; width:min(450px,calc(100vw - 30px)); max-height:min(72vh,680px);
   overflow:auto; overscroll-behavior:contain; padding:15px; color:#27333f; background:rgba(251,252,253,.985);
@@ -693,8 +682,678 @@ body[data-page="file-analysis"]:not([data-analysis-lens="fft"]):not([data-analys
 }
 @media (max-width:680px) {
   body[data-page="file-analysis"] .analysis-lens-settings { top:7px; right:7px; }
-  body[data-page="file-analysis"] .analysis-lens-settings>summary { min-height:32px; gap:5px; padding:0 9px; }
-  body[data-page="file-analysis"] .analysis-lens-settings>summary span { font-size:9px; }
+  body[data-page="file-analysis"] .analysis-lens-settings-trigger { min-height:32px; gap:5px; padding:0 9px; }
+  body[data-page="file-analysis"] .analysis-lens-settings-trigger span { font-size:9px; }
   body[data-page="file-analysis"] .analysis-lenses { padding-right:99px; }
   body[data-page="file-analysis"] #analysisLensSettingsPopover { width:min(430px,calc(100vw - 24px)); max-height:68vh; padding:13px; }
+}
+
+/* Signal Lab dark instrument workspace. */
+body[data-page="file-analysis"][data-analysis-theme="dark"] {
+  --lab-bg:#070b11;
+  --lab-shell:#0c121b;
+  --lab-panel:#101822;
+  --lab-panel-2:#131d29;
+  --lab-stage:#080e17;
+  --lab-line:#263446;
+  --lab-line-soft:#1b2735;
+  --lab-text:#e4eaf1;
+  --lab-muted:#8190a1;
+  --lab-signal:#4a83ff;
+  --lab-signal-hi:#72a5ff;
+  --lab-copper:#c98a42;
+  --lab-success:#5b9674;
+  --bg:var(--lab-bg);
+  --panel:var(--lab-panel);
+  --panel-2:var(--lab-panel-2);
+  --line:var(--lab-line);
+  --muted:var(--lab-muted);
+  --text:var(--lab-text);
+  --cyan:var(--lab-signal);
+  --amber:var(--lab-copper);
+  --shadow:none;
+  height:100vh;
+  height:100dvh;
+  min-height:0;
+  overflow:hidden;
+  color-scheme:dark;
+  color:var(--lab-text);
+  background:#070b11;
+  background-image:linear-gradient(115deg,rgba(74,131,255,.025),transparent 34%);
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .topbar {
+  position:relative;
+  z-index:30;
+  height:64px;
+  padding:0 clamp(18px,2.6vw,42px);
+  color:var(--lab-text);
+  background:rgba(8,13,20,.97);
+  border-color:#1b2634;
+  box-shadow:none;
+  backdrop-filter:blur(14px);
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .brand-mark { border-color:#2b3c52; border-radius:8px; background:#0c1521; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .brand-mark span { background:var(--lab-signal); }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .brand .eyebrow { color:#718197; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .brand h1 { color:#eef3f9; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .page-nav a { color:#758397; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .page-nav a:hover { color:#b9c6d6; background:#0e1722; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .page-nav a.active { color:#e3ebf6; background:#101a27; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .page-nav a.active::after { background:var(--lab-signal); box-shadow:none; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .connection { color:#c5d0dc; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .connection small { color:#6e7d8e; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .status-dot { background:var(--lab-success); box-shadow:0 0 0 4px rgba(91,150,116,.11); }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .workspace {
+  width:100%;
+  max-width:none;
+  height:calc(100dvh - 64px);
+  min-height:0;
+  margin:0;
+  padding:14px clamp(16px,2.2vw,34px) 13px;
+  grid-template-columns:minmax(270px,306px) minmax(0,1fr);
+  align-items:stretch;
+  gap:14px;
+  overflow:hidden;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .control-stack {
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding-right:4px;
+  gap:9px;
+  scrollbar-width:thin;
+  scrollbar-color:#304158 transparent;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .monitor-stack {
+  display:grid;
+  min-height:0;
+  grid-template-rows:auto auto minmax(0,1fr) auto auto;
+  gap:8px;
+  overflow:hidden;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-intro {
+  min-height:44px;
+  padding:0 3px;
+  align-items:center;
+  border-bottom:1px solid var(--lab-line-soft);
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-intro .eyebrow { margin:0 0 4px; color:#71839a; font-size:8px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-intro h2 {
+  margin:0;
+  color:#eaf0f7;
+  font:650 17px/1.1 "Segoe UI","Microsoft YaHei UI",sans-serif;
+  letter-spacing:.025em;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-app-status { display:flex; align-items:center; gap:15px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-instrument-id { color:#617186; font:8px/1 Consolas,monospace; letter-spacing:.08em; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-view-state { padding:0; color:#8695a6; font-size:8px; letter-spacing:.06em; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lens-bar { min-height:43px; z-index:20; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses {
+  align-items:center;
+  min-height:43px;
+  padding:4px 112px 4px 5px;
+  gap:4px;
+  background:#0b121b;
+  border:1px solid var(--lab-line-soft);
+  border-radius:8px;
+  box-shadow:none;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .lens-group { min-height:32px; padding:0 7px 0 3px; border-color:#243244; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .lens-group>span { color:#5f6f82; font-size:7px; letter-spacing:.13em; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses button {
+  min-height:29px;
+  padding:0 10px;
+  color:#8998aa;
+  border:1px solid transparent;
+  border-radius:5px;
+  font-size:9px;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses button:hover { color:#d8e3f1; background:#121d29; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses button[aria-selected="true"] {
+  color:#f0f5fb;
+  background:#17253a;
+  border-color:#315078;
+  box-shadow:inset 0 -2px var(--lab-signal);
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses .lens-experimental {
+  min-height:29px;
+  color:#9c8870;
+  background:#11161c;
+  border-color:#342b22;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses .lens-experimental span { margin-right:5px; color:var(--lab-copper); font:7px Consolas,monospace; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses .lens-experimental[aria-selected="true"] {
+  color:#f0dcc4;
+  background:#251c13;
+  border-color:#6a4827;
+  box-shadow:inset 0 -2px var(--lab-copper);
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] #analysisLensSettingsPopover {
+  color:#dce5f0;
+  background:#101823;
+  border-color:#314156;
+  border-radius:9px;
+  box-shadow:0 18px 50px rgba(0,0,0,.45);
+  scrollbar-color:#40536c transparent;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] #analysisLensSettingsPopover .subhead { border-color:#263447; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-time-controls,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-spectrum-controls,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-transform-controls,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls {
+  margin:0;
+  padding:14px;
+  color:#dbe4ee;
+  background:#0e151f;
+  border:1px solid #202d3d;
+  border-radius:8px;
+  box-shadow:none;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-panel-kicker {
+  color:#5f7591;
+  font:7px/1 Consolas,monospace;
+  letter-spacing:.13em;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .panel-heading h2 { color:#dfe7f0; font-size:12px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .panel-heading small,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .subhead small { color:#67778a; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel label,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-time-controls label,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-spectrum-controls label,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-transform-controls label,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls label { color:#8594a6; font-size:9px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel input,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel select,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-time-controls input,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-time-controls select,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-spectrum-controls input,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-spectrum-controls select,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-transform-controls input,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-transform-controls select,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls input,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls select {
+  color:#d9e3ef;
+  background:#090f17;
+  border-color:#273649;
+  border-radius:5px;
+  box-shadow:none;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel input:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel select:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-time-controls input:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-time-controls select:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-spectrum-controls input:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-spectrum-controls select:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-transform-controls input:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-transform-controls select:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls input:focus,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls select:focus { outline:2px solid rgba(74,131,255,.18); border-color:#426da8; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel .inline-input button,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-button-row button,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-spectrum-controls .small-button {
+  color:#b9d0ff;
+  background:#111d2d;
+  border-color:#29456c;
+  border-radius:5px;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-source-panel .inline-input button:hover,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-button-row button:hover { color:#fff; background:#172944; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-meta { color:#77879a; background:#0a111a; border-color:#1d2a39; border-radius:5px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-band-heading { margin-top:0; padding-top:0; border-top:0; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-channel-grid button { color:#738396; background:#0a111a; border-color:#223044; border-radius:5px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-channel-grid button.active { color:#f5f8fc; background:#214fba; border-color:#4079f4; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-channel-grid button.unavailable { color:#3f4b59; background:#0a0f16; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .subhead { color:#aebbc9; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-time-controls .analysis-checks { display:none!important; }
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="experimental"] .analysis-time-controls { display:none!important; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls .experimental-warning {
+  color:#a99a88; background:#16130f; border-color:#3a2b1d; border-radius:5px;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-transform-controls .sweep-start,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-experimental-controls .sweep-start { color:#fff; background:#265fd6; border-color:#3d77ee; border-radius:5px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-workbench,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .spectrum-panel,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .time-frequency-panel,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .experimental-result-panel {
+  display:flex;
+  flex-direction:column;
+  height:100%;
+  min-height:0;
+  padding:15px 17px 13px;
+  color:#e6edf5;
+  background:#0a111b;
+  border:1px solid #223147;
+  border-radius:8px;
+  box-shadow:none;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="raw"] .analysis-workbench,
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="filtered"] .analysis-workbench,
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="mix"] .analysis-workbench,
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="fft"] .spectrum-panel,
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="stft"] .time-frequency-panel,
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="wpd"] .time-frequency-panel,
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="cwt"] .time-frequency-panel,
+body[data-page="file-analysis"][data-analysis-theme="dark"][data-analysis-lens="experimental"] .experimental-result-panel { display:flex!important; }
+body[data-page="file-analysis"][data-analysis-theme="dark"]:not([data-analysis-lens="raw"]):not([data-analysis-lens="filtered"]):not([data-analysis-lens="mix"]) .analysis-workbench { display:none!important; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .scope-toolbar { flex:none; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .scope-toolbar .eyebrow { color:#6f88aa; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .scope-toolbar h2 { color:#e8eef6; font-size:14px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-canvas-wrap,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .spectrum-canvas-wrap,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .tf-canvas-wrap {
+  flex:1 1 auto;
+  height:auto;
+  min-height:240px;
+  background-color:#070d15;
+  background-image:linear-gradient(rgba(112,139,174,.065) 1px,transparent 1px),linear-gradient(90deg,rgba(112,139,174,.065) 1px,transparent 1px);
+  border-color:#1e2d40;
+  border-radius:5px;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-canvas-wrap canvas,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .spectrum-canvas-wrap canvas,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .tf-canvas-wrap canvas { display:block; width:100%; height:100%; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .legend { flex:none; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .legend button { border-radius:4px; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-help { flex:none; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .experimental-result-panel { overflow-y:auto; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-inspector {
+  grid-template-columns:repeat(4,minmax(0,1fr)) minmax(180px,1.1fr);
+  padding:8px 4px 5px;
+  border-color:#1d2938;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .inspector-item>span { color:#596a7e; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .inspector-item>strong { color:#aebccc; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-inspector .analysis-readout { color:#8fa1b5; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .event-panel {
+  min-height:31px;
+  padding:6px 9px;
+  color:#7c8b9d;
+  border-color:#1c2836;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .event-label { color:#66778a; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .event-panel strong { color:#8999ab; }
+body[data-page="file-analysis"][data-analysis-theme="dark"] .event-panel time { color:#536476; }
+body[data-page="file-analysis"][data-analysis-theme="dark"]:not([data-analysis-lens="fft"]):not([data-analysis-lens="stft"]):not([data-analysis-lens="wpd"]):not([data-analysis-lens="cwt"]) #analysisLensSettings { display:none!important; }
+
+@media (max-width:900px) {
+  body[data-page="file-analysis"][data-analysis-theme="dark"] { height:auto; min-height:100vh; overflow:auto; }
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .workspace { height:auto; min-height:calc(100vh - 64px); grid-template-columns:1fr; overflow:visible; }
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .control-stack { max-height:none; overflow:visible; }
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .monitor-stack { display:flex; overflow:visible; }
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-workbench,
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .spectrum-panel,
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .time-frequency-panel { min-height:520px; }
+}
+@media (max-width:680px) {
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-app-status { align-items:flex-end; flex-direction:column; gap:6px; }
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-instrument-id { display:none; }
+  body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lenses { padding-right:99px; }
+}
+
+/* Shared application structure for both Signal Lab themes. */
+body[data-page="file-analysis"] {
+  --analysis-rail:#fbfcfd;
+  --analysis-rail-line:#dfe5eb;
+  --analysis-segment:#f1f4f8;
+  --analysis-segment-line:#d9e1e9;
+  --analysis-segment-text:#647283;
+  --analysis-kicker:#6d7f96;
+  --analysis-instrument:#68788b;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] {
+  --analysis-rail:#0e151f;
+  --analysis-rail-line:#202d3d;
+  --analysis-segment:#0a111a;
+  --analysis-segment-line:#263649;
+  --analysis-segment-text:#8494a7;
+  --analysis-kicker:#5f7591;
+  --analysis-instrument:#617186;
+}
+body[data-page="file-analysis"] .control-stack {
+  gap:0!important;
+  padding:0!important;
+  background:var(--analysis-rail);
+  border:1px solid var(--analysis-rail-line);
+  border-radius:11px;
+  box-shadow:0 10px 30px rgba(20,35,50,.055);
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .control-stack { box-shadow:none; }
+body[data-page="file-analysis"] .control-stack>.analysis-source-panel,
+body[data-page="file-analysis"] .control-stack>.analysis-time-controls,
+body[data-page="file-analysis"] .control-stack>.analysis-experimental-controls {
+  margin:0!important;
+  padding:15px!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+body[data-page="file-analysis"] .control-stack>.analysis-time-controls,
+body[data-page="file-analysis"] .control-stack>.analysis-experimental-controls {
+  border-top:1px solid var(--analysis-rail-line)!important;
+}
+body[data-page="file-analysis"] #analysisFileList { min-height:112px; max-height:160px; }
+body[data-page="file-analysis"] .analysis-lens-bar {
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  z-index:45;
+  overflow:visible;
+}
+body[data-page="file-analysis"] .analysis-lenses { width:100%; padding-right:8px!important; }
+body[data-page="file-analysis"] .analysis-lens-settings {
+  position:relative!important;
+  top:auto!important;
+  right:auto!important;
+  z-index:70!important;
+}
+body[data-page="file-analysis"] #analysisLensSettingsPopover {
+  top:calc(100% + 8px)!important;
+  right:0!important;
+  z-index:80;
+}
+body[data-page="file-analysis"] .monitor-stack { overflow:visible!important; }
+body[data-page="file-analysis"] .analysis-workbench,
+body[data-page="file-analysis"] .spectrum-panel,
+body[data-page="file-analysis"] .time-frequency-panel,
+body[data-page="file-analysis"] .experimental-result-panel { overflow:hidden; }
+body[data-page="file-analysis"] .experimental-result-panel { overflow-y:auto; }
+body[data-page="file-analysis"] .analysis-app-status { display:flex; align-items:center; gap:12px; }
+body[data-page="file-analysis"] .analysis-theme-switch {
+  display:inline-flex;
+  flex:none;
+  align-items:center;
+  gap:2px;
+  padding:2px;
+  background:var(--analysis-segment);
+  border:1px solid var(--analysis-segment-line);
+  border-radius:7px;
+}
+body[data-page="file-analysis"] .analysis-theme-switch button {
+  min-width:43px;
+  height:24px;
+  padding:0 8px;
+  color:var(--analysis-segment-text);
+  background:transparent;
+  border:0;
+  border-radius:5px;
+  font:8px/1 Consolas,monospace;
+  letter-spacing:.04em;
+}
+body[data-page="file-analysis"] .analysis-theme-switch button:hover { color:var(--cyan); }
+body[data-page="file-analysis"] .analysis-theme-switch button[aria-pressed="true"] {
+  color:#fff;
+  background:#2f73ff;
+  box-shadow:0 1px 3px rgba(18,47,98,.18);
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-theme-switch button[aria-pressed="true"] { background:#285fcf; box-shadow:none; }
+
+/* Geometry is shared; themes only change material and color. */
+body[data-page="file-analysis"] {
+  height:auto!important;
+  min-height:100vh!important;
+  overflow:auto!important;
+}
+body[data-page="file-analysis"] .topbar {
+  position:sticky!important;
+  top:0;
+  height:70px!important;
+  min-height:70px;
+  padding:0 clamp(20px,3.2vw,54px)!important;
+}
+body[data-page="file-analysis"] .brand-mark { width:37px; height:37px; border-radius:10px; }
+body[data-page="file-analysis"] .workspace {
+  width:min(100%,2240px)!important;
+  height:auto!important;
+  min-height:calc(100vh - 70px)!important;
+  padding:22px clamp(22px,3.25vw,52px) 30px!important;
+  grid-template-columns:minmax(270px,310px) minmax(0,1fr)!important;
+  align-items:start!important;
+  gap:clamp(18px,2.2vw,30px)!important;
+  overflow:visible!important;
+}
+body[data-page="file-analysis"] .control-stack { align-self:start; overflow:visible!important; }
+body[data-page="file-analysis"] .monitor-stack {
+  display:flex!important;
+  min-width:0;
+  min-height:0;
+  flex-direction:column;
+  overflow:visible!important;
+  gap:12px!important;
+}
+body[data-page="file-analysis"] .analysis-intro {
+  min-height:62px!important;
+  padding:0 3px 7px!important;
+  align-items:center!important;
+  border-bottom:0!important;
+}
+body[data-page="file-analysis"] .analysis-intro .eyebrow {
+  margin:0 0 6px!important;
+  font-size:9px!important;
+}
+body[data-page="file-analysis"] .analysis-intro h2 {
+  font:680 20px/1.12 "Segoe UI","Microsoft YaHei UI",sans-serif!important;
+}
+body[data-page="file-analysis"] .analysis-instrument-id {
+  color:var(--analysis-instrument);
+  font:8px/1 Consolas,monospace;
+  letter-spacing:.08em;
+  white-space:nowrap;
+}
+body[data-page="file-analysis"] .analysis-view-state {
+  padding:0!important;
+  font-size:9px!important;
+}
+body[data-page="file-analysis"] .analysis-lens-bar { min-height:52px!important; }
+body[data-page="file-analysis"] .analysis-lenses {
+  align-items:center!important;
+  gap:8px!important;
+  min-height:52px!important;
+  padding:6px 8px!important;
+  overflow-x:auto;
+  border-radius:10px!important;
+}
+body[data-page="file-analysis"] .lens-group { min-height:36px!important; padding:0 6px!important; }
+body[data-page="file-analysis"] .analysis-lenses .lens-experimental span {
+  margin-right:5px;
+  color:#c98435;
+  font:7px/1 Consolas,monospace;
+}
+body[data-page="file-analysis"] .analysis-lenses button {
+  min-height:31px!important;
+  padding:0 11px!important;
+  border-radius:7px!important;
+  font-size:10px!important;
+}
+body[data-page="file-analysis"] .analysis-lenses .lens-experimental { min-height:31px!important; }
+body[data-page="file-analysis"] .analysis-source-panel .panel-heading,
+body[data-page="file-analysis"] .analysis-time-controls .panel-heading,
+body[data-page="file-analysis"] .analysis-experimental-controls .panel-heading { margin-bottom:13px!important; }
+body[data-page="file-analysis"] .control-stack .panel-heading h2 { font-size:13px!important; }
+body[data-page="file-analysis"] .analysis-panel-kicker {
+  color:var(--analysis-kicker);
+  font:7px/1 Consolas,monospace;
+  letter-spacing:.13em;
+}
+body[data-page="file-analysis"] .analysis-source-panel label,
+body[data-page="file-analysis"] .analysis-time-controls label,
+body[data-page="file-analysis"] .analysis-spectrum-controls label,
+body[data-page="file-analysis"] .analysis-transform-controls label,
+body[data-page="file-analysis"] .analysis-experimental-controls label { font-size:10px!important; }
+body[data-page="file-analysis"] .analysis-source-panel input,
+body[data-page="file-analysis"] .analysis-source-panel select,
+body[data-page="file-analysis"] .analysis-time-controls input,
+body[data-page="file-analysis"] .analysis-time-controls select,
+body[data-page="file-analysis"] .analysis-spectrum-controls input,
+body[data-page="file-analysis"] .analysis-spectrum-controls select,
+body[data-page="file-analysis"] .analysis-transform-controls input,
+body[data-page="file-analysis"] .analysis-transform-controls select,
+body[data-page="file-analysis"] .analysis-experimental-controls input,
+body[data-page="file-analysis"] .analysis-experimental-controls select { border-radius:7px!important; }
+body[data-page="file-analysis"] .analysis-source-panel .inline-input button,
+body[data-page="file-analysis"] .analysis-button-row button,
+body[data-page="file-analysis"] .analysis-spectrum-controls .small-button,
+body[data-page="file-analysis"] .analysis-transform-controls .sweep-start,
+body[data-page="file-analysis"] .analysis-experimental-controls .sweep-start,
+body[data-page="file-analysis"] .analysis-meta,
+body[data-page="file-analysis"] .analysis-channel-grid button,
+body[data-page="file-analysis"] .experimental-warning { border-radius:7px!important; }
+body[data-page="file-analysis"] .analysis-workbench,
+body[data-page="file-analysis"] .spectrum-panel,
+body[data-page="file-analysis"] .time-frequency-panel,
+body[data-page="file-analysis"] .experimental-result-panel {
+  height:auto!important;
+  min-height:0;
+  position:relative;
+  flex-direction:column;
+  padding:21px 23px 18px!important;
+  border-radius:12px!important;
+}
+body[data-page="file-analysis"][data-analysis-lens="raw"] .analysis-workbench,
+body[data-page="file-analysis"][data-analysis-lens="filtered"] .analysis-workbench,
+body[data-page="file-analysis"][data-analysis-lens="mix"] .analysis-workbench,
+body[data-page="file-analysis"][data-analysis-lens="fft"] .spectrum-panel,
+body[data-page="file-analysis"][data-analysis-lens="stft"] .time-frequency-panel,
+body[data-page="file-analysis"][data-analysis-lens="wpd"] .time-frequency-panel,
+body[data-page="file-analysis"][data-analysis-lens="cwt"] .time-frequency-panel,
+body[data-page="file-analysis"][data-analysis-lens="experimental"] .experimental-result-panel { display:flex!important; }
+body[data-page="file-analysis"][data-analysis-lens="experimental"] .analysis-time-controls { display:none!important; }
+body[data-page="file-analysis"] .analysis-canvas-wrap,
+body[data-page="file-analysis"] .spectrum-canvas-wrap,
+body[data-page="file-analysis"] .tf-canvas-wrap {
+  flex:0 0 auto!important;
+  height:clamp(350px,51vh,570px)!important;
+  min-height:350px!important;
+  border-radius:8px!important;
+}
+body[data-page="file-analysis"] .analysis-lens-settings-trigger {
+  display:inline-flex;
+  min-height:36px;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  padding:0 12px;
+  color:#41516a;
+  background:rgba(251,252,253,.96);
+  border:1px solid #dce3eb;
+  border-radius:7px;
+  box-shadow:0 2px 7px rgba(24,39,57,.055);
+  cursor:pointer;
+  font-size:10px;
+  font-weight:620;
+  white-space:nowrap;
+}
+body[data-page="file-analysis"] .analysis-lens-settings-trigger svg {
+  width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.2; stroke-linecap:round;
+}
+body[data-page="file-analysis"] .analysis-lens-settings-trigger:hover,
+body[data-page="file-analysis"] .analysis-lens-settings.is-open .analysis-lens-settings-trigger {
+  color:#1f5bd3; background:#fff; border-color:#b9cdf7;
+}
+body[data-page="file-analysis"] .analysis-lens-settings-trigger:focus-visible {
+  outline:2px solid rgba(47,115,255,.35);
+  outline-offset:2px;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lens-settings-trigger {
+  color:#9cacbf; background:#111a26; border-color:#2b3a4e; box-shadow:none;
+}
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lens-settings-trigger:hover,
+body[data-page="file-analysis"][data-analysis-theme="dark"] .analysis-lens-settings.is-open .analysis-lens-settings-trigger {
+  color:#e2ebf7; background:#162231; border-color:#3b5779;
+}
+body[data-page="file-analysis"] #analysisLensSettingsPopover[hidden] { display:none!important; }
+body[data-page="file-analysis"] #analysisLensSettingsPopover { border-radius:12px!important; }
+body[data-page="file-analysis"] .scope-toolbar h2 { font-size:16px!important; }
+body[data-page="file-analysis"] .legend button { border-radius:7px!important; }
+body[data-page="file-analysis"] .analysis-inspector {
+  grid-template-columns:repeat(4,minmax(0,1fr)) minmax(190px,1.2fr)!important;
+  gap:11px 17px!important;
+  padding:13px 4px 6px!important;
+}
+body[data-page="file-analysis"] .event-panel {
+  min-height:47px!important;
+  padding:9px 12px!important;
+}
+body[data-page="file-analysis"] .analysis-global-tools {
+  display:flex!important;
+  align-items:center;
+  gap:8px;
+  margin-right:4px;
+}
+body[data-page="file-analysis"] .analysis-global-tools>span {
+  color:#7a8795;
+  font:7px/1 Consolas,monospace;
+  letter-spacing:.11em;
+}
+
+/* Experimental is a focused workstation in both themes; only its material palette changes. */
+@media (min-width:901px) {
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] {
+    height:100dvh!important;
+    overflow:hidden!important;
+  }
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] .workspace {
+    height:calc(100dvh - 70px)!important;
+    min-height:0!important;
+    padding:14px clamp(18px,2.5vw,40px) 14px!important;
+    align-items:stretch!important;
+    gap:14px!important;
+    overflow:hidden!important;
+  }
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] .control-stack {
+    align-self:stretch;
+    min-height:0;
+    max-height:100%;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+  }
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] .monitor-stack {
+    min-height:0;
+    gap:8px!important;
+    overflow:hidden!important;
+  }
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] .analysis-intro {
+    flex:0 0 44px;
+    min-height:44px!important;
+    padding:0 3px!important;
+  }
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] .analysis-lens-bar {
+    flex:0 0 43px;
+    min-height:43px!important;
+  }
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] .analysis-lenses {
+    min-height:43px!important;
+    padding:4px 8px!important;
+  }
+  body[data-page="file-analysis"][data-analysis-lens="experimental"] .experimental-result-panel {
+    flex:1 1 0;
+    height:0!important;
+    min-height:0!important;
+    padding:15px 17px 13px!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+  }
+}
+
+@media (max-width:1180px) {
+  body[data-page="file-analysis"] .connection>#statusDot,
+  body[data-page="file-analysis"] .connection>div:not(.analysis-global-tools) { display:none; }
+}
+@media (max-width:900px) {
+  body[data-page="file-analysis"] .control-stack { overflow:visible; }
+  body[data-page="file-analysis"] .workspace { grid-template-columns:1fr!important; }
+}
+@media (max-width:680px) {
+  body[data-page="file-analysis"] .analysis-lens-bar { grid-template-columns:minmax(0,1fr); }
+  body[data-page="file-analysis"] .analysis-lens-settings { justify-self:end; margin-top:-44px; margin-right:6px; }
+  body[data-page="file-analysis"] .analysis-lenses { padding-right:98px!important; }
+  body[data-page="file-analysis"] .analysis-app-status { align-items:flex-end; flex-direction:column; gap:6px; }
+  body[data-page="file-analysis"] .analysis-instrument-id { display:none; }
+  body[data-page="file-analysis"] .connection { display:flex!important; }
+  body[data-page="file-analysis"] .connection>#statusDot,
+  body[data-page="file-analysis"] .connection>div:not(.analysis-global-tools) { display:none; }
+  body[data-page="file-analysis"] .analysis-global-tools>span { display:none; }
 }

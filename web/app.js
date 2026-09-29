@@ -2404,6 +2404,31 @@ const hiddenSpectrumSeries = new Set();
 const spectrumWindowColors = ["#2f73ff", "#78a9ff", "#a8c7ed", "#567dbb", "#bed5f0", "#849bb7", "#c98435", "#d8b783"];
 const analysisChannelColors = ["#4b88ff", "#84b4ff", "#9fc0df", "#c98435", "#678fc7", "#c4d2e3", "#718eae", "#d8b783"];
 
+function storedAnalysisTheme() {
+  try {
+    return localStorage.getItem("waveguard-analysis-theme") === "dark" ? "dark" : "light";
+  } catch (_) {
+    return "light";
+  }
+}
+
+function applyAnalysisTheme(theme, persist = false) {
+  const selected = theme === "dark" ? "dark" : "light";
+  document.body.dataset.analysisTheme = selected;
+  document.querySelectorAll("[data-analysis-theme-choice]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.analysisThemeChoice === selected));
+  });
+  if (persist) {
+    try { localStorage.setItem("waveguard-analysis-theme", selected); } catch (_) { /* Browser storage is optional. */ }
+  }
+  requestAnimationFrame(() => {
+    drawAnalysisWaveform();
+    drawSpectrum();
+    drawTimeFrequency();
+    drawExperimentalModes();
+  });
+}
+
 function setAnalysisViewState(state) {
   document.body.dataset.analysisState = state;
   const labels = {
@@ -2432,7 +2457,7 @@ function syncAnalysisTimeRange(source = "time", pending = false) {
 }
 
 function syncAnalysisLensContext(result = analysisResult) {
-  const metadata = result?.metadata;
+  const metadata = result?.metadata || analysisResult?.metadata;
   const file = $("analysisLensFile");
   const channels = $("analysisLensChannels");
   const rate = $("analysisLensRate");
@@ -2443,17 +2468,22 @@ function syncAnalysisLensContext(result = analysisResult) {
   file.textContent = parts.at(-1) || "未加载";
   file.title = path || "";
   const timeFrequencyLens = ["stft", "wpd", "cwt"].includes(analysisLens);
-  const selected = timeFrequencyLens
-    ? $("timeFrequencyChannel")?.value || "—"
-    : analysisSelectedChannels.join(" / ") || metadata?.channels?.join(" / ") || "—";
+  const experimentalLens = analysisLens === "experimental";
+  const selected = experimentalLens
+    ? `${$("modeReferenceChannel")?.value || "—"} / ${$("modeComparisonChannel")?.value || "—"}`
+    : timeFrequencyLens
+      ? $("timeFrequencyChannel")?.value || "—"
+      : analysisSelectedChannels.join(" / ") || metadata?.channels?.join(" / ") || "—";
   channels.textContent = selected;
+  $("analysisLensChannelLabel").textContent = experimentalLens ? "CHANNEL PAIR" : timeFrequencyLens ? "CHANNEL" : "CHANNELS";
   rate.textContent = metadata?.sample_rate_hz
     ? `${(metadata.sample_rate_hz / 1e6).toFixed(4)} MS/s`
     : "—";
-  const startId = timeFrequencyLens ? "timeFrequencyStart" : "analysisTimeStart";
-  const endId = timeFrequencyLens ? "timeFrequencyEnd" : "analysisTimeEnd";
+  const startId = experimentalLens ? "modeSearchStart" : timeFrequencyLens ? "timeFrequencyStart" : "analysisTimeStart";
+  const endId = experimentalLens ? "modeSearchEnd" : timeFrequencyLens ? "timeFrequencyEnd" : "analysisTimeEnd";
   const start = $(startId)?.value;
   const end = $(endId)?.value;
+  $("analysisLensRangeLabel").textContent = experimentalLens ? "SEARCH WINDOW" : "TIME RANGE";
   range.textContent = start && end ? `${start} — ${end} μs` : "—";
 }
 
@@ -2480,8 +2510,33 @@ function clearAnalysisLensOutputs() {
   $("modeAnalysisMeta").textContent = "不参与正式评分 · 尚未运行";
 }
 
+function syncAnalysisLensChrome(lens) {
+  const waveCopy = {
+    raw: ["TIME DOMAIN / RAW", "原始波形"],
+    filtered: ["TIME DOMAIN / FILTERED", "带通波形"],
+    mix: ["TIME DOMAIN / MIX", "原始与带通对照"],
+  };
+  const copy = waveCopy[lens];
+  if (copy) {
+    $("analysisWaveEyebrow").textContent = copy[0];
+    $("analysisWaveTitle").textContent = copy[1];
+  }
+  setAnalysisSettingsOpen(false);
+}
+
+function setAnalysisSettingsOpen(open) {
+  const settings = $("analysisLensSettings");
+  const button = $("analysisLensSettingsButton");
+  const popover = $("analysisLensSettingsPopover");
+  if (!settings || !button || !popover) return;
+  const expanded = Boolean(open);
+  popover.hidden = !expanded;
+  button.setAttribute("aria-expanded", String(expanded));
+  settings.classList.toggle("is-open", expanded);
+}
+
 function setAnalysisLens(lens, refresh = true) {
-  const allowed = new Set(["raw", "filtered", "fft", "stft", "wpd", "cwt", "experimental"]);
+  const allowed = new Set(["raw", "filtered", "mix", "fft", "stft", "wpd", "cwt", "experimental"]);
   if (!allowed.has(lens)) return;
   const previous = analysisLens;
   const timeFrequencyLenses = ["stft", "wpd", "cwt"];
@@ -2490,47 +2545,52 @@ function setAnalysisLens(lens, refresh = true) {
   if (previousRangeSource !== nextRangeSource) syncAnalysisTimeRange(previousRangeSource);
   analysisLens = lens;
   document.body.dataset.analysisLens = lens;
-  document.querySelectorAll("[data-analysis-lens]").forEach((button) => {
+  syncAnalysisLensChrome(lens);
+  document.querySelectorAll(".analysis-lenses [data-analysis-lens]").forEach((button) => {
     button.setAttribute("aria-selected", String(button.dataset.analysisLens === lens));
   });
   syncAnalysisLensContext();
   requestAnimationFrame(() => {
-    if (lens === "raw" || lens === "filtered") drawAnalysisWaveform();
+    if (["raw", "filtered", "mix"].includes(lens)) drawAnalysisWaveform();
     if (lens === "fft") drawSpectrum();
     if (["stft", "wpd", "cwt"].includes(lens) && timeFrequencyResult?.method === lens) drawTimeFrequency();
     if (lens === "experimental" && experimentalModeResult) drawExperimentalModes();
   });
 
-  if (!refresh || !analysisSource) return;
-  if (lens === "raw" || lens === "filtered") {
-    const raw = lens === "raw";
-    const changed = $("analysisShowRaw").checked !== raw
-      || $("analysisShowFiltered").checked === raw
-      || (lens === "filtered" && !$("analysisFilterEnabled").checked);
-    $("analysisShowRaw").checked = raw;
-    $("analysisShowFiltered").checked = !raw;
-    if (lens === "filtered") $("analysisFilterEnabled").checked = true;
-    if (changed) scheduleAnalysisRefresh();
+  if (["raw", "filtered", "mix"].includes(lens)) {
+    const showRaw = lens !== "filtered";
+    const showFiltered = lens !== "raw";
+    const changed = $("analysisShowRaw").checked !== showRaw
+      || $("analysisShowFiltered").checked !== showFiltered
+      || (showFiltered && !$("analysisFilterEnabled").checked);
+    $("analysisShowRaw").checked = showRaw;
+    $("analysisShowFiltered").checked = showFiltered;
+    if (showFiltered) $("analysisFilterEnabled").checked = true;
+    if (refresh && analysisSource && changed) scheduleAnalysisRefresh();
     return;
   }
   if (["stft", "wpd", "cwt"].includes(lens)) {
     $("timeFrequencyMethod").value = lens;
     updateTimeFrequencyControls();
     syncAnalysisLensContext();
-    if (previous !== lens || !timeFrequencyResult) {
-      if (timeFrequencyResult?.method !== lens) {
-        timeFrequencyResult = null;
-        const canvas = $("timeFrequencyCanvas");
-        canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
-        $("timeFrequencyEmpty").style.display = "grid";
-        $("timeFrequencyTitle").textContent = `${lens.toUpperCase()}时频图 · CH ${$("timeFrequencyChannel").value}`;
-      }
-      calculateTimeFrequency();
+    if (timeFrequencyResult?.method !== lens) {
+      timeFrequencyResult = null;
+      const canvas = $("timeFrequencyCanvas");
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      $("timeFrequencyEmpty").style.display = "grid";
+      $("timeFrequencyEmpty").textContent = analysisSource ? `${lens.toUpperCase()} 正在计算…` : "请先载入波形数据";
+      $("timeFrequencyTitle").textContent = `${lens.toUpperCase()}时频图 · CH ${$("timeFrequencyChannel").value}`;
+      $("timeFrequencyMeta").textContent = analysisSource ? "正在使用当前参数计算…" : "等待数据";
+      if (refresh && analysisSource) void calculateTimeFrequency();
+    } else {
+      requestAnimationFrame(drawTimeFrequency);
     }
     return;
   }
-  if (lens === "experimental" && (previous !== lens || !experimentalModeResult)) {
-    calculateExperimentalModes();
+  if (lens === "experimental" && !experimentalModeResult) {
+    $("modeWaveEmpty").style.display = "grid";
+    $("modeWaveEmpty").textContent = "选择实验参数后运行分析";
+    $("modeAnalysisMeta").textContent = "TEST · 等待显式运行";
   }
 }
 
@@ -2664,6 +2724,8 @@ function updateSweepBaseSummary() {
 function showPage(page, push = false) {
   document.body.dataset.page = page;
   document.title = page === "file-analysis" ? "WaveGuard Signal Lab · 单数据分析" : "PicoScope 4824A 控制台";
+  $("productBrandEyebrow").textContent = page === "file-analysis" ? "SIGNAL LAB · PICO 4824A" : "GUIDED WAVE LAB";
+  $("productBrandTitle").textContent = page === "file-analysis" ? "WaveGuard" : "PicoScope 4824A";
   document.querySelectorAll("[data-nav]").forEach((link) => {
     link.classList.toggle("active", link.dataset.nav === page);
   });
@@ -2966,7 +3028,6 @@ async function loadSelectedAnalysisFile() {
     setEvent(`已加载：${metadata.source}`, "complete");
     await refreshAnalysis();
     if (["stft", "wpd", "cwt"].includes(analysisLens)) await calculateTimeFrequency();
-    if (analysisLens === "experimental") await calculateExperimentalModes();
   } catch (error) {
     setAnalysisViewState("error");
     $("analysisMeta").textContent = error.message;
@@ -3960,6 +4021,8 @@ async function calculateTimeFrequency() {
   const channel = $("timeFrequencyChannel").value;
   try {
     setAnalysisViewState("processing");
+    $("timeFrequencyEmpty").style.display = "grid";
+    $("timeFrequencyEmpty").textContent = `${method.toUpperCase()} 正在计算…`;
     $("timeFrequencyMeta").textContent = "正在计算…";
     const result = await api("/api/analysis/time-frequency", {
       method: "POST",
@@ -4001,6 +4064,8 @@ async function calculateTimeFrequency() {
   } catch (error) {
     if (requestId !== analysisTimeFrequencyRequestId || sourcePath !== analysisSource) return;
     setAnalysisViewState("error");
+    $("timeFrequencyEmpty").style.display = "grid";
+    $("timeFrequencyEmpty").textContent = `计算失败 · ${error.message}`;
     $("timeFrequencyMeta").textContent = error.message;
     setEvent(error.message, "error");
   }
@@ -4198,6 +4263,7 @@ function mountAnalysisLensControls() {
 
 buildChannels();
 mountAnalysisLensControls();
+applyAnalysisTheme(storedAnalysisTheme());
 restoreSettings();
 updateMeasureFilterStatus();
 showPage(currentPage());
@@ -4304,13 +4370,32 @@ $("timeFrequencyMethod").addEventListener("change", () => {
   }
 });
 $("timeFrequencyChannel").addEventListener("change", syncAnalysisLensContext);
+["modeReferenceChannel", "modeComparisonChannel", "modeSearchStart", "modeSearchEnd"].forEach((id) => {
+  $(id).addEventListener(id.includes("Channel") ? "change" : "input", syncAnalysisLensContext);
+});
 ["analysisTimeStart", "analysisTimeEnd"].forEach((id) =>
   $(id).addEventListener("input", () => syncAnalysisTimeRange("time", true)));
 ["timeFrequencyStart", "timeFrequencyEnd"].forEach((id) =>
   $(id).addEventListener("input", () => syncAnalysisTimeRange("time-frequency", true)));
 $("analysisChannels").addEventListener("click", syncAnalysisLensContext);
-document.querySelectorAll("[data-analysis-lens]").forEach((button) => {
+document.querySelectorAll(".analysis-lenses [data-analysis-lens]").forEach((button) => {
   button.addEventListener("click", () => setAnalysisLens(button.dataset.analysisLens));
+});
+document.querySelectorAll("[data-analysis-theme-choice]").forEach((button) => {
+  button.addEventListener("click", () => applyAnalysisTheme(button.dataset.analysisThemeChoice, true));
+});
+$("analysisLensSettingsButton").addEventListener("click", (event) => {
+  event.stopPropagation();
+  const popover = $("analysisLensSettingsPopover");
+  setAnalysisSettingsOpen(popover.hidden);
+});
+$("analysisLensSettingsPopover").addEventListener("click", (event) => event.stopPropagation());
+document.addEventListener("click", (event) => {
+  const settings = $("analysisLensSettings");
+  if (!settings.contains(event.target)) setAnalysisSettingsOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setAnalysisSettingsOpen(false);
 });
 $("calculateTimeFrequencyBtn").addEventListener("click", calculateTimeFrequency);
 $("calculateModesBtn").addEventListener("click", calculateExperimentalModes);
