@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pico4824a-control"
+version = "0.1.0"
+description = "PicoScope 4824A eight-channel ADC and AWG controller"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "picosdk>=1.1",
+]
+
+[project.scripts]
+pico4824a = "pico4824a.cli:main"
+pico4824a-gui = "pico4824a.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pico4824a*"]
+
