@@ -46,7 +46,7 @@
 2. 在 PowerShell 中运行：
 
 ```powershell
-cd F:\Project\01guided_waves\software\Pico_4824A
+cd F:\Project\01guided_waves\software\Pico_4824A_btf
 .\setup.ps1
 ```
 

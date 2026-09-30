@@ -57,10 +57,12 @@ from .storage import default_stem, save_csv, save_npz
 from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
 from .time_frequency import time_frequency_map
+from . import interference
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = PROJECT_DIR / "web"
+INTERFERENCE_DIR = WEB_DIR / "interference"
 
 
 @dataclass(slots=True)
@@ -81,6 +83,7 @@ class WebControlState:
         lcr_output_root: Path | None = None,
         big_lcr_output_root: Path | None = None,
         lcr_linearity_output_root: Path | None = None,
+        interference_output_root: Path | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self.status = WebStatus()
@@ -96,6 +99,7 @@ class WebControlState:
         self.lcr_output_root = lcr_output_root or PROJECT_DIR / "data" / "lcr"
         self.big_lcr_output_root = big_lcr_output_root or PROJECT_DIR / "data" / "lcr_big"
         self.lcr_linearity_output_root = lcr_linearity_output_root or PROJECT_DIR / "data" / "lcr_linearity"
+        self.interference_output_root = interference_output_root or interference.ROOT
         self._stop_event = threading.Event()
         self._resume_event = threading.Event()
         self._resume_event.set()
@@ -1083,6 +1087,14 @@ class PicoWebHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {fmt % args}")
 
+    def handle(self) -> None:
+        try:
+            super().handle()
+        except (ConnectionError, TimeoutError):
+            # Navigation, cancellation and socket teardown can disconnect the
+            # client at any point, including while sending an error response.
+            self.close_connection = True
+
     def _send_json(self, payload: Any, status: int = 200) -> None:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
@@ -1111,11 +1123,50 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_interference_asset(self, name: str, content_type: str) -> None:
+        body = (INTERFERENCE_DIR / name).read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {
+            if path in {"/interference", "/interference/"}:
+                self._send_interference_asset("index.html", "text/html; charset=utf-8")
+            elif path in {"/interference/manual", "/interference/manual.html"}:
+                self._send_interference_asset("manual.html", "text/html; charset=utf-8")
+            elif path == "/interference/app.js":
+                self._send_interference_asset("app.js", "text/javascript; charset=utf-8")
+            elif path == "/interference/guide.js":
+                self._send_interference_asset("guide.js", "text/javascript; charset=utf-8")
+            elif path == "/interference/manual.js":
+                self._send_interference_asset("manual.js", "text/javascript; charset=utf-8")
+            elif path == "/interference/styles.css":
+                self._send_interference_asset("styles.css", "text/css; charset=utf-8")
+            elif path == "/interference/manual.css":
+                self._send_interference_asset("manual.css", "text/css; charset=utf-8")
+            elif path == "/api/interference/session":
+                session_id = parse_qs(parsed.query).get("id", [""])[0]
+                session = interference.load_session(session_id, self.control.interference_output_root)
+                self._send_json({"session": session, "summary": interference.summarize(session)})
+            elif path == "/api/interference/preview":
+                query = parse_qs(parsed.query)
+                self._send_json(interference.preview(query.get("id", [""])[0], query.get("run", [""])[0], self.control.interference_output_root))
+            elif path == "/api/interference/export":
+                session_id = parse_qs(parsed.query).get("id", [""])[0]
+                body = interference.export_csv(session_id, self.control.interference_output_root).read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="interference_{session_id}.csv"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif path in {
                 "/",
                 "/measure",
                 "/sweep",
@@ -1152,14 +1203,71 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json(self.control.sweep_run_payload(run_index))
             else:
                 self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        except ConnectionError:
+            self.close_connection = True
         except Exception as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
         path = urlparse(self.path).path
         try:
+            if getattr(self.server, "shutdown_in_progress", False):
+                self._send_json({"error": "服务正在关闭"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+            if path == "/api/admin/shutdown":
+                # Only the local launcher may shut down the instrument server.
+                # The non-simple header also prevents an unrelated web page
+                # from submitting this request through a browser form.
+                if (
+                    self.client_address[0] not in {"127.0.0.1", "::1"}
+                    or self.headers.get("Host", "").split(":")[0] != "127.0.0.1"
+                    or self.headers.get("Origin") is not None
+                    or self.headers.get("X-Pico-Local-Control") != "shutdown"
+                ):
+                    self._send_json({"error": "仅允许本机管理脚本关闭服务"}, HTTPStatus.FORBIDDEN)
+                    return
+                with self.control._lock:
+                    if self.control.status.state in {"running", "paused"}:
+                        raise RuntimeError("测量仍在运行；请先停止任务，再关闭服务")
+                    self.server.shutdown_in_progress = True  # type: ignore[attr-defined]
+                try:
+                    self.control.shutdown()
+                except Exception:
+                    self.server.shutdown_in_progress = False  # type: ignore[attr-defined]
+                    raise
+                try:
+                    self._send_json({"ok": True, "message": "设备已安全关闭，服务正在退出"})
+                finally:
+                    # Even if the launcher disconnects while receiving the
+                    # reply, the cleaned-up server must still leave the port.
+                    threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
             payload = self._read_json()
-            if path == "/api/capture":
+            if path == "/api/interference/session":
+                self._send_json({"session": interference.create_session(payload, self.control.interference_output_root)}, HTTPStatus.CREATED)
+            elif path == "/api/interference/run":
+                capture_id = int(payload["capture_id"])
+                with self.control._lock:
+                    if (self.control.status.capture_id != capture_id or
+                        self.control.status.task_kind != "capture" or
+                        self.control.status.state != "complete" or self.control.result is None):
+                        raise RuntimeError("capture id is no longer the latest completed capture")
+                    result = interference.save_run(str(payload["session_id"]), capture_id,
+                        self.control.result, payload, self.control.interference_output_root)
+                self._send_json(result)
+            elif path == "/api/interference/reanalyze":
+                self._send_json(interference.reanalyze(str(payload["session_id"]), payload["windows_us"], self.control.interference_output_root))
+            elif path == "/api/interference/complete":
+                session_id = str(payload["session_id"])
+                with interference._LOCK:
+                    session = interference.load_session(session_id, self.control.interference_output_root)
+                    experiment = int(payload["experiment"])
+                    if experiment not in range(1, 13): raise ValueError("invalid experiment")
+                    if experiment not in session["completed_experiments"]:
+                        session["completed_experiments"].append(experiment)
+                    interference._write_json(interference._folder(session_id, self.control.interference_output_root) / "session.json", session)
+                self._send_json({"session": session, "summary": interference.summarize(session)})
+            elif path == "/api/capture":
                 capture_id = self.control.start_capture(payload)
                 self._send_json({"capture_id": capture_id}, HTTPStatus.ACCEPTED)
             elif path == "/api/sweep/start":
@@ -1302,6 +1410,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json({"path": str(saved)})
             else:
                 self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        except ConnectionError:
+            self.close_connection = True
         except RuntimeError as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except Exception as exc:
