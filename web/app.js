@@ -1,5 +1,5 @@
 const channelNames = [..."ABCDEFGH"];
-const colors = ["#35d0ba", "#ffb64d", "#68a8ff", "#ff6f82", "#b88cff", "#59d5ec", "#d6e86c", "#e990c8"];
+const colors = ["#2f73ff", "#59a9ff", "#7eb6e8", "#9bc9ff", "#3d5fca", "#75a2d4", "#a7cce8", "#c8d8eb"];
 const inputRanges = ["10mV", "20mV", "50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V", "10V", "20V", "50V"];
 const $ = (id) => document.getElementById(id);
 const setDisabled = (id, value) => { const element = $(id); if (element) element.disabled = value; };
@@ -837,7 +837,7 @@ function drawAwgPreview(preview) {
     ctx.beginPath(); ctx.moveTo(left, zeroY); ctx.lineTo(right, zeroY); ctx.stroke();
   }
 
-  ctx.strokeStyle = "#35d0ba";
+  ctx.strokeStyle = "#2f73ff";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   values.forEach((value, index) => {
@@ -862,6 +862,15 @@ function setEvent(message, state = "idle") {
   $("messageText").textContent = message;
   $("stateText").textContent = state === "running" ? "任务运行中" : state === "paused" ? "扫描已暂停" : state === "error" ? "运行异常" : state === "complete" ? "任务完成" : state === "stopped" ? "任务已停止" : "系统就绪";
   $("statusDot").className = `status-dot ${state}`;
+  if (document.body.dataset.page !== "file-analysis") {
+    const label = state === "running" ? "任务运行中 · RUNNING"
+      : state === "paused" ? "等待处置 · PAUSED"
+        : state === "error" ? "运行异常 · ERROR"
+          : state === "complete" ? "任务完成 · COMPLETE"
+            : state === "stopped" ? "任务停止 · STOPPED"
+              : "系统就绪 · READY";
+    $("analysisViewState").textContent = label;
+  }
   $("eventTime").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 
@@ -886,6 +895,11 @@ async function startSweep() {
     ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn"].forEach((id) => setDisabled(id, true));
     latestSweep = null;
     $("sweepResultPanel").hidden = true;
+    $("sweepIdleStage").hidden = false;
+    $("sweepIdleStage").dataset.state = "running";
+    $("sweepIdleEyebrow").textContent = "PARAMETER SWEEP · RUNNING";
+    $("sweepIdleTitle").textContent = "扫描正在建立数据";
+    $("sweepIdleDescription").textContent = "AWG、硬件触发与块采集按参数网格顺序执行；首个有效参数点完成后开始呈现结果。";
     $("sweepProgressBar").style.width = "0%";
     const reply = await api("/api/sweep/start", { method: "POST", body: JSON.stringify(buildSweepPayload()) });
     setDisabled("sweepStopBtn", false);
@@ -896,6 +910,10 @@ async function startSweep() {
   } catch (error) {
     ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
     setDisabled("sweepStopBtn", true);
+    $("sweepIdleStage").dataset.state = "idle";
+    $("sweepIdleEyebrow").textContent = "PARAMETER SWEEP · IDLE";
+    $("sweepIdleTitle").textContent = "扫描数据舞台";
+    $("sweepIdleDescription").textContent = "配置左侧参数网格并启动扫描。首个有效参数点完成后，这里将呈现评价结果与逐次采集波形。";
     setEvent(error.message, "error");
   }
 }
@@ -1011,9 +1029,9 @@ function renderLinearityMeasurement() {
     : "回波窗未配置或采样不足";
   const state = last.status === "OK" ? (last.engineering_state || "有效") : `${last.status || "—"}${last.clipped ? " · clipped" : ""}${last.overflow ? " · overflow" : ""}`;
   $("linMeasurementStateMetric").textContent = state;
-  $("linMeasurementStateMetric").style.color = last.valid ? "#35d0ba" : "#ffb64d";
+  $("linMeasurementStateMetric").style.color = last.valid ? "#2f73ff" : "#c98435";
   $("linMeasurementSafetyMetric").textContent = last.safety_state === "WARN" ? (last.safety_message || "WARN") : "OK · 未超过程序提醒阈值";
-  $("linMeasurementSafetyMetric").style.color = last.safety_state === "WARN" ? "#ffb64d" : "#35d0ba";
+  $("linMeasurementSafetyMetric").style.color = last.safety_state === "WARN" ? "#c98435" : "#2f73ff";
   const pointSummary = new Map((data.summary_rows || []).map((item) => [`${item.direction}:${Number(item.awg_vpp)}`, item]));
   $("linMeasurementTableBody").innerHTML = rows.map((row) => {
     const summary = pointSummary.get(`${row.direction}:${Number(row.awg_vpp)}`);
@@ -1084,15 +1102,15 @@ function drawLinearityMeasurementCharts() {
   if (!latestLinearityMeasurement) return;
   const rows = latestLinearityMeasurement.run_rows || [];
   const valid = rows.filter((row) => row.valid);
-  drawLinearityScatter("linMeasurementAmplitudeCanvas", valid, "current_peak_a", [{ key: "receiver_peak_v", label: "Receiver peak", color: "#35d0ba" }], "V");
-  drawLinearityScatter("linMeasurementKmeCanvas", valid, "current_peak_a", [{ key: "K_ME_v_per_a", label: "K_ME", color: "#68a8ff" }], "V/A");
-  drawLinearityScatter("linMeasurementThdCanvas", valid, "current_peak_a", [{ key: "current_thd_pct", label: "THD_I", color: "#ffb64d" }, { key: "receiver_thd_pct", label: "THD_RX", color: "#35d0ba" }], "%");
-  drawLinearityScatter("linMeasurementShapeCanvas", valid, "current_peak_a", [{ key: "D_wave_pct", label: "D_wave", color: "#b88cff" }], "%");
-  drawLinearityScatter("linMeasurementCorrCanvas", valid, "current_peak_a", [{ key: "correlation", label: "Correlation", color: "#68a8ff" }], "r");
-  drawLinearityScatter("linMeasurementCompressionCanvas", valid, "current_peak_a", [{ key: "compression_db", label: "Compression", color: "#ff6f82" }], "dB");
+  drawLinearityScatter("linMeasurementAmplitudeCanvas", valid, "current_peak_a", [{ key: "receiver_peak_v", label: "Receiver peak", color: "#2f73ff" }], "V");
+  drawLinearityScatter("linMeasurementKmeCanvas", valid, "current_peak_a", [{ key: "K_ME_v_per_a", label: "K_ME", color: "#59a9ff" }], "V/A");
+  drawLinearityScatter("linMeasurementThdCanvas", valid, "current_peak_a", [{ key: "current_thd_pct", label: "THD_I", color: "#c98435" }, { key: "receiver_thd_pct", label: "THD_RX", color: "#2f73ff" }], "%");
+  drawLinearityScatter("linMeasurementShapeCanvas", valid, "current_peak_a", [{ key: "D_wave_pct", label: "D_wave", color: "#7eb6e8" }], "%");
+  drawLinearityScatter("linMeasurementCorrCanvas", valid, "current_peak_a", [{ key: "correlation", label: "Correlation", color: "#59a9ff" }], "r");
+  drawLinearityScatter("linMeasurementCompressionCanvas", valid, "current_peak_a", [{ key: "compression_db", label: "Compression", color: "#c98435" }], "dB");
   const direction = (latestLinearityMeasurement.summary_rows || []).filter((row) => row.direction === "up" && row.sweep_difference_receiver_pct != null)
     .map((row) => ({ direction: "up", current_peak_a: row.current_peak_a_mean, sweep_difference_receiver_pct: row.sweep_difference_receiver_pct }));
-  drawLinearityScatter("linMeasurementDirectionCanvas", direction, "current_peak_a", [{ key: "sweep_difference_receiver_pct", label: "正反扫差异", color: "#ffb64d" }], "%");
+  drawLinearityScatter("linMeasurementDirectionCanvas", direction, "current_peak_a", [{ key: "sweep_difference_receiver_pct", label: "正反扫差异", color: "#c98435" }], "%");
 }
 
 async function loadLinearityMeasurementWave() {
@@ -1133,13 +1151,13 @@ function drawLinearityMeasurementWave() {
     const xMin = Math.min(refTime[0], alignedTime[0]), xMax = Math.max(refTime.at(-1), alignedTime.at(-1));
     const yMin = Math.min(...reference, ...aligned), yMax = Math.max(...reference, ...aligned), ySpan = Math.max(yMax - yMin, 1e-12);
     ctx.strokeStyle = "rgba(120,144,156,.25)"; ctx.beginPath(); ctx.moveTo(left, overlayTop); ctx.lineTo(right, overlayTop); ctx.stroke();
-    [[refTime, reference, "#f0f4f5", [5, 3]], [alignedTime, aligned, "#b88cff", []]].forEach(([times, values, color, dash]) => {
+    [[refTime, reference, "#f0f4f5", [5, 3]], [alignedTime, aligned, "#7eb6e8", []]].forEach(([times, values, color, dash]) => {
       ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash); ctx.beginPath();
       values.forEach((value, i) => { const x = left + (times[i] - xMin) / Math.max(xMax - xMin, 1e-15) * (right - left); const y = overlayBottom - (value - yMin) / ySpan * (overlayBottom - overlayTop); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
       ctx.stroke(); ctx.setLineDash([]);
     });
     ctx.fillStyle = "#f0f4f5"; ctx.font = "10px sans-serif"; ctx.fillText("Reference Receiver", left, overlayTop + 11);
-    ctx.fillStyle = "#b88cff"; ctx.fillText("Current Receiver · aligned", left + 118, overlayTop + 11);
+    ctx.fillStyle = "#7eb6e8"; ctx.fillText("Current Receiver · aligned", left + 118, overlayTop + 11);
     ctx.fillStyle = "#78909c"; ctx.textAlign = "left"; ctx.fillText(`${(xMin * 1e6).toPrecision(4)} μs · direct-wave zoom`, left, height - 5); ctx.textAlign = "right"; ctx.fillText(`${(xMax * 1e6).toPrecision(4)} μs`, right, height - 5); ctx.textAlign = "left";
   }
   if (!hasOverlay) { ctx.fillStyle = "#78909c"; ctx.textAlign = "right"; ctx.fillText(`${(tMax * 1e6).toPrecision(4)} μs`, right, height - 6); ctx.textAlign = "left"; }
@@ -1287,7 +1305,7 @@ function updateMeasureFilterStatus(result = latestResult) {
   }
   const filter = result?.summary?.display_filter || measureFilterPayload();
   status.textContent = `已启用零相位 FFT 带通：${Number(filter.low_hz / 1000).toFixed(3)}–${Number(filter.high_hz / 1000).toFixed(3)} kHz，过渡带 ${Number(filter.transition_hz / 1000).toFixed(3)} kHz`;
-  status.style.color = "#35d0ba";
+  status.style.color = "#2f73ff";
 }
 
 function scheduleMeasureFilterRefresh() {
@@ -1310,7 +1328,7 @@ async function refreshMeasureDisplay() {
   } catch (error) {
     if (requestId !== measureFilterRequest) return;
     $("measureFilterStatus").textContent = error.message;
-    $("measureFilterStatus").style.color = "#ff6678";
+    $("measureFilterStatus").style.color = "#d94b4b";
   }
 }
 
@@ -1328,7 +1346,7 @@ function updateResult(result, resetView = true) {
   $("rateMetric").textContent = (s.actual_sample_rate_hz / 1e6).toPrecision(5).replace(/0+$/, "").replace(/\.$/, "");
   $("intervalMetric").textContent = (s.sample_interval_s * 1e9).toPrecision(5).replace(/0+$/, "").replace(/\.$/, "");
   $("overflowMetric").textContent = s.overflow_channels.length ? s.overflow_channels.join(", ") : "正常";
-  $("overflowMetric").style.color = s.overflow_channels.length ? "#ff6678" : "#35d0ba";
+  $("overflowMetric").style.color = s.overflow_channels.length ? "#d94b4b" : "#2f73ff";
   $("modeText").textContent = s.simulated ? "仿真数据 · 未访问硬件" : "PicoSDK 实机采集";
   $("emptyState").style.display = "none";
   updateMeasureFilterStatus(result);
@@ -1367,6 +1385,7 @@ function updateSweepResult(result) {
     : channelNames.filter((name) =>
       (result.run_rows || []).some((row) => `${name}_tail_to_direct_db` in row));
   $("sweepResultPanel").hidden = false;
+  $("sweepIdleStage").hidden = true;
   const maxDuration = number("recommendationMaxDuration");
   const minStrength = number("recommendationMinStrength");
   const strongMinStrength = number("recommendationStrongMinStrength");
@@ -1463,9 +1482,9 @@ function drawSweepRun() {
 
   const run = latestSweepRun.run;
   const windows = [
-    [Number(run.direct_start_us) * 1e-6, Number(run.direct_end_us) * 1e-6, "rgba(53,208,186,.08)", `直达波 · ${Number(run.nominal_duration_us).toFixed(1)} μs`],
+    [Number(run.direct_start_us) * 1e-6, Number(run.direct_end_us) * 1e-6, "rgba(47,115,255,.08)", `直达波 · ${Number(run.nominal_duration_us).toFixed(1)} μs`],
     [Number(run.tail_start_us) * 1e-6, Number(run.tail_end_us) * 1e-6, "rgba(255,182,77,.08)", "拖尾评价窗"],
-    [Number(run.reflection_start_us) * 1e-6, Number(run.reflection_end_us) * 1e-6, "rgba(184,140,255,.08)", "端面反射"],
+    [Number(run.reflection_start_us) * 1e-6, Number(run.reflection_end_us) * 1e-6, "rgba(201,132,53,.10)", "端面反射"],
   ];
   windows.forEach(([start, end, fill, label]) => {
     const x1 = (start - tMin) / (tMax - tMin) * width;
@@ -1530,14 +1549,12 @@ function drawSweepResult() {
       const xIndex = frequencies.indexOf(row.frequency_hz);
       const yIndex = cycles.indexOf(row.cycles);
       const ratio = (Number(row[metric]) - minimum) / span;
-      const badness = higherIsBetter ? 1 - ratio : ratio;
-      const hue = 168 - badness * 135;
-      ctx.fillStyle = `hsl(${hue} 62% 45%)`;
+      ctx.fillStyle = archiveColor(ratio, higherIsBetter);
       const x = left + xIndex * cellWidth;
       const y = top + (cycles.length - 1 - yIndex) * cellHeight;
       ctx.fillRect(x + 1, y + 1, cellWidth - 2, cellHeight - 2);
       if (cellWidth > 58 && cellHeight > 30) {
-        ctx.fillStyle = "rgba(5,16,20,.82)";
+        ctx.fillStyle = "rgba(239,244,250,.92)";
         ctx.textAlign = "center";
         ctx.fillText(Number(row[metric]).toFixed(metric.endsWith("_v") ? 5 : 2), x + cellWidth / 2, y + cellHeight / 2 + 4);
       }
@@ -1562,7 +1579,7 @@ function drawSweepResult() {
       ctx.fillStyle = "#78909c"; ctx.textAlign = "right";
       ctx.fillText((yMax - (yMax - yMin) * index / 4).toFixed(metric.endsWith("_v") ? 5 : 2), left - 8, y + 4);
     }
-    ctx.strokeStyle = "#35d0ba"; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.strokeStyle = "#2f73ff"; ctx.lineWidth = 2; ctx.beginPath();
     ordered.forEach((row, index) => {
       const xValue = xValues[index];
       const x = left + (xValue - xMin) / Math.max(xMax - xMin, 1) * (right - left);
@@ -1574,7 +1591,7 @@ function drawSweepResult() {
       const xValue = xValues[index];
       const x = left + (xValue - xMin) / Math.max(xMax - xMin, 1) * (right - left);
       const y = bottom - (Number(row[metric]) - yMin) / (yMax - yMin) * (bottom - top);
-      ctx.fillStyle = "#ffb64d"; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#c98435"; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#78909c"; ctx.textAlign = "center"; ctx.fillText(String(xValue), x, bottom + 20);
     });
     ctx.fillText(useFrequency ? "频率 (kHz)" : "周期数", (left + right) / 2, height - 8);
@@ -1928,11 +1945,11 @@ function renderLcrFolder(mode) {
     $("bigFolderTableBody").innerHTML = rows.map((r) => `<tr><td>${cell(Number(r.frequency_hz) / 1000, 5)}</td><td>${cell(r.awg_drive_vpp, 4)}</td><td>${cell(r.impedance_magnitude_ohm)}</td><td>${cell(r.phase_deg, 5)}</td><td>${cell(r.series_resistance_ohm)}</td><td>${cell(r.series_reactance_ohm)}</td><td>${cell(r.effective_inductance_h)}</td><td>${cell(r.quality_factor)}</td><td>${cell(r.voltage_rms_v)}</td><td>${cell(r.current_rms_a)}</td><td>${cell(r.voltage_vpp_v)}</td><td>${cell(r.current_peak_a)}</td><td>${cell(r.voltage_snr_db)}</td><td>${cell(r.current_snr_db)}</td><td>${r.safety_state || "—"}</td></tr>`).join("");
     const maxVpp = Math.max(...rows.map((r) => Number(r.awg_drive_vpp || 0)));
     const curve = rows.filter((r) => Number(r.awg_drive_vpp || 0) === maxVpp).sort((a, b) => Number(a.frequency_hz) - Number(b.frequency_hz));
-    drawFolderFrequencyCurve("bigFolderCurveCanvas", curve, [{ key: "impedance_magnitude_ohm", label: "|Z|", color: "#35d0ba" }, { key: "series_resistance_ohm", label: "Rs", color: "#ffb64d" }, { key: "series_reactance_ohm", label: "Xs", color: "#68a8ff" }]);
+    drawFolderFrequencyCurve("bigFolderCurveCanvas", curve, [{ key: "impedance_magnitude_ohm", label: "|Z|", color: "#2f73ff" }, { key: "series_resistance_ohm", label: "Rs", color: "#c98435" }, { key: "series_reactance_ohm", label: "Xs", color: "#59a9ff" }]);
     drawBigFolderGrid(rows);
   } else {
     $("smallFolderTableBody").innerHTML = rows.map((r) => `<tr><td>${cell(Number(r.frequency_hz) / 1000, 5)}</td><td>${cell(r.repeats_completed, 3)}</td><td>${cell(r.impedance_magnitude_ohm)}</td><td>${cell(r.phase_deg, 5)}</td><td>${cell(r.impedance_real_ohm ?? r.series_resistance_ohm)}</td><td>${cell(r.impedance_imag_ohm ?? r.series_reactance_ohm)}</td><td>${cell(r.series_capacitance_f)}</td><td>${cell(r.series_inductance_h)}</td><td>${cell(r.parallel_resistance_ohm)}</td><td>${cell(r.parallel_capacitance_f)}</td><td>${cell(r.parallel_inductance_h)}</td><td>${cell(r.quality_factor)}</td><td>${cell(r.dissipation_factor)}</td><td>${cell(r.voltage_snr_db)}</td><td>${cell(r.current_snr_db)}</td></tr>`).join("");
-    drawFolderFrequencyCurve("smallFolderCurveCanvas", rows, [{ key: "impedance_magnitude_ohm", label: "|Z|", color: "#35d0ba" }, { key: "impedance_real_ohm", label: "R", color: "#ffb64d" }, { key: "impedance_imag_ohm", label: "X", color: "#68a8ff" }]);
+    drawFolderFrequencyCurve("smallFolderCurveCanvas", rows, [{ key: "impedance_magnitude_ohm", label: "|Z|", color: "#2f73ff" }, { key: "impedance_real_ohm", label: "R", color: "#c98435" }, { key: "impedance_imag_ohm", label: "X", color: "#59a9ff" }]);
   }
   const selector = $(`${prefix}RunSelect`), oldValue = selector.value;
   selector.replaceChildren(...data.run_rows.map((r) => new Option(`#${r.run_index} · ${(Number(r.frequency_hz) / 1000).toPrecision(5)} kHz`, String(r.run_index))));
@@ -1966,7 +1983,7 @@ function drawBigFolderGrid(rows) {
   if (!f.length || !v.length || !z.length) { ctx.fillStyle = "#78909c"; ctx.textAlign = "center"; ctx.fillText("没有可显示的 |Z| 网格", width / 2, height / 2); ctx.textAlign = "left"; return; }
   const left = 55, right = width - 12, top = 15, bottom = height - 36, cellW = (right - left) / f.length, cellH = (bottom - top) / v.length;
   const min = Math.min(...z), max = Math.max(...z);
-  rows.forEach((r) => { const fi = f.indexOf(Number(r.frequency_hz)), vi = v.indexOf(Number(r.awg_drive_vpp)); const value = Number(r.impedance_magnitude_ohm); if (!Number.isFinite(value)) return; const q = (value - min) / Math.max(max - min, 1e-12); ctx.fillStyle = `hsl(${190 - q * 170} 72% ${25 + q * 32}%)`; ctx.fillRect(left + fi * cellW, bottom - (vi + 1) * cellH, Math.max(1, cellW - 1), Math.max(1, cellH - 1)); });
+  rows.forEach((r) => { const fi = f.indexOf(Number(r.frequency_hz)), vi = v.indexOf(Number(r.awg_drive_vpp)); const value = Number(r.impedance_magnitude_ohm); if (!Number.isFinite(value)) return; const q = (value - min) / Math.max(max - min, 1e-12); ctx.fillStyle = signalHeatColor(q); ctx.fillRect(left + fi * cellW, bottom - (vi + 1) * cellH, Math.max(1, cellW - 1), Math.max(1, cellH - 1)); });
   ctx.fillStyle = "#78909c"; ctx.font = "10px Consolas"; ctx.fillText(`${(Math.min(...f) / 1000).toPrecision(3)} kHz`, left, height - 8); ctx.textAlign = "right"; ctx.fillText(`${(Math.max(...f) / 1000).toPrecision(3)} kHz`, right, height - 8); ctx.textAlign = "left"; ctx.fillText(`${Math.max(...v).toPrecision(3)} Vpp`, 3, top + 8); ctx.fillText(`${Math.min(...v).toPrecision(3)} Vpp`, 3, bottom);
 }
 
@@ -2012,17 +2029,17 @@ function updateLinearityView() {
   const xKey = rows.some((row) => Number.isFinite(lcrNumeric(row.current_peak_a))) ? "current_peak_a" : "awg_drive_vpp";
   const receiverKey = rows.some((row) => Number.isFinite(lcrNumeric(row.receiver_peak_v))) ? "receiver_peak_v" : "current_fundamental_rms_a";
   const rxThdKey = rows.some((row) => Number.isFinite(lcrNumeric(row.receiver_thd_pct))) ? "receiver_thd_pct" : "voltage_thd_pct";
-  drawLinearityScatter("linearityReceiveCanvas", rows, xKey, [{ key: receiverKey, label: receiverKey === "receiver_peak_v" ? "Receiver peak" : "旧数据 Current fundamental", color: "#35d0ba" }], receiverKey === "receiver_peak_v" ? "V" : "A RMS");
-  drawLinearityScatter("linearityKmeCanvas", rows, xKey, [{ key: "K_ME_v_per_a", label: "K_ME", color: "#68a8ff" }], "V/A");
-  drawLinearityScatter("linearityShapeCanvas", rows, xKey, [{ key: "D_wave_pct", label: "D_wave", color: "#b88cff" }], "%");
-  drawLinearityScatter("linearityCorrCanvas", rows, xKey, [{ key: "correlation", label: "Correlation", color: "#68a8ff" }], "r");
-  drawLinearityScatter("linearityCompressionCanvas", rows, xKey, [{ key: "compression_db", label: "Compression", color: "#ff6f82" }], "dB");
-  drawLinearityScatter("linearityEchoCanvas", rows, xKey, [{ key: "echo_peak_v", label: "Echo peak", color: "#ffb64d" }], "V");
-  drawLinearityScatter("linearityEchoShapeCanvas", rows, xKey, [{ key: "D_echo_pct", label: "D_echo", color: "#b88cff" }], "%");
-  drawLinearityScatter("linearityThdCanvas", rows, xKey, [{ key: "current_thd_pct", label: "THD_I", color: "#ffb64d" }, { key: rxThdKey, label: rxThdKey === "receiver_thd_pct" ? "THD_RX" : "Legacy V THD", color: "#35d0ba" }], "%");
+  drawLinearityScatter("linearityReceiveCanvas", rows, xKey, [{ key: receiverKey, label: receiverKey === "receiver_peak_v" ? "Receiver peak" : "旧数据 Current fundamental", color: "#2f73ff" }], receiverKey === "receiver_peak_v" ? "V" : "A RMS");
+  drawLinearityScatter("linearityKmeCanvas", rows, xKey, [{ key: "K_ME_v_per_a", label: "K_ME", color: "#59a9ff" }], "V/A");
+  drawLinearityScatter("linearityShapeCanvas", rows, xKey, [{ key: "D_wave_pct", label: "D_wave", color: "#7eb6e8" }], "%");
+  drawLinearityScatter("linearityCorrCanvas", rows, xKey, [{ key: "correlation", label: "Correlation", color: "#59a9ff" }], "r");
+  drawLinearityScatter("linearityCompressionCanvas", rows, xKey, [{ key: "compression_db", label: "Compression", color: "#c98435" }], "dB");
+  drawLinearityScatter("linearityEchoCanvas", rows, xKey, [{ key: "echo_peak_v", label: "Echo peak", color: "#c98435" }], "V");
+  drawLinearityScatter("linearityEchoShapeCanvas", rows, xKey, [{ key: "D_echo_pct", label: "D_echo", color: "#7eb6e8" }], "%");
+  drawLinearityScatter("linearityThdCanvas", rows, xKey, [{ key: "current_thd_pct", label: "THD_I", color: "#c98435" }, { key: rxThdKey, label: rxThdKey === "receiver_thd_pct" ? "THD_RX" : "Legacy V THD", color: "#2f73ff" }], "%");
   const directionRows = (latestLinearity.summary_rows || []).filter((row) => Number(row.frequency_hz) === frequency && row.direction === "up");
-  drawLinearityScatter("linearityDirectionCanvas", directionRows, "current_peak_a_mean", [{ key: "sweep_difference_receiver_pct", label: "正反扫幅值差异", color: "#ffb64d" }], "%");
-  drawLinearityScatter("linearityGainCanvas", rows, xKey, [{ key: "voltage_gain_deviation_db", label: "Legacy voltage", color: "#35d0ba" }, { key: "current_gain_deviation_db", label: "Legacy current", color: "#ffb64d" }], "dB");
+  drawLinearityScatter("linearityDirectionCanvas", directionRows, "current_peak_a_mean", [{ key: "sweep_difference_receiver_pct", label: "正反扫幅值差异", color: "#c98435" }], "%");
+  drawLinearityScatter("linearityGainCanvas", rows, xKey, [{ key: "voltage_gain_deviation_db", label: "Legacy voltage", color: "#2f73ff" }, { key: "current_gain_deviation_db", label: "Legacy current", color: "#c98435" }], "dB");
   updateLinearityRun();
 }
 
@@ -2097,12 +2114,12 @@ function drawLinearityHarmonics(run) {
     [voltage, current].forEach((array, side) => {
       const dbc = n === 0 ? 0 : Math.max(floorDb, 20 * Math.log10(Math.max(array[n], 1e-30) / Math.max(array[0], 1e-30)));
       const y = top + (0 - dbc) / (0 - floorDb) * (bottom - top);
-      ctx.fillStyle = side === 0 ? "#35d0ba" : "#ffb64d";
+      ctx.fillStyle = side === 0 ? "#2f73ff" : "#c98435";
       ctx.fillRect(center + (side ? 1 : -7), y, 6, bottom - y);
     });
   }
-  ctx.fillStyle = "#35d0ba"; ctx.fillText(run.receiver_harmonics_rms_v ? "Receiver" : "旧电压", left, 17);
-  ctx.fillStyle = "#ffb64d"; ctx.fillText("Current", left + 65, 17);
+  ctx.fillStyle = "#2f73ff"; ctx.fillText(run.receiver_harmonics_rms_v ? "Receiver" : "旧电压", left, 17);
+  ctx.fillStyle = "#c98435"; ctx.fillText("Current", left + 65, 17);
   ctx.fillStyle = "#78909c"; ctx.fillText("dBc", 6, top - 8); ctx.textAlign = "right"; ctx.fillText("谐波阶数", right, 17); ctx.textAlign = "left";
 }
 
@@ -2130,12 +2147,12 @@ function drawLinearityWave() {
         reference.forEach((value, i) => { const x = left + ((refTime[i] ?? tMin) - tMin) / Math.max(tMax - tMin, 1e-15) * (right - left); const y = y0 + band - 4 - (value - low) / span * Math.max(band - 12, 1); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke(); ctx.setLineDash([]);
       }
       if (aligned?.length) {
-        const alignedTime = wave.current_receiver_aligned_time_s || []; ctx.strokeStyle = "#b88cff"; ctx.setLineDash([]); ctx.lineWidth = 1.4; ctx.beginPath();
+        const alignedTime = wave.current_receiver_aligned_time_s || []; ctx.strokeStyle = "#7eb6e8"; ctx.setLineDash([]); ctx.lineWidth = 1.4; ctx.beginPath();
         aligned.forEach((value, i) => { const x = left + ((alignedTime[i] ?? tMin) - tMin) / Math.max(tMax - tMin, 1e-15) * (right - left); const y = y0 + band - 4 - (value - low) / span * Math.max(band - 12, 1); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
       }
       ctx.fillStyle = colors[index]; ctx.font = "10px sans-serif"; ctx.fillText(`${name} raw V`, 4, y0 + 11);
     });
-    ctx.fillStyle = "#f0f4f5"; ctx.fillText("浅色虚线：同频参考 Receiver", left, 15); ctx.fillStyle = "#b88cff"; ctx.fillText("紫色：当前 Receiver 已对齐波形", left + 190, 15); return;
+    ctx.fillStyle = "#f0f4f5"; ctx.fillText("浅色虚线：同频参考 Receiver", left, 15); ctx.fillStyle = "#7eb6e8"; ctx.fillText("紫色：当前 Receiver 已对齐波形", left + 190, 15); return;
   }
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => ((tMin + ratio * (tMax - tMin)) * 1e6).toFixed(1),
@@ -2145,7 +2162,7 @@ function drawLinearityWave() {
     const x = left + (edge - tMin) / (tMax - tMin) * (right - left);
     ctx.setLineDash([4, 4]); ctx.strokeStyle = "#78909c"; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.setLineDash([]);
   }
-  [[wave.voltage_v, "#35d0ba", "线圈电压"], [wave.current_a, "#ffb64d", "线圈电流"]].forEach(([values, color, label], index) => {
+  [[wave.voltage_v, "#2f73ff", "线圈电压"], [wave.current_a, "#c98435", "线圈电流"]].forEach(([values, color, label], index) => {
     const peak = Math.max(...values.map(Math.abs), 1e-12);
     ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath();
     values.forEach((value, i) => {
@@ -2245,28 +2262,28 @@ function drawLcrParameterCharts() {
   $("lcrCapacitanceUnitLabel").textContent = units.capacitance.label;
   $("lcrInductanceUnitLabel").textContent = units.inductance.label;
   drawLcrFrequencyChart("lcrImpedanceCanvas", rows, [
-    { key: "impedance_magnitude_ohm", label: "|Z|", color: "#35d0ba" },
-    { key: "impedance_real_ohm", label: "R", color: "#ffb64d" },
-    { key: "impedance_imag_ohm", label: "X", color: "#b88cff" },
+    { key: "impedance_magnitude_ohm", label: "|Z|", color: "#2f73ff" },
+    { key: "impedance_real_ohm", label: "R", color: "#c98435" },
+    { key: "impedance_imag_ohm", label: "X", color: "#7eb6e8" },
   ], units.resistance, "阻抗");
   drawLcrFrequencyChart("lcrParallelResistanceCanvas", rows, [
-    { key: "parallel_resistance_ohm", label: "Rp", color: "#68a8ff" },
+    { key: "parallel_resistance_ohm", label: "Rp", color: "#59a9ff" },
   ], units.resistance, "并联电阻");
   drawLcrFrequencyChart("lcrCapacitanceCanvas", rows, [
-    { key: "series_capacitance_f", label: "Cs", color: "#35d0ba" },
-    { key: "parallel_capacitance_f", label: "Cp", color: "#ffb64d" },
+    { key: "series_capacitance_f", label: "Cs", color: "#2f73ff" },
+    { key: "parallel_capacitance_f", label: "Cp", color: "#c98435" },
   ], units.capacitance, "电容");
   drawLcrFrequencyChart("lcrInductanceCanvas", rows, [
-    { key: "series_inductance_h", label: "Ls", color: "#59d5ec" },
-    { key: "parallel_inductance_h", label: "Lp", color: "#b88cff" },
+    { key: "series_inductance_h", label: "Ls", color: "#59a9ff" },
+    { key: "parallel_inductance_h", label: "Lp", color: "#7eb6e8" },
   ], units.inductance, "电感");
   drawLcrFrequencyChart("lcrFactorCanvas", rows, [
-    { key: "quality_factor", label: "Q", color: "#35d0ba" },
-    { key: "dissipation_factor", label: "D", color: "#ffb64d" },
+    { key: "quality_factor", label: "Q", color: "#2f73ff" },
+    { key: "dissipation_factor", label: "D", color: "#c98435" },
   ], { scale: 1, label: "" }, "Q / D");
   drawLcrFrequencyChart("lcrSnrCanvas", rows, [
-    { key: "voltage_snr_db", label: "电压 SNR", color: "#68a8ff" },
-    { key: "current_snr_db", label: "电流 SNR", color: "#ff6f82" },
+    { key: "voltage_snr_db", label: "电压 SNR", color: "#59a9ff" },
+    { key: "current_snr_db", label: "电流 SNR", color: "#c98435" },
   ], { scale: 1, label: "dB" }, "SNR");
 }
 
@@ -2292,7 +2309,7 @@ function drawLcrBode() {
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => lcrAxisNumber(10 ** (xMin + (xMax - xMin) * ratio) / units.frequency.scale),
     (ratio) => lcrAxisNumber(10 ** (zMin + (zMax - zMin) * ratio) / units.resistance.scale));
-  ctx.fillStyle = "#b88cff"; ctx.font = "10px Consolas"; ctx.textAlign = "left";
+  ctx.fillStyle = "#7eb6e8"; ctx.font = "10px Consolas"; ctx.textAlign = "left";
   for (let index = 0; index <= 4; index += 1) {
     const y = bottom - (bottom - top) * index / 4;
     ctx.fillText(`${(pMin + (pMax - pMin) * index / 4).toFixed(1)}°`, right + 7, y + 4);
@@ -2306,10 +2323,10 @@ function drawLcrBode() {
     });
     ctx.stroke();
   };
-  plot(logZ, zMin, zMax, "#35d0ba");
-  plot(phases, pMin, pMax, "#b88cff");
-  ctx.fillStyle = "#35d0ba"; ctx.fillText("|Z|", left + 6, top + 12);
-  ctx.fillStyle = "#b88cff"; ctx.fillText("相位", left + 40, top + 12);
+  plot(logZ, zMin, zMax, "#2f73ff");
+  plot(phases, pMin, pMax, "#7eb6e8");
+  ctx.fillStyle = "#2f73ff"; ctx.fillText("|Z|", left + 6, top + 12);
+  ctx.fillStyle = "#7eb6e8"; ctx.fillText("相位", left + 40, top + 12);
   ctx.fillStyle = "#708790"; ctx.textAlign = "right";
   ctx.fillText(`频率 / ${units.frequency.label}`, right, height - 7);
   ctx.textAlign = "left"; ctx.fillText(`|Z| / ${units.resistance.label}`, 6, top + 26);
@@ -2333,7 +2350,7 @@ function drawLcrNyquist() {
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => engineering(xMin + (xMax - xMin) * ratio),
     (ratio) => engineering(yMin + (yMax - yMin) * ratio));
-  ctx.strokeStyle = "#ffb64d"; ctx.lineWidth = 1.7; ctx.beginPath();
+  ctx.strokeStyle = "#c98435"; ctx.lineWidth = 1.7; ctx.beginPath();
   rows.forEach((row, index) => {
     const x = left + (real[index] - xMin) / (xMax - xMin) * (right - left);
     const y = bottom - (imag[index] - yMin) / (yMax - yMin) * (bottom - top);
@@ -2343,7 +2360,7 @@ function drawLcrNyquist() {
   rows.forEach((row, index) => {
     const x = left + (real[index] - xMin) / (xMax - xMin) * (right - left);
     const y = bottom - (imag[index] - yMin) / (yMax - yMin) * (bottom - top);
-    ctx.fillStyle = "#35d0ba"; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#2f73ff"; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
   });
   ctx.fillStyle = "#708790"; ctx.font = "10px Consolas";
   ctx.fillText(`R / ${units.resistance.label}`, right - 55, height - 8); ctx.fillText(`X / ${units.resistance.label}`, 8, top + 10);
@@ -2363,7 +2380,7 @@ function drawLcrWave() {
   if (lastRun) {
     const x1 = (Number(lastRun.analysis_start_s) - tMin) / Math.max(tMax - tMin, 1e-30) * width;
     const x2 = (Number(lastRun.analysis_end_s) - tMin) / Math.max(tMax - tMin, 1e-30) * width;
-    ctx.fillStyle = "rgba(53,208,186,.08)"; ctx.fillRect(x1, 0, x2 - x1, height);
+    ctx.fillStyle = "rgba(47,115,255,.08)"; ctx.fillRect(x1, 0, x2 - x1, height);
   }
   names.forEach((name, laneIndex) => {
     const values = latestLcrWave.channels[name] || [];
@@ -2393,12 +2410,218 @@ let archiveRunPreview = null;
 let timeFrequencyResult = null;
 let experimentalModeResult = null;
 let analysisSelectedChannels = [];
+let analysisLens = "raw";
 let analysisRequestId = 0;
+let analysisTimeFrequencyRequestId = 0;
+let analysisExperimentalRequestId = 0;
 let analysisRefreshTimer = null;
 let spectrumWindowCounter = 0;
 const hiddenWaveSeries = new Set();
 const hiddenSpectrumSeries = new Set();
-const spectrumWindowColors = ["#35d0ba", "#ffb64d", "#68a8ff", "#ff6f82", "#b88cff", "#59d5ec", "#d6e86c", "#e990c8"];
+const spectrumWindowColors = ["#2f73ff", "#78a9ff", "#a8c7ed", "#567dbb", "#bed5f0", "#849bb7", "#c98435", "#d8b783"];
+const analysisChannelColors = ["#4b88ff", "#84b4ff", "#9fc0df", "#c98435", "#678fc7", "#c4d2e3", "#718eae", "#d8b783"];
+
+function storedAnalysisTheme() {
+  try {
+    const saved = localStorage.getItem("waveguard-ui-theme") || localStorage.getItem("waveguard-analysis-theme");
+    return saved === "dark" ? "dark" : "light";
+  } catch (_) {
+    return "light";
+  }
+}
+
+function applyAnalysisTheme(theme, persist = false) {
+  const selected = theme === "dark" ? "dark" : "light";
+  document.body.dataset.analysisTheme = selected;
+  document.querySelectorAll("[data-analysis-theme-choice]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.analysisThemeChoice === selected));
+  });
+  if (persist) {
+    try {
+      localStorage.setItem("waveguard-ui-theme", selected);
+      localStorage.setItem("waveguard-analysis-theme", selected);
+    } catch (_) { /* Browser storage is optional. */ }
+  }
+  requestAnimationFrame(() => {
+    const page = document.body.dataset.page;
+    if (page === "measure") drawScope();
+    if (page === "sweep") { drawSweepResult(); drawSweepRun(); }
+    if (page === "file-analysis") {
+      drawAnalysisWaveform(); drawSpectrum(); drawTimeFrequency(); drawExperimentalModes();
+    }
+    if (page === "sweep-analysis") { drawArchiveHeatmap(); drawArchiveRun(); }
+    if (page === "lcr") {
+      drawLcrParameterCharts(); drawLcrBode(); drawLcrNyquist(); drawLcrWave();
+      drawBigLcrCharts(); drawBigLcrWaves();
+    }
+    if (page === "lcr-linearity" && latestLinearity) updateLinearityView();
+  });
+}
+
+function setAnalysisViewState(state) {
+  document.body.dataset.analysisState = state;
+  const labels = {
+    empty: "待载入 · EMPTY",
+    loading: "读取中 · LOADING",
+    pending: "设置待应用 · PENDING",
+    processing: "分析中 · PROCESSING",
+    ready: "数据已载入 · READY",
+    error: "结果未更新 · ERROR",
+  };
+  const status = $("analysisViewState");
+  if (status) status.textContent = labels[state] || labels.empty;
+}
+
+function syncAnalysisTimeRange(source = "time", pending = false) {
+  const sourcePrefix = source === "time-frequency" ? "timeFrequency" : "analysisTime";
+  const targetPrefix = sourcePrefix === "analysisTime" ? "timeFrequency" : "analysisTime";
+  const start = $(`${sourcePrefix}Start`)?.value;
+  const end = $(`${sourcePrefix}End`)?.value;
+  if (start !== undefined && end !== undefined) {
+    $(`${targetPrefix}Start`).value = start;
+    $(`${targetPrefix}End`).value = end;
+  }
+  syncAnalysisLensContext();
+  if (pending && analysisSource) setAnalysisViewState("pending");
+}
+
+function syncAnalysisLensContext(result = analysisResult) {
+  const metadata = result?.metadata || analysisResult?.metadata;
+  const file = $("analysisLensFile");
+  const channels = $("analysisLensChannels");
+  const rate = $("analysisLensRate");
+  const range = $("analysisLensRange");
+  if (!file || !channels || !rate || !range) return;
+  const path = metadata?.source || analysisSource;
+  const parts = path ? path.split(/[\\/]/) : [];
+  file.textContent = parts.at(-1) || "未加载";
+  file.title = path || "";
+  const timeFrequencyLens = ["stft", "wpd", "cwt"].includes(analysisLens);
+  const experimentalLens = analysisLens === "experimental";
+  const selected = experimentalLens
+    ? `${$("modeReferenceChannel")?.value || "—"} / ${$("modeComparisonChannel")?.value || "—"}`
+    : timeFrequencyLens
+      ? $("timeFrequencyChannel")?.value || "—"
+      : analysisSelectedChannels.join(" / ") || metadata?.channels?.join(" / ") || "—";
+  channels.textContent = selected;
+  $("analysisLensChannelLabel").textContent = experimentalLens ? "CHANNEL PAIR" : timeFrequencyLens ? "CHANNEL" : "CHANNELS";
+  rate.textContent = metadata?.sample_rate_hz
+    ? `${(metadata.sample_rate_hz / 1e6).toFixed(4)} MS/s`
+    : "—";
+  const startId = experimentalLens ? "modeSearchStart" : timeFrequencyLens ? "timeFrequencyStart" : "analysisTimeStart";
+  const endId = experimentalLens ? "modeSearchEnd" : timeFrequencyLens ? "timeFrequencyEnd" : "analysisTimeEnd";
+  const start = $(startId)?.value;
+  const end = $(endId)?.value;
+  $("analysisLensRangeLabel").textContent = experimentalLens ? "SEARCH WINDOW" : "TIME RANGE";
+  range.textContent = start && end ? `${start} — ${end} μs` : "—";
+}
+
+function clearAnalysisLensOutputs() {
+  ["analysisWaveCanvas", "spectrumCanvas", "timeFrequencyCanvas", "modeWaveCanvas", "modeSymmetryCanvas", "modeMatchCanvas"]
+    .forEach((id) => {
+      const canvas = $(id);
+      if (!canvas) return;
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+    });
+  $("analysisWaveLegend").replaceChildren();
+  $("spectrumLegend").replaceChildren();
+  $("analysisWaveEmpty").style.display = "grid";
+  $("spectrumEmpty").style.display = "grid";
+  $("timeFrequencyEmpty").style.display = "grid";
+  $("modeWaveEmpty").style.display = "grid";
+  $("modeMetricCards").replaceChildren();
+  $("modeCandidatesBody").replaceChildren();
+  $("analysisCursorTime").textContent = "t = —";
+  $("analysisCursorValue").textContent = "V = —";
+  $("timeFrequencyTitle").textContent = `${$("timeFrequencyMethod").value.toUpperCase()}时频图`;
+  $("timeFrequencyMeta").textContent = "尚未计算当前文件";
+  $("modeResultTitle").textContent = "双通道空间—时间对称性与端面匹配";
+  $("modeAnalysisMeta").textContent = "不参与正式评分 · 尚未运行";
+}
+
+function syncAnalysisLensChrome(lens) {
+  const waveCopy = {
+    raw: ["TIME DOMAIN / RAW", "原始波形"],
+    filtered: ["TIME DOMAIN / FILTERED", "带通波形"],
+    mix: ["TIME DOMAIN / MIX", "原始与带通对照"],
+  };
+  const copy = waveCopy[lens];
+  if (copy) {
+    $("analysisWaveEyebrow").textContent = copy[0];
+    $("analysisWaveTitle").textContent = copy[1];
+  }
+  setAnalysisSettingsOpen(false);
+}
+
+function setAnalysisSettingsOpen(open) {
+  const settings = $("analysisLensSettings");
+  const button = $("analysisLensSettingsButton");
+  const popover = $("analysisLensSettingsPopover");
+  if (!settings || !button || !popover) return;
+  const expanded = Boolean(open);
+  popover.hidden = !expanded;
+  button.setAttribute("aria-expanded", String(expanded));
+  settings.classList.toggle("is-open", expanded);
+}
+
+function setAnalysisLens(lens, refresh = true) {
+  const allowed = new Set(["raw", "filtered", "mix", "fft", "stft", "wpd", "cwt", "experimental"]);
+  if (!allowed.has(lens)) return;
+  const previous = analysisLens;
+  const timeFrequencyLenses = ["stft", "wpd", "cwt"];
+  const previousRangeSource = timeFrequencyLenses.includes(previous) ? "time-frequency" : "time";
+  const nextRangeSource = timeFrequencyLenses.includes(lens) ? "time-frequency" : "time";
+  if (previousRangeSource !== nextRangeSource) syncAnalysisTimeRange(previousRangeSource);
+  analysisLens = lens;
+  document.body.dataset.analysisLens = lens;
+  syncAnalysisLensChrome(lens);
+  document.querySelectorAll(".analysis-lenses [data-analysis-lens]").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.analysisLens === lens));
+  });
+  syncAnalysisLensContext();
+  requestAnimationFrame(() => {
+    if (["raw", "filtered", "mix"].includes(lens)) drawAnalysisWaveform();
+    if (lens === "fft") drawSpectrum();
+    if (["stft", "wpd", "cwt"].includes(lens) && timeFrequencyResult?.method === lens) drawTimeFrequency();
+    if (lens === "experimental" && experimentalModeResult) drawExperimentalModes();
+  });
+
+  if (["raw", "filtered", "mix"].includes(lens)) {
+    const showRaw = lens !== "filtered";
+    const showFiltered = lens !== "raw";
+    const changed = $("analysisShowRaw").checked !== showRaw
+      || $("analysisShowFiltered").checked !== showFiltered
+      || (showFiltered && !$("analysisFilterEnabled").checked);
+    $("analysisShowRaw").checked = showRaw;
+    $("analysisShowFiltered").checked = showFiltered;
+    if (showFiltered) $("analysisFilterEnabled").checked = true;
+    if (refresh && analysisSource && changed) scheduleAnalysisRefresh();
+    return;
+  }
+  if (["stft", "wpd", "cwt"].includes(lens)) {
+    $("timeFrequencyMethod").value = lens;
+    updateTimeFrequencyControls();
+    syncAnalysisLensContext();
+    if (timeFrequencyResult?.method !== lens) {
+      timeFrequencyResult = null;
+      const canvas = $("timeFrequencyCanvas");
+      canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+      $("timeFrequencyEmpty").style.display = "grid";
+      $("timeFrequencyEmpty").textContent = analysisSource ? `${lens.toUpperCase()} 正在计算…` : "请先载入波形数据";
+      $("timeFrequencyTitle").textContent = `${lens.toUpperCase()}时频图 · CH ${$("timeFrequencyChannel").value}`;
+      $("timeFrequencyMeta").textContent = analysisSource ? "正在使用当前参数计算…" : "等待数据";
+      if (refresh && analysisSource) void calculateTimeFrequency();
+    } else {
+      requestAnimationFrame(drawTimeFrequency);
+    }
+    return;
+  }
+  if (lens === "experimental" && !experimentalModeResult) {
+    $("modeWaveEmpty").style.display = "grid";
+    $("modeWaveEmpty").textContent = "选择实验参数后运行分析";
+    $("modeAnalysisMeta").textContent = "TEST · 等待显式运行";
+  }
+}
 
 function currentPage() {
   const part = location.pathname.replace(/^\/+|\/+$/g, "");
@@ -2528,12 +2751,37 @@ function updateSweepBaseSummary() {
 }
 
 function showPage(page, push = false) {
+  const workspaceCopy = {
+    measure: ["LIVE ACQUISITION", "实时测量", "PicoScope 4824A · 8CH BLOCK CAPTURE", "系统就绪 · READY"],
+    sweep: ["PARAMETER EXPLORATION", "参数扫描", "AWG → TRIGGER → 8CH CAPTURE → EVALUATION", "扫描待命 · READY"],
+    lcr: ["IMPEDANCE WORKSPACE", "LCR 测量", "SMALL SIGNAL / HIGH DRIVE · CALIBRATED", "测量待命 · READY"],
+    "lcr-linearity": ["ENGINEERING ANALYSIS", "LCR 数据分析", "SAVED DATA · LINEARITY · HARMONICS", "离线分析 · READY"],
+    "file-analysis": ["ANALYSIS WORKSPACE", "单数据分析", "PicoScope 4824A · OFFLINE ANALYSIS", "待载入 · EMPTY"],
+    "sweep-analysis": ["SWEEP ARCHIVE", "参数数据分析", "SAVED SWEEP · RE-EVALUATION · RUN PREVIEW", "等待归档 · READY"],
+  };
+  const copy = workspaceCopy[page] || workspaceCopy.measure;
   document.body.dataset.page = page;
+  document.title = `WaveGuard · ${copy[1]}`;
+  $("productBrandEyebrow").textContent = "SCIENTIFIC SIGNAL WORKSTATION";
+  $("productBrandTitle").textContent = "WaveGuard";
+  $("workspaceEyebrow").textContent = copy[0];
+  $("workspaceTitle").textContent = copy[1];
+  $("workspaceInstrument").textContent = copy[2];
+  if (page !== "file-analysis") $("analysisViewState").textContent = copy[3];
   document.querySelectorAll("[data-nav]").forEach((link) => {
     link.classList.toggle("active", link.dataset.nav === page);
+    if (link.dataset.nav === page) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
   });
   if (push && location.pathname !== `/${page}`) history.pushState({ page }, "", `/${page}`);
   if (page === "sweep") {
+    $("sweepIdleStage").hidden = Boolean(latestSweep);
+    if (!latestSweep) {
+      $("sweepIdleStage").dataset.state = "idle";
+      $("sweepIdleEyebrow").textContent = "PARAMETER SWEEP · IDLE";
+      $("sweepIdleTitle").textContent = "扫描数据舞台";
+      $("sweepIdleDescription").textContent = "配置左侧参数网格并启动扫描。首个有效参数点完成后，这里将呈现评价结果与逐次采集波形。";
+    }
     updateSweepBaseSummary();
     drawSweepResult();
     drawSweepRun();
@@ -2546,6 +2794,7 @@ function showPage(page, push = false) {
     drawTimeFrequency();
     drawExperimentalModes();
   } else if (page === "sweep-analysis") {
+    $("archiveIdleStage").hidden = Boolean(archiveResult);
     drawArchiveHeatmap();
     drawArchiveRun();
   } else if (page === "lcr") {
@@ -2782,6 +3031,16 @@ async function loadSelectedAnalysisFile() {
   const selected = $("analysisFileList").value;
   if (!selected) return;
   analysisSource = selected;
+  analysisFullRangeUs = null;
+  analysisResult = null;
+  timeFrequencyResult = null;
+  experimentalModeResult = null;
+  analysisSelectedChannels = [];
+  analysisTimeFrequencyRequestId += 1;
+  analysisExperimentalRequestId += 1;
+  clearAnalysisLensOutputs();
+  setAnalysisViewState("loading");
+  syncAnalysisLensContext(null);
   hiddenWaveSeries.clear();
   hiddenSpectrumSeries.clear();
   try {
@@ -2816,9 +3075,13 @@ async function loadSelectedAnalysisFile() {
     $("timeFrequencyEnd").value = analysisFullRangeUs[1].toFixed(3);
     $("analysisMeta").textContent = `${metadata.source} · ${metadata.samples.toLocaleString("zh-CN")} 点 · ${(metadata.sample_rate_hz / 1e6).toFixed(4)} MS/s · CH ${metadata.channels.join("/")}`;
     updateAnalysisResult(result);
+    setAnalysisViewState("ready");
+    syncAnalysisLensContext(result);
     setEvent(`已加载：${metadata.source}`, "complete");
     await refreshAnalysis();
+    if (["stft", "wpd", "cwt"].includes(analysisLens)) await calculateTimeFrequency();
   } catch (error) {
+    setAnalysisViewState("error");
     $("analysisMeta").textContent = error.message;
     setEvent(error.message, "error");
   }
@@ -2833,6 +3096,7 @@ function scheduleAnalysisRefresh() {
 async function refreshAnalysis() {
   if (!analysisSource) return;
   const requestId = ++analysisRequestId;
+  setAnalysisViewState("processing");
   try {
     const result = await api("/api/analysis/process", {
       method: "POST",
@@ -2841,14 +3105,19 @@ async function refreshAnalysis() {
     if (requestId !== analysisRequestId) return;
     analysisResult = result;
     updateAnalysisResult(result);
+    setAnalysisViewState("ready");
+    syncAnalysisLensContext(result);
   } catch (error) {
-    if (requestId === analysisRequestId) setEvent(error.message, "error");
+    if (requestId === analysisRequestId) {
+      setAnalysisViewState("error");
+      setEvent(error.message, "error");
+    }
   }
 }
 
 function waveSeriesColor(key) {
   const [channel, kind] = key.split(":");
-  const base = colors[Math.max(0, channelNames.indexOf(channel))];
+  const base = analysisChannelColors[Math.max(0, channelNames.indexOf(channel))];
   return { color: base, alpha: kind === "raw" ? 0.52 : 1, dashed: kind === "raw" };
 }
 
@@ -2887,6 +3156,7 @@ function updateAnalysisResult(result) {
   $("spectrumResolution").textContent = Number.isFinite(resolution) ? `显示频率间隔约 ${(resolution / 1000).toFixed(3)} kHz` : "—";
   drawAnalysisWaveform();
   drawSpectrum();
+  syncAnalysisLensContext(result);
 }
 
 function canvasSetup(canvas) {
@@ -2900,7 +3170,8 @@ function canvasSetup(canvas) {
 }
 
 function drawAxes(ctx, width, height, left, top, right, bottom, xLabels, yLabels, minXTickSpacing = 0) {
-  ctx.strokeStyle = "rgba(120,144,156,.19)";
+  const analysisPage = document.body.dataset.page === "file-analysis";
+  ctx.strokeStyle = analysisPage ? "rgba(150,170,195,.2)" : "rgba(120,144,156,.19)";
   ctx.lineWidth = 1;
   ctx.font = "10px Consolas";
   const xIntervals = minXTickSpacing > 0
@@ -2909,13 +3180,13 @@ function drawAxes(ctx, width, height, left, top, right, bottom, xLabels, yLabels
   for (let index = 0; index <= xIntervals; index += 1) {
     const x = left + (right - left) * index / xIntervals;
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
-    ctx.fillStyle = "#69808a"; ctx.textAlign = "center";
+    ctx.fillStyle = analysisPage ? "#94a4b8" : "#69808a"; ctx.textAlign = "center";
     ctx.fillText(xLabels(index / xIntervals), x, height - 9);
   }
   for (let index = 0; index <= 4; index += 1) {
     const y = top + (bottom - top) * index / 4;
     ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-    ctx.fillStyle = "#69808a"; ctx.textAlign = "right";
+    ctx.fillStyle = analysisPage ? "#94a4b8" : "#69808a"; ctx.textAlign = "right";
     ctx.fillText(yLabels(1 - index / 4), left - 7, y + 4);
   }
   ctx.textAlign = "left";
@@ -3005,7 +3276,7 @@ function drawBigComponentChart(rows) {
     (ratio) => lcrAxisNumber(lMin + (lMax - lMin) * ratio), 70);
   for (let index = 0; index <= 4; index += 1) {
     const y = bottom - (bottom - top) * index / 4;
-    ctx.fillStyle = "#ff6f82"; ctx.textAlign = "left";
+    ctx.fillStyle = "#c98435"; ctx.textAlign = "left";
     ctx.fillText(lcrAxisNumber(qMin + (qMax - qMin) * index / 4), right + 7, y + 4);
   }
   const plot = (values, min, max, color) => {
@@ -3026,9 +3297,9 @@ function drawBigComponentChart(rows) {
       });
     }
   };
-  plot(lValues, lMin, lMax, "#59d5ec"); plot(qValues, qMin, qMax, "#ff6f82");
-  ctx.font = "10px Consolas"; ctx.fillStyle = "#59d5ec"; ctx.textAlign = "left"; ctx.fillText(`Leff / ${lLabel}`, left + 5, 17);
-  ctx.fillStyle = "#ff6f82"; ctx.fillText("Q", left + 70, 17); ctx.fillStyle = "#708790"; ctx.textAlign = "right"; ctx.fillText("频率 / kHz（对数）", right, 17); ctx.textAlign = "left";
+  plot(lValues, lMin, lMax, "#59a9ff"); plot(qValues, qMin, qMax, "#c98435");
+  ctx.font = "10px Consolas"; ctx.fillStyle = "#59a9ff"; ctx.textAlign = "left"; ctx.fillText(`Leff / ${lLabel}`, left + 5, 17);
+  ctx.fillStyle = "#c98435"; ctx.fillText("Q", left + 70, 17); ctx.fillStyle = "#708790"; ctx.textAlign = "right"; ctx.fillText("频率 / kHz（对数）", right, 17); ctx.textAlign = "left";
 }
 
 function drawBigLcrGridChart(rows) {
@@ -3073,13 +3344,13 @@ function drawBigLcrGridChart(rows) {
     const x0 = pxX(xEdges[xi]), x1 = pxX(xEdges[xi + 1]);
     const y0 = pxY(yEdges[yi + 1]), y1 = pxY(yEdges[yi]);
     const ratio = zMax > zMin ? (row.impedance - zMin) / (zMax - zMin) : 0.5;
-    ctx.fillStyle = `hsl(${190 - 155 * ratio}, 76%, ${35 + 13 * ratio}%)`;
+    ctx.fillStyle = signalHeatColor(ratio);
     ctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
     ctx.strokeStyle = "rgba(9,19,26,.7)"; ctx.lineWidth = 1;
     ctx.strokeRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
   });
   const legend = ctx.createLinearGradient(0, bottom, 0, top);
-  legend.addColorStop(0, "hsl(190, 76%, 35%)"); legend.addColorStop(1, "hsl(35, 76%, 48%)");
+  legend.addColorStop(0, signalHeatColor(0)); legend.addColorStop(1, signalHeatColor(1));
   ctx.fillStyle = legend; ctx.fillRect(width - 43, top + 4, 12, bottom - top - 8);
   ctx.fillStyle = "#8299a2"; ctx.font = "10px Consolas"; ctx.textAlign = "left";
   ctx.fillText(lcrAxisNumber(zMax), width - 27, top + 10);
@@ -3096,9 +3367,9 @@ function drawBigLcrCharts() {
   const highestVpp = Math.max(...rows.map((row) => Number(row.awg_drive_vpp) || 0));
   const curveRows = rows.filter((row) => Math.abs((Number(row.awg_drive_vpp) || 0) - highestVpp) < 1e-12);
   drawBigFrequencyChart("bigLcrImpedanceCanvas", curveRows, [
-    { key: "impedance_magnitude_ohm", label: "|Z|", color: "#35d0ba" },
-    { key: "series_resistance_ohm", label: "Rs", color: "#ffb64d" },
-    { key: "series_reactance_ohm", label: "Xs", color: "#b88cff" },
+    { key: "impedance_magnitude_ohm", label: "|Z|", color: "#2f73ff" },
+    { key: "series_resistance_ohm", label: "Rs", color: "#c98435" },
+    { key: "series_reactance_ohm", label: "Xs", color: "#7eb6e8" },
   ], { scale: 1, label: "Ω" }, "阻抗");
   drawBigComponentChart(curveRows);
 }
@@ -3125,8 +3396,8 @@ function drawBigLcrWaves() {
   const voltageScale = Number(savedRun.voltage_monitor_scale_v_per_v ?? $("bigLcrVoltageScale")?.value ?? 1);
   const currentScale = Number(savedRun.current_monitor_scale_a_per_v ?? $("bigLcrCurrentScale")?.value ?? 1);
   const polarity = Number(savedRun.current_monitor_polarity ?? $("bigLcrCurrentPolarity")?.value ?? 1);
-  draw("bigLcrVoltageWaveCanvas", "bigLcrVoltageChannel", "#35d0ba", "Voltage Monitor", voltageScale, "V");
-  draw("bigLcrCurrentWaveCanvas", "bigLcrCurrentChannel", "#ffb64d", "Current Monitor", currentScale * polarity, "A");
+  draw("bigLcrVoltageWaveCanvas", "bigLcrVoltageChannel", "#2f73ff", "Voltage Monitor", voltageScale, "V");
+  draw("bigLcrCurrentWaveCanvas", "bigLcrCurrentChannel", "#c98435", "Current Monitor", currentScale * polarity, "A");
 }
 
 function drawAnalysisWaveform() {
@@ -3214,7 +3485,7 @@ function drawAnalysisWaveform() {
       ctx.setLineDash([]);
     });
     if (stacked || channelIndex === 0) {
-      ctx.fillStyle = stacked ? colors[Math.max(0, channelNames.indexOf(channel))] : "#8ca1aa";
+      ctx.fillStyle = stacked ? analysisChannelColors[Math.max(0, channelNames.indexOf(channel))] : "#aab8c8";
       ctx.font = "10px Consolas";
       ctx.fillText(stacked ? `CH ${channel}` : "叠加", 7, laneTop + 15);
       ctx.fillStyle = "#607984";
@@ -3264,7 +3535,7 @@ function drawSpectrum() {
     (ratio) => `${(xMin + (xMax - xMin) * ratio).toFixed(1)}`,
     (ratio) => (yMin + (yMax - yMin) * ratio).toFixed($("spectrumScale").value === "db" ? 1 : 4),
   );
-  ctx.fillStyle = "#6d858f"; ctx.font = "10px Consolas";
+  ctx.fillStyle = "#a5b4c7"; ctx.font = "10px Consolas";
   ctx.fillText("kHz", right - 18, height - 9);
   series.forEach((item) => {
     const dashPatterns = [[], [6, 3], [2, 3], [8, 3, 2, 3]];
@@ -3310,6 +3581,7 @@ function resetAnalysisView() {
   if (!analysisFullRangeUs) return;
   $("analysisTimeStart").value = analysisFullRangeUs[0].toFixed(3);
   $("analysisTimeEnd").value = analysisFullRangeUs[1].toFixed(3);
+  syncAnalysisTimeRange("time");
   scheduleAnalysisRefresh();
 }
 
@@ -3347,6 +3619,7 @@ function installAnalysisCanvasInteraction() {
     if (nextEnd > analysisFullRangeUs[1]) { nextStart -= nextEnd - analysisFullRangeUs[1]; nextEnd = analysisFullRangeUs[1]; }
     $("analysisTimeStart").value = nextStart.toFixed(3);
     $("analysisTimeEnd").value = nextEnd.toFixed(3);
+    syncAnalysisTimeRange("time");
     scheduleAnalysisRefresh();
   }, { passive: false });
   canvas.addEventListener("mousedown", (event) => {
@@ -3367,6 +3640,7 @@ function installAnalysisCanvasInteraction() {
       if (end > analysisFullRangeUs[1]) { start -= end - analysisFullRangeUs[1]; end = analysisFullRangeUs[1]; }
       $("analysisTimeStart").value = start.toFixed(3);
       $("analysisTimeEnd").value = end.toFixed(3);
+      syncAnalysisTimeRange("time");
     }
     const times = analysisResult.time_s;
     const index = Math.min(times.length - 1, Math.max(0, Math.round(ratio * (times.length - 1))));
@@ -3400,6 +3674,7 @@ async function loadSweepArchive(path) {
     });
     archiveResult = result.is_sweep ? result : null;
     $("scanArchivePanel").hidden = !result.is_sweep;
+    $("archiveIdleStage").hidden = Boolean(result.is_sweep);
     if (!result.is_sweep) {
       $("archiveLoadMeta").textContent = "该目录不是完整的参数扫描归档";
       return;
@@ -3422,6 +3697,7 @@ async function loadSweepArchive(path) {
   } catch (error) {
     archiveResult = null;
     $("scanArchivePanel").hidden = true;
+    $("archiveIdleStage").hidden = false;
     $("archiveLoadMeta").textContent = error.message;
     setEvent(`扫描归档读取失败：${error.message}`, "error");
   }
@@ -3722,10 +3998,21 @@ function drawArchiveRun() {
   });
 }
 
+function interpolateRgb(from, to, ratio) {
+  const value = Math.max(0, Math.min(1, Number(ratio) || 0));
+  const channels = from.map((channel, index) => Math.round(channel + (to[index] - channel) * value));
+  return `rgb(${channels.join(",")})`;
+}
+
+function signalHeatColor(ratio) {
+  const value = Math.max(0, Math.min(1, Number(ratio) || 0));
+  if (value < 0.56) return interpolateRgb([19, 34, 53], [47, 115, 255], value / 0.56);
+  return interpolateRgb([47, 115, 255], [89, 169, 255], (value - 0.56) / 0.44);
+}
+
 function archiveColor(ratio, higherIsBetter) {
-  const good = higherIsBetter ? ratio : 1 - ratio;
-  const hue = 18 + 150 * Math.max(0, Math.min(1, good));
-  return `hsl(${hue} 62% 45%)`;
+  const good = Math.max(0, Math.min(1, higherIsBetter ? ratio : 1 - ratio));
+  return interpolateRgb([201, 132, 53], [47, 115, 255], good);
 }
 
 function drawArchiveHeatmap() {
@@ -3754,7 +4041,7 @@ function drawArchiveHeatmap() {
     ctx.fillStyle = archiveColor(ratio, higherIsBetter);
     ctx.fillRect(x + 1, y + 1, Math.max(1, cellWidth - 2), Math.max(1, cellHeight - 2));
     if (cellWidth >= 38 && cellHeight >= 24) {
-      ctx.fillStyle = "rgba(5,16,20,.84)";
+      ctx.fillStyle = "rgba(239,244,250,.92)";
       ctx.font = "9px Consolas";
       ctx.textAlign = "center";
       ctx.fillText(value.toFixed(metric.endsWith("_v") ? 5 : 2), x + cellWidth / 2, y + cellHeight / 2 + 3);
@@ -3793,15 +4080,22 @@ async function calculateTimeFrequency() {
     setEvent("请先加载一个波形文件。", "error");
     return;
   }
+  const requestId = ++analysisTimeFrequencyRequestId;
+  const sourcePath = analysisSource;
+  const method = $("timeFrequencyMethod").value;
+  const channel = $("timeFrequencyChannel").value;
   try {
+    setAnalysisViewState("processing");
+    $("timeFrequencyEmpty").style.display = "grid";
+    $("timeFrequencyEmpty").textContent = `${method.toUpperCase()} 正在计算…`;
     $("timeFrequencyMeta").textContent = "正在计算…";
     const result = await api("/api/analysis/time-frequency", {
       method: "POST",
       body: JSON.stringify({
-        path: analysisSource,
-        channel: $("timeFrequencyChannel").value,
+        path: sourcePath,
+        channel,
         filter: analysisFilterPayload(),
-        method: $("timeFrequencyMethod").value,
+        method,
         start_us: number("timeFrequencyStart"),
         end_us: number("timeFrequencyEnd"),
         frequency_min_hz: number("timeFrequencyMin") * 1000,
@@ -3818,9 +4112,10 @@ async function calculateTimeFrequency() {
         cwt_log_frequency: $("cwtLogFrequency").checked,
       }),
     });
+    if (requestId !== analysisTimeFrequencyRequestId || sourcePath !== analysisSource) return;
     timeFrequencyResult = result;
     $("timeFrequencyEmpty").style.display = "none";
-    $("timeFrequencyTitle").textContent = `${result.method.toUpperCase()}时频图 · CH ${$("timeFrequencyChannel").value}`;
+    $("timeFrequencyTitle").textContent = `${result.method.toUpperCase()}时频图 · CH ${channel}`;
     $("tfFloorLabel").textContent = `${result.floor_db} dB`;
     const details = result.details;
     $("timeFrequencyMeta").textContent = result.method === "stft"
@@ -3829,7 +4124,13 @@ async function calculateTimeFrequency() {
         ? `${details.wavelet} · ${details.bands} 频带 · 带宽 ${Number(details.band_width_hz / 1000).toFixed(3)} kHz`
         : `${details.cwt_bins} 频率点 · Morlet ω0=${details.morlet_omega0}`;
     drawTimeFrequency();
+    setAnalysisViewState("ready");
+    syncAnalysisLensContext();
   } catch (error) {
+    if (requestId !== analysisTimeFrequencyRequestId || sourcePath !== analysisSource) return;
+    setAnalysisViewState("error");
+    $("timeFrequencyEmpty").style.display = "grid";
+    $("timeFrequencyEmpty").textContent = `计算失败 · ${error.message}`;
     $("timeFrequencyMeta").textContent = error.message;
     setEvent(error.message, "error");
   }
@@ -3838,7 +4139,7 @@ async function calculateTimeFrequency() {
 function tfColor(value, floor) {
   const ratio = Math.max(0, Math.min(1, (value - floor) / -floor));
   const stops = [
-    [7, 16, 23], [22, 77, 115], [53, 208, 186], [255, 182, 77], [255, 241, 199],
+    [8, 15, 25], [19, 40, 72], [34, 75, 137], [47, 115, 255], [111, 164, 255], [220, 233, 255],
   ];
   const scaled = ratio * (stops.length - 1);
   const index = Math.min(stops.length - 2, Math.floor(scaled));
@@ -3876,7 +4177,7 @@ function drawTimeFrequency() {
     (ratio) => `${(result.time_us[0] + (result.time_us.at(-1) - result.time_us[0]) * ratio).toFixed(1)} μs`,
     (ratio) => `${((result.frequency_hz[0] + (result.frequency_hz.at(-1) - result.frequency_hz[0]) * ratio) / 1000).toFixed(1)}`,
   );
-  ctx.fillStyle = "#718892"; ctx.font = "10px Consolas";
+  ctx.fillStyle = "#a5b4c7"; ctx.font = "10px Consolas";
   ctx.fillText("kHz", 8, top + 10);
 }
 
@@ -3891,12 +4192,15 @@ async function calculateExperimentalModes() {
     setEvent("请选择两个不同的通道进行共模—差模实验。", "error");
     return;
   }
+  const requestId = ++analysisExperimentalRequestId;
+  const sourcePath = analysisSource;
   try {
+    setAnalysisViewState("processing");
     $("modeAnalysisMeta").textContent = "正在计算实验指标…";
     const result = await api("/api/analysis/experimental-modes", {
       method: "POST",
       body: JSON.stringify({
-        path: analysisSource,
+        path: sourcePath,
         reference_channel: referenceChannel,
         comparison_channel: comparisonChannel,
         filter: analysisFilterPayload(),
@@ -3912,6 +4216,7 @@ async function calculateExperimentalModes() {
         candidate_count: number("modeCandidateCount"),
       }),
     });
+    if (requestId !== analysisExperimentalRequestId || sourcePath !== analysisSource) return;
     experimentalModeResult = result;
     $("modeWaveEmpty").style.display = "none";
     $("modeAnalysisMeta").textContent = result.warning;
@@ -3929,7 +4234,11 @@ async function calculateExperimentalModes() {
     ].map(([label, value, detail]) => `<article><span>${label}</span><strong>${value}</strong><small>${detail}</small></article>`).join("");
     $("modeCandidatesBody").innerHTML = result.candidates.map((candidate) => `<tr><td>${candidate.time_us.toFixed(3)}</td><td>${candidate.absolute_correlation.toFixed(4)}</td><td>${candidate.correlation.toFixed(4)}</td><td>${candidate.polarity > 0 ? "同相" : "反相"}</td></tr>`).join("");
     drawExperimentalModes();
+    setAnalysisViewState("ready");
+    syncAnalysisLensContext();
   } catch (error) {
+    if (requestId !== analysisExperimentalRequestId || sourcePath !== analysisSource) return;
+    setAnalysisViewState("error");
     $("modeAnalysisMeta").textContent = error.message;
     setEvent(error.message, "error");
   }
@@ -3949,7 +4258,7 @@ function drawExperimentalModes() {
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => `${(times[0] + (times.at(-1) - times[0]) * ratio).toFixed(0)} μs`,
     (ratio) => `${((-maximum + 2 * maximum * ratio) * 1000).toFixed(2)}`);
-  [["common_v", "#35d0ba", []], ["differential_v", "#ffb64d", [5, 3]]].forEach(([key, color, dash]) => {
+  [["common_v", "#4b88ff", []], ["differential_v", "#c98435", [5, 3]]].forEach(([key, color, dash]) => {
     ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.beginPath();
     result[key].forEach((value, index) => {
       const x = left + index / Math.max(result[key].length - 1, 1) * (right - left);
@@ -3958,9 +4267,9 @@ function drawExperimentalModes() {
     });
     ctx.stroke();
   });
-  ctx.setLineDash([]); ctx.fillStyle = "#35d0ba"; ctx.fillText("共模", left + 6, top + 13);
-  ctx.fillStyle = "#ffb64d"; ctx.fillText("差模", left + 48, top + 13);
-  ctx.fillStyle = "#718892"; ctx.fillText("mV", 8, top + 10);
+  ctx.setLineDash([]); ctx.fillStyle = "#4b88ff"; ctx.fillText("共模", left + 6, top + 13);
+  ctx.fillStyle = "#c98435"; ctx.fillText("差模", left + 48, top + 13);
+  ctx.fillStyle = "#a5b4c7"; ctx.fillText("mV", 8, top + 10);
 
   const symmetryCanvas = $("modeSymmetryCanvas");
   setup = canvasSetup(symmetryCanvas);
@@ -3975,14 +4284,14 @@ function drawExperimentalModes() {
   drawAxes(ctx, width, height, sLeft, sTop, sRight, sBottom,
     (ratio) => `${(symmetryTimes[0] + (symmetryTimes.at(-1) - symmetryTimes[0]) * ratio).toFixed(0)} μs`,
     (ratio) => (symmetryMin + (symmetryMax - symmetryMin) * ratio).toFixed(1));
-  ctx.strokeStyle = "#59d5ec"; ctx.lineWidth = 1.25; ctx.beginPath();
+  ctx.strokeStyle = "#84b4ff"; ctx.lineWidth = 1.25; ctx.beginPath();
   symmetryValues.forEach((value, index) => {
     const x = sLeft + index / Math.max(symmetryValues.length - 1, 1) * (sRight - sLeft);
     const y = sBottom - (value - symmetryMin) / Math.max(symmetryMax - symmetryMin, 1e-12) * (sBottom - sTop);
     if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   });
   ctx.stroke();
-  ctx.fillStyle = "#718892";
+  ctx.fillStyle = "#a5b4c7";
   ctx.fillText(`局部差模/共模 dB · ${result.windows.temporal_window_us.toFixed(2)} μs窗`, 7, sTop + 10);
 
   const matchCanvas = $("modeMatchCanvas");
@@ -3994,7 +4303,7 @@ function drawExperimentalModes() {
   drawAxes(ctx, width, height, mLeft, mTop, mRight, mBottom,
     (ratio) => `${(matchTimes[0] + (matchTimes.at(-1) - matchTimes[0]) * ratio).toFixed(0)} μs`,
     (ratio) => (-1 + 2 * ratio).toFixed(1));
-  ctx.strokeStyle = "#b88cff"; ctx.lineWidth = 1.25; ctx.beginPath();
+  ctx.strokeStyle = "#4b88ff"; ctx.lineWidth = 1.25; ctx.beginPath();
   correlation.forEach((value, index) => {
     const x = mLeft + index / Math.max(correlation.length - 1, 1) * (mRight - mLeft);
     const y = mBottom - (value + 1) / 2 * (mBottom - mTop);
@@ -4003,15 +4312,29 @@ function drawExperimentalModes() {
   ctx.stroke();
   result.candidates.forEach((candidate) => {
     const x = mLeft + (candidate.time_us - matchTimes[0]) / Math.max(matchTimes.at(-1) - matchTimes[0], 1e-12) * (mRight - mLeft);
-    ctx.strokeStyle = "rgba(255,182,77,.62)"; ctx.beginPath(); ctx.moveTo(x, mTop); ctx.lineTo(x, mBottom); ctx.stroke();
+    ctx.strokeStyle = "rgba(201,132,53,.72)"; ctx.beginPath(); ctx.moveTo(x, mTop); ctx.lineTo(x, mBottom); ctx.stroke();
   });
   ctx.fillStyle = "#718892"; ctx.fillText("相关系数", 7, mTop + 10);
 }
 
+function mountAnalysisLensControls() {
+  const target = $("analysisLensSettingsPopover");
+  if (!target) return;
+  [".analysis-spectrum-controls", ".analysis-transform-controls"].forEach((selector) => {
+    const panel = document.querySelector(selector);
+    if (panel) target.appendChild(panel);
+  });
+}
+
 buildChannels();
+mountAnalysisLensControls();
+applyAnalysisTheme(storedAnalysisTheme());
 restoreSettings();
 updateMeasureFilterStatus();
 showPage(currentPage());
+setAnalysisLens("raw", false);
+setAnalysisViewState("empty");
+syncAnalysisLensContext();
 $("spectrumWindows").innerHTML = "";
 addSpectrumWindow(-100, 900, "全记录");
 installScopeCanvasInteraction();
@@ -4023,7 +4346,7 @@ document.querySelectorAll("[data-nav], [data-route-link]").forEach((link) => {
   });
 });
 window.addEventListener("popstate", () => showPage(currentPage()));
-onElement("linearityAnalyzeBtn", "click", analyzeBigLinearity);
+onElement("linearityAnalyzeBtn", "click", () => analyzeBigLinearity(false));
 onElement("linearityReanalyzeBtn", "click", () => analyzeBigLinearity(true));
 onElement("linearityFrequency", "change", updateLinearityView);
 onElement("linearityRunSelect", "change", updateLinearityRun);
@@ -4105,6 +4428,40 @@ $("archiveHeatmapCanvas").addEventListener("click", (event) => {
   }
 });
 $("timeFrequencyMethod").addEventListener("change", updateTimeFrequencyControls);
+$("timeFrequencyMethod").addEventListener("change", () => {
+  const method = $("timeFrequencyMethod").value;
+  if (["stft", "wpd", "cwt"].includes(document.body.dataset.analysisLens)) {
+    setAnalysisLens(method, false);
+  }
+});
+$("timeFrequencyChannel").addEventListener("change", syncAnalysisLensContext);
+["modeReferenceChannel", "modeComparisonChannel", "modeSearchStart", "modeSearchEnd"].forEach((id) => {
+  $(id).addEventListener(id.includes("Channel") ? "change" : "input", syncAnalysisLensContext);
+});
+["analysisTimeStart", "analysisTimeEnd"].forEach((id) =>
+  $(id).addEventListener("input", () => syncAnalysisTimeRange("time", true)));
+["timeFrequencyStart", "timeFrequencyEnd"].forEach((id) =>
+  $(id).addEventListener("input", () => syncAnalysisTimeRange("time-frequency", true)));
+$("analysisChannels").addEventListener("click", syncAnalysisLensContext);
+document.querySelectorAll(".analysis-lenses [data-analysis-lens]").forEach((button) => {
+  button.addEventListener("click", () => setAnalysisLens(button.dataset.analysisLens));
+});
+document.querySelectorAll("[data-analysis-theme-choice]").forEach((button) => {
+  button.addEventListener("click", () => applyAnalysisTheme(button.dataset.analysisThemeChoice, true));
+});
+$("analysisLensSettingsButton").addEventListener("click", (event) => {
+  event.stopPropagation();
+  const popover = $("analysisLensSettingsPopover");
+  setAnalysisSettingsOpen(popover.hidden);
+});
+$("analysisLensSettingsPopover").addEventListener("click", (event) => event.stopPropagation());
+document.addEventListener("click", (event) => {
+  const settings = $("analysisLensSettings");
+  if (!settings.contains(event.target)) setAnalysisSettingsOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setAnalysisSettingsOpen(false);
+});
 $("calculateTimeFrequencyBtn").addEventListener("click", calculateTimeFrequency);
 $("calculateModesBtn").addEventListener("click", calculateExperimentalModes);
 $("captureBtn").addEventListener("click", startCapture);

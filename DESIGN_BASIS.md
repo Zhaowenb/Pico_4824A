@@ -24,13 +24,13 @@
 
 主要参考资料：
 
-1. PicoScope 4000 Series (A API) Programmer's Guide  
+1. PicoScope 4000 Series (A API) Programmer's Guide
    <https://www.picotech.com/helpfiles/4000a-api/index.html>
-2. PicoScope 4000A Series 官方规格  
+2. PicoScope 4000A Series 官方规格
    <https://www.picotech.com/oscilloscope/4000/picoscope-4000-specifications>
-3. Pico Technology 官方 Python 示例，特别是 `ps4824BlockExample.py` 和 `ps4000aSigGen.py`  
+3. Pico Technology 官方 Python 示例，特别是 `ps4824BlockExample.py` 和 `ps4000aSigGen.py`
    <https://github.com/picotech/picosdk-python-wrappers/tree/master/ps4000aExamples>
-4. PicoSDK Windows 64 位安装包  
+4. PicoSDK Windows 64 位安装包
    <https://www.picotech.com/downloads/_lightbox/pico-software-development-kit-64bit>
 
 ## 为什么采用“ADC 先武装、AWG 后触发”
@@ -58,4 +58,3 @@
 - 八通道同一输入信号下的相位一致性和通道间串扰。
 
 建议按 README 中的实机验收顺序逐步测试，不要第一次运行就连接高压功放输出。
-
