@@ -848,7 +848,7 @@ function drawAwgPreview(preview) {
   ctx.stroke();
 
   ctx.fillStyle = "#78909c";
-  ctx.font = "10px Consolas";
+  ctx.font = "11px Consolas";
   ctx.fillText(`${yMax.toPrecision(3)} V`, 2, top + 8);
   ctx.fillText(`${yMin.toPrecision(3)} V`, 2, bottom);
   ctx.fillText("0", left - 3, height - 7);
@@ -1346,13 +1346,14 @@ function updateResult(result, resetView = true) {
   $("rateMetric").textContent = (s.actual_sample_rate_hz / 1e6).toPrecision(5).replace(/0+$/, "").replace(/\.$/, "");
   $("intervalMetric").textContent = (s.sample_interval_s * 1e9).toPrecision(5).replace(/0+$/, "").replace(/\.$/, "");
   $("overflowMetric").textContent = s.overflow_channels.length ? s.overflow_channels.join(", ") : "正常";
-  $("overflowMetric").style.color = s.overflow_channels.length ? "#d94b4b" : "#2f73ff";
+  $("overflowMetric").style.color = s.overflow_channels.length ? "#d94b4b" : "#75b593";
   $("modeText").textContent = s.simulated ? "仿真数据 · 未访问硬件" : "PicoSDK 实机采集";
   $("emptyState").style.display = "none";
   updateMeasureFilterStatus(result);
   if (resetView || scopeTimeStart === null || scopeTimeEnd === null) resetScopeView(false);
   buildLegend(result.channels);
   drawScope();
+  window.dispatchEvent(new Event("signal-capture-ready"));
 }
 
 function buildLegend(channels) {
@@ -1512,10 +1513,10 @@ function drawSweepRun() {
       if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     });
     ctx.stroke();
-    ctx.fillStyle = colors[colorIndex]; ctx.font = "10px Consolas"; ctx.fillText(`CH ${name}`, 8, channelIndex * lane + 26);
+    ctx.fillStyle = colors[colorIndex]; ctx.font = "11px Consolas"; ctx.fillText(`CH ${name}`, 8, channelIndex * lane + 26);
     ctx.fillStyle = "#607a84"; ctx.textAlign = "right"; ctx.fillText(`±${peak.toPrecision(3)} V`, width - 8, channelIndex * lane + 26); ctx.textAlign = "left";
   });
-  ctx.fillStyle = "#78909c"; ctx.font = "10px Consolas";
+  ctx.fillStyle = "#78909c"; ctx.font = "11px Consolas";
   ctx.fillText(formatTime(tMin), 5, height - 6);
   ctx.textAlign = "right"; ctx.fillText(formatTime(tMax), width - 5, height - 6); ctx.textAlign = "left";
 }
@@ -1634,7 +1635,7 @@ function drawScope() {
   last = Math.min(times.length - 1, last + 1);
   const triggerX = (0 - tMin) / (tMax - tMin) * width;
   if (triggerX >= 0 && triggerX <= width) {
-    ctx.strokeStyle = "rgba(255, 111, 150, .55)";
+    ctx.strokeStyle = "rgba(89,169,255,.65)";
     ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.moveTo(triggerX, 0); ctx.lineTo(triggerX, height); ctx.stroke(); ctx.setLineDash([]);
   }
   names.forEach((name, channelIndex) => {
@@ -1644,14 +1645,14 @@ function drawScope() {
     let peak = 1e-12;
     for (let i = first; i <= last; i += 1) peak = Math.max(peak, Math.abs(values[i]));
     ctx.strokeStyle = "rgba(111, 139, 150, .17)"; ctx.beginPath(); ctx.moveTo(0, middle); ctx.lineTo(width, middle); ctx.stroke();
-    ctx.strokeStyle = colors[colorIndex]; ctx.lineWidth = 1.2; ctx.beginPath();
+    ctx.strokeStyle = colors[colorIndex]; ctx.lineWidth = 1.6; ctx.beginPath();
     for (let i = first; i <= last; i += 1) {
       const x = (times[i] - tMin) / Math.max(tMax - tMin, 1e-30) * width;
       const y = middle - values[i] / peak * lane * .38 * scopeAmplitudeScale;
       if (i === first) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
-    ctx.fillStyle = colors[colorIndex]; ctx.font = "10px Consolas"; ctx.fillText(`CH ${name}`, 8, channelIndex * lane + 14);
+    ctx.fillStyle = colors[colorIndex]; ctx.font = "11px Consolas"; ctx.fillText(`CH ${name}`, 8, channelIndex * lane + 14);
     ctx.fillStyle = "#607a84"; ctx.textAlign = "right"; ctx.fillText(`±${peak.toPrecision(3)} V · ×${scopeAmplitudeScale.toFixed(2)}`, width - 8, channelIndex * lane + 14); ctx.textAlign = "left";
   });
 }
@@ -1984,7 +1985,7 @@ function drawBigFolderGrid(rows) {
   const left = 55, right = width - 12, top = 15, bottom = height - 36, cellW = (right - left) / f.length, cellH = (bottom - top) / v.length;
   const min = Math.min(...z), max = Math.max(...z);
   rows.forEach((r) => { const fi = f.indexOf(Number(r.frequency_hz)), vi = v.indexOf(Number(r.awg_drive_vpp)); const value = Number(r.impedance_magnitude_ohm); if (!Number.isFinite(value)) return; const q = (value - min) / Math.max(max - min, 1e-12); ctx.fillStyle = signalHeatColor(q); ctx.fillRect(left + fi * cellW, bottom - (vi + 1) * cellH, Math.max(1, cellW - 1), Math.max(1, cellH - 1)); });
-  ctx.fillStyle = "#78909c"; ctx.font = "10px Consolas"; ctx.fillText(`${(Math.min(...f) / 1000).toPrecision(3)} kHz`, left, height - 8); ctx.textAlign = "right"; ctx.fillText(`${(Math.max(...f) / 1000).toPrecision(3)} kHz`, right, height - 8); ctx.textAlign = "left"; ctx.fillText(`${Math.max(...v).toPrecision(3)} Vpp`, 3, top + 8); ctx.fillText(`${Math.min(...v).toPrecision(3)} Vpp`, 3, bottom);
+  ctx.fillStyle = "#78909c"; ctx.font = "11px Consolas"; ctx.fillText(`${(Math.min(...f) / 1000).toPrecision(3)} kHz`, left, height - 8); ctx.textAlign = "right"; ctx.fillText(`${(Math.max(...f) / 1000).toPrecision(3)} kHz`, right, height - 8); ctx.textAlign = "left"; ctx.fillText(`${Math.max(...v).toPrecision(3)} Vpp`, 3, top + 8); ctx.fillText(`${Math.min(...v).toPrecision(3)} Vpp`, 3, bottom);
 }
 
 async function loadLcrFolderRun(mode) {
@@ -2242,11 +2243,11 @@ function drawLcrFrequencyChart(canvasId, rows, series, yUnit, emptyLabel) {
       ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
     });
     ctx.fillStyle = item.color;
-    ctx.font = "10px Consolas";
+    ctx.font = "11px Consolas";
     ctx.fillText(item.label, left + seriesIndex * 62, 17);
   });
   ctx.fillStyle = "#708790";
-  ctx.font = "10px Consolas";
+  ctx.font = "11px Consolas";
   ctx.textAlign = "right";
   ctx.fillText(`频率 / ${frequencyUnit.label}（${axisMode === "log" ? "对数" : "线性"}）`, right, height - 7);
   ctx.textAlign = "left";
@@ -2309,7 +2310,7 @@ function drawLcrBode() {
   drawAxes(ctx, width, height, left, top, right, bottom,
     (ratio) => lcrAxisNumber(10 ** (xMin + (xMax - xMin) * ratio) / units.frequency.scale),
     (ratio) => lcrAxisNumber(10 ** (zMin + (zMax - zMin) * ratio) / units.resistance.scale));
-  ctx.fillStyle = "#7eb6e8"; ctx.font = "10px Consolas"; ctx.textAlign = "left";
+  ctx.fillStyle = "#7eb6e8"; ctx.font = "11px Consolas"; ctx.textAlign = "left";
   for (let index = 0; index <= 4; index += 1) {
     const y = bottom - (bottom - top) * index / 4;
     ctx.fillText(`${(pMin + (pMax - pMin) * index / 4).toFixed(1)}°`, right + 7, y + 4);
@@ -2362,7 +2363,7 @@ function drawLcrNyquist() {
     const y = bottom - (imag[index] - yMin) / (yMax - yMin) * (bottom - top);
     ctx.fillStyle = "#2f73ff"; ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
   });
-  ctx.fillStyle = "#708790"; ctx.font = "10px Consolas";
+  ctx.fillStyle = "#708790"; ctx.font = "11px Consolas";
   ctx.fillText(`R / ${units.resistance.label}`, right - 55, height - 8); ctx.fillText(`X / ${units.resistance.label}`, 8, top + 10);
 }
 
@@ -2395,10 +2396,10 @@ function drawLcrWave() {
       if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     });
     ctx.stroke();
-    ctx.fillStyle = colors[channelNames.indexOf(name)]; ctx.font = "10px Consolas";
+    ctx.fillStyle = colors[channelNames.indexOf(name)]; ctx.font = "11px Consolas";
     ctx.fillText(`${labels[laneIndex]} · CH ${name} · ±${peak.toPrecision(4)} V`, 8, laneIndex * lane + 15);
   });
-  ctx.fillStyle = "#708790"; ctx.font = "10px Consolas";
+  ctx.fillStyle = "#708790"; ctx.font = "11px Consolas";
   ctx.fillText(formatTime(tMin), 6, height - 6); ctx.textAlign = "right"; ctx.fillText(formatTime(tMax), width - 6, height - 6); ctx.textAlign = "left";
 }
 
@@ -2419,7 +2420,7 @@ let spectrumWindowCounter = 0;
 const hiddenWaveSeries = new Set();
 const hiddenSpectrumSeries = new Set();
 const spectrumWindowColors = ["#2f73ff", "#78a9ff", "#a8c7ed", "#567dbb", "#bed5f0", "#849bb7", "#c98435", "#d8b783"];
-const analysisChannelColors = ["#4b88ff", "#84b4ff", "#9fc0df", "#c98435", "#678fc7", "#c4d2e3", "#718eae", "#d8b783"];
+const analysisChannelColors = ["#59a9ff", "#9bc9ff", "#7eb6e8", "#aac2ff", "#709bff", "#c4d2e3", "#83a6ce", "#e2eaf3"];
 
 function storedAnalysisTheme() {
   try {
@@ -2562,13 +2563,24 @@ function setAnalysisSettingsOpen(open) {
   popover.hidden = !expanded;
   button.setAttribute("aria-expanded", String(expanded));
   settings.classList.toggle("is-open", expanded);
+  document.body.classList.toggle("signal-inspector-open", expanded);
+  window.dispatchEvent(new Event("signal-layout"));
 }
 
 function setAnalysisLens(lens, refresh = true) {
   const allowed = new Set(["raw", "filtered", "mix", "fft", "stft", "wpd", "cwt", "experimental"]);
   if (!allowed.has(lens)) return;
   const previous = analysisLens;
+  window.dispatchEvent(new Event("signal-lens-change"));
   const timeFrequencyLenses = ["stft", "wpd", "cwt"];
+  // Preserve channel identity across views; calculations stay in the existing API.
+  if (timeFrequencyLenses.includes(lens) && !timeFrequencyLenses.includes(previous)) {
+    const selectedChannel = analysisSelectedChannels[0];
+    if (selectedChannel && $("timeFrequencyChannel").value !== selectedChannel) {
+      $("timeFrequencyChannel").value = selectedChannel;
+      timeFrequencyResult = null;
+    }
+  }
   const previousRangeSource = timeFrequencyLenses.includes(previous) ? "time-frequency" : "time";
   const nextRangeSource = timeFrequencyLenses.includes(lens) ? "time-frequency" : "time";
   if (previousRangeSource !== nextRangeSource) syncAnalysisTimeRange(previousRangeSource);
@@ -2608,7 +2620,7 @@ function setAnalysisLens(lens, refresh = true) {
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
       $("timeFrequencyEmpty").style.display = "grid";
       $("timeFrequencyEmpty").textContent = analysisSource ? `${lens.toUpperCase()} 正在计算…` : "请先载入波形数据";
-      $("timeFrequencyTitle").textContent = `${lens.toUpperCase()}时频图 · CH ${$("timeFrequencyChannel").value}`;
+      $("timeFrequencyTitle").textContent = `${lens === "wpd" ? "WPD频带分解" : `${lens.toUpperCase()}时频图`} · CH ${$("timeFrequencyChannel").value}`;
       $("timeFrequencyMeta").textContent = analysisSource ? "正在使用当前参数计算…" : "等待数据";
       if (refresh && analysisSource) void calculateTimeFrequency();
     } else {
@@ -2761,6 +2773,10 @@ function showPage(page, push = false) {
   };
   const copy = workspaceCopy[page] || workspaceCopy.measure;
   document.body.dataset.page = page;
+  document.body.classList.toggle("signal-workstation", ["measure", "file-analysis"].includes(page));
+  document.body.classList.remove("signal-focus", "signal-inspector-open", "signal-mobile-controls");
+  setAnalysisSettingsOpen(false);
+  window.dispatchEvent(new Event("signal-layout"));
   document.title = `WaveGuard · ${copy[1]}`;
   $("productBrandEyebrow").textContent = "SCIENTIFIC SIGNAL WORKSTATION";
   $("productBrandTitle").textContent = "WaveGuard";
@@ -3118,10 +3134,11 @@ async function refreshAnalysis() {
 function waveSeriesColor(key) {
   const [channel, kind] = key.split(":");
   const base = analysisChannelColors[Math.max(0, channelNames.indexOf(channel))];
-  return { color: base, alpha: kind === "raw" ? 0.52 : 1, dashed: kind === "raw" };
+  return { color: base, alpha: kind === "raw" && analysisLens === "mix" ? 0.65 : 1, dashed: kind === "raw" && analysisLens === "mix" };
 }
 
 function updateAnalysisResult(result) {
+  window.dispatchEvent(new Event("signal-analysis-ready"));
   $("analysisWaveEmpty").style.display = "none";
   $("spectrumEmpty").style.display = "none";
   const keys = Object.keys(result.waveform);
@@ -3173,7 +3190,7 @@ function drawAxes(ctx, width, height, left, top, right, bottom, xLabels, yLabels
   const analysisPage = document.body.dataset.page === "file-analysis";
   ctx.strokeStyle = analysisPage ? "rgba(150,170,195,.2)" : "rgba(120,144,156,.19)";
   ctx.lineWidth = 1;
-  ctx.font = "10px Consolas";
+  ctx.font = "11px Consolas";
   const xIntervals = minXTickSpacing > 0
     ? Math.max(2, Math.min(5, Math.floor((right - left) / minXTickSpacing)))
     : 5;
@@ -3181,6 +3198,7 @@ function drawAxes(ctx, width, height, left, top, right, bottom, xLabels, yLabels
     const x = left + (right - left) * index / xIntervals;
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
     ctx.fillStyle = analysisPage ? "#94a4b8" : "#69808a"; ctx.textAlign = "center";
+    ctx.textAlign = index === xIntervals ? "right" : index === 0 ? "left" : "center";
     ctx.fillText(xLabels(index / xIntervals), x, height - 9);
   }
   for (let index = 0; index <= 4; index += 1) {
@@ -3234,9 +3252,9 @@ function drawBigFrequencyChart(canvasId, rows, series, yUnit, emptyLabel) {
         ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
       });
     }
-    ctx.fillStyle = item.color; ctx.font = "10px Consolas"; ctx.fillText(item.label, left + seriesIndex * 58, 17);
+    ctx.fillStyle = item.color; ctx.font = "11px Consolas"; ctx.fillText(item.label, left + seriesIndex * 58, 17);
   });
-  ctx.fillStyle = "#708790"; ctx.font = "10px Consolas"; ctx.textAlign = "right";
+  ctx.fillStyle = "#708790"; ctx.font = "11px Consolas"; ctx.textAlign = "right";
   ctx.fillText("频率 / kHz（对数）", right, 17); ctx.textAlign = "left";
   ctx.fillText(yUnit.label || "", 8, top - 8);
 }
@@ -3298,7 +3316,7 @@ function drawBigComponentChart(rows) {
     }
   };
   plot(lValues, lMin, lMax, "#59a9ff"); plot(qValues, qMin, qMax, "#c98435");
-  ctx.font = "10px Consolas"; ctx.fillStyle = "#59a9ff"; ctx.textAlign = "left"; ctx.fillText(`Leff / ${lLabel}`, left + 5, 17);
+  ctx.font = "11px Consolas"; ctx.fillStyle = "#59a9ff"; ctx.textAlign = "left"; ctx.fillText(`Leff / ${lLabel}`, left + 5, 17);
   ctx.fillStyle = "#c98435"; ctx.fillText("Q", left + 70, 17); ctx.fillStyle = "#708790"; ctx.textAlign = "right"; ctx.fillText("频率 / kHz（对数）", right, 17); ctx.textAlign = "left";
 }
 
@@ -3352,7 +3370,7 @@ function drawBigLcrGridChart(rows) {
   const legend = ctx.createLinearGradient(0, bottom, 0, top);
   legend.addColorStop(0, signalHeatColor(0)); legend.addColorStop(1, signalHeatColor(1));
   ctx.fillStyle = legend; ctx.fillRect(width - 43, top + 4, 12, bottom - top - 8);
-  ctx.fillStyle = "#8299a2"; ctx.font = "10px Consolas"; ctx.textAlign = "left";
+  ctx.fillStyle = "#8299a2"; ctx.font = "11px Consolas"; ctx.textAlign = "left";
   ctx.fillText(lcrAxisNumber(zMax), width - 27, top + 10);
   ctx.fillText(lcrAxisNumber(zMin), width - 27, bottom - 1);
   ctx.fillStyle = "#8ca1aa"; ctx.fillText("AWG Vpp / V", 7, top - 9);
@@ -3390,7 +3408,7 @@ function drawBigLcrWaves() {
     ctx.strokeStyle = "rgba(111,139,150,.2)"; ctx.beginPath(); ctx.moveTo(0, height / 2); ctx.lineTo(width, height / 2); ctx.stroke();
     ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.beginPath();
     values.forEach((value, index) => { const x = index / Math.max(values.length - 1, 1) * width; const y = height / 2 - Number(value) / peak * height * .4; if (!index) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
-    ctx.stroke(); ctx.fillStyle = color; ctx.font = "10px Consolas"; ctx.fillText(`${label} · ±${peak.toPrecision(4)} ${unit}（换算后）`, 8, 15);
+    ctx.stroke(); ctx.fillStyle = color; ctx.font = "11px Consolas"; ctx.fillText(`${label} · ±${peak.toPrecision(4)} ${unit}（换算后）`, 8, 15);
     ctx.fillStyle = "#708790"; ctx.fillText(formatTime(latestBigLcrWave.time_s[0]), 6, height - 6); ctx.textAlign = "right"; ctx.fillText(formatTime(latestBigLcrWave.time_s.at(-1)), width - 6, height - 6); ctx.textAlign = "left";
   };
   const voltageScale = Number(savedRun.voltage_monitor_scale_v_per_v ?? $("bigLcrVoltageScale")?.value ?? 1);
@@ -3472,7 +3490,7 @@ function drawAnalysisWaveform() {
       const style = waveSeriesColor(key);
       ctx.strokeStyle = style.color;
       ctx.globalAlpha = style.alpha;
-      ctx.lineWidth = key.endsWith(":filtered") ? 1.35 : 1;
+      ctx.lineWidth = key.endsWith(":filtered") ? 1.8 : 1.6;
       ctx.setLineDash(style.dashed ? [4, 3] : []);
       ctx.beginPath();
       values.forEach((value, index) => {
@@ -3486,7 +3504,7 @@ function drawAnalysisWaveform() {
     });
     if (stacked || channelIndex === 0) {
       ctx.fillStyle = stacked ? analysisChannelColors[Math.max(0, channelNames.indexOf(channel))] : "#aab8c8";
-      ctx.font = "10px Consolas";
+      ctx.font = "11px Consolas";
       ctx.fillText(stacked ? `CH ${channel}` : "叠加", 7, laneTop + 15);
       ctx.fillStyle = "#607984";
       ctx.fillText(`${yMax.toPrecision(3)} V`, 7, laneTop + 29);
@@ -3532,11 +3550,11 @@ function drawSpectrum() {
   const left = 72, right = width - 16, top = 16, bottom = height - 31;
   drawAxes(
     ctx, width, height, left, top, right, bottom,
-    (ratio) => `${(xMin + (xMax - xMin) * ratio).toFixed(1)}`,
+    (ratio) => `${(xMin + (xMax - xMin) * ratio).toFixed(1)} kHz`,
     (ratio) => (yMin + (yMax - yMin) * ratio).toFixed($("spectrumScale").value === "db" ? 1 : 4),
   );
-  ctx.fillStyle = "#a5b4c7"; ctx.font = "10px Consolas";
-  ctx.fillText("kHz", right - 18, height - 9);
+  ctx.fillStyle = "#a5b4c7"; ctx.font = "11px Consolas";
+  ctx.fillText($("spectrumScale").value === "db" ? "dB" : "线性", 7, top + 10);
   series.forEach((item) => {
     const dashPatterns = [[], [6, 3], [2, 3], [8, 3, 2, 3]];
     ctx.strokeStyle = item.color;
@@ -3608,7 +3626,7 @@ function installAnalysisCanvasInteraction() {
     }
     const start = number("analysisTimeStart"), end = number("analysisTimeEnd");
     const rect = canvas.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left - 68) / Math.max(1, rect.width - 84)));
     const anchor = start + (end - start) * ratio;
     const factor = event.deltaY > 0 ? 1.25 : 0.8;
     const minimumSpan = Math.max((analysisFullRangeUs[1] - analysisFullRangeUs[0]) / 10000, 0.01);
@@ -3623,6 +3641,7 @@ function installAnalysisCanvasInteraction() {
     scheduleAnalysisRefresh();
   }, { passive: false });
   canvas.addEventListener("mousedown", (event) => {
+    if (event.shiftKey || event.button !== 0) return;
     drag = { x: event.clientX, start: number("analysisTimeStart"), end: number("analysisTimeEnd") };
   });
   window.addEventListener("mouseup", () => {
@@ -3632,9 +3651,9 @@ function installAnalysisCanvasInteraction() {
   canvas.addEventListener("mousemove", (event) => {
     if (!analysisResult) return;
     const rect = canvas.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left - 68) / Math.max(1, rect.width - 84)));
     if (drag && analysisFullRangeUs) {
-      const delta = -(event.clientX - drag.x) / rect.width * (drag.end - drag.start);
+      const delta = -(event.clientX - drag.x) / Math.max(1, rect.width - 84) * (drag.end - drag.start);
       let start = drag.start + delta, end = drag.end + delta;
       if (start < analysisFullRangeUs[0]) { end += analysisFullRangeUs[0] - start; start = analysisFullRangeUs[0]; }
       if (end > analysisFullRangeUs[1]) { start -= end - analysisFullRangeUs[1]; end = analysisFullRangeUs[1]; }
@@ -3993,7 +4012,7 @@ function drawArchiveRun() {
       if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     });
     ctx.stroke();
-    ctx.fillStyle = color; ctx.font = "10px Consolas";
+    ctx.fillStyle = color; ctx.font = "11px Consolas";
     ctx.fillText(`CH ${name}`, 8, channelIndex * lane + 14);
   });
 }
@@ -4115,7 +4134,7 @@ async function calculateTimeFrequency() {
     if (requestId !== analysisTimeFrequencyRequestId || sourcePath !== analysisSource) return;
     timeFrequencyResult = result;
     $("timeFrequencyEmpty").style.display = "none";
-    $("timeFrequencyTitle").textContent = `${result.method.toUpperCase()}时频图 · CH ${channel}`;
+    $("timeFrequencyTitle").textContent = `${result.method === "wpd" ? "WPD频带分解" : `${result.method.toUpperCase()}时频图`} · CH ${channel}`;
     $("tfFloorLabel").textContent = `${result.floor_db} dB`;
     const details = result.details;
     $("timeFrequencyMeta").textContent = result.method === "stft"
@@ -4169,16 +4188,16 @@ function drawTimeFrequency() {
   imageContext.putImageData(pixels, 0, 0);
   const left = 72, right = width - 18, top = 17, bottom = height - 34;
   ctx.clearRect(0, 0, width, height);
-  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingEnabled = result.method !== "wpd";
   ctx.drawImage(image, left, top, right - left, bottom - top);
   ctx.strokeStyle = "#32454f"; ctx.strokeRect(left, top, right - left, bottom - top);
   drawAxes(
     ctx, width, height, left, top, right, bottom,
     (ratio) => `${(result.time_us[0] + (result.time_us.at(-1) - result.time_us[0]) * ratio).toFixed(1)} μs`,
-    (ratio) => `${((result.frequency_hz[0] + (result.frequency_hz.at(-1) - result.frequency_hz[0]) * ratio) / 1000).toFixed(1)}`,
+    (ratio) => `${(result.frequency_hz[Math.round(ratio * (rows - 1))] / 1000).toFixed(1)}`,
   );
-  ctx.fillStyle = "#a5b4c7"; ctx.font = "10px Consolas";
-  ctx.fillText("kHz", 8, top + 10);
+  ctx.fillStyle = "#a5b4c7"; ctx.font = "11px Consolas";
+  ctx.fillText(result.method === "cwt" ? "kHz/log" : "kHz", 8, top + 10);
 }
 
 async function calculateExperimentalModes() {
@@ -4341,6 +4360,8 @@ installScopeCanvasInteraction();
 installAnalysisCanvasInteraction();
 document.querySelectorAll("[data-nav], [data-route-link]").forEach((link) => {
   link.addEventListener("click", (event) => {
+    // Interference is a standalone application with its own assets and router.
+    if (link.dataset.nav === "interference") return;
     event.preventDefault();
     showPage(link.dataset.nav || link.dataset.routeLink, true);
   });
@@ -4563,3 +4584,255 @@ syncSweepReceiverChannels();
 updateTimeFrequencyControls();
 setEvent("系统就绪，可以开始配置。", "idle");
 pollStatus();
+
+/* Signal workstation presentation adapter. Existing controls are moved, never cloned.
+   No acquisition request, transform, source array or export is changed here. */
+function signalTimeAtPixel(pixelX, width, startUs, endUs) {
+  const ratio = Math.max(0, Math.min(1, (pixelX - 68) / Math.max(1, width - 84)));
+  return startUs + (endUs - startUs) * ratio;
+}
+
+(() => {
+  const body = document.body;
+  const monitor = document.querySelector('.monitor-stack');
+  const intro = document.querySelector('.workstation-intro');
+  const create = (tag, className, html = '') => {
+    const node = document.createElement(tag); node.className = className;
+    if (html) node.innerHTML = html;
+    return node;
+  };
+  const analysisStage = create('section', 'signal-stage page-only');
+  analysisStage.dataset.pages = 'file-analysis';
+  analysisStage.setAttribute('aria-label', '信号分析工作面');
+  const measureStage = create('section', 'signal-stage page-only');
+  measureStage.dataset.pages = 'measure';
+  measureStage.setAttribute('aria-label', '实时采集工作面');
+  const wavePanel = $('scopeCanvas').closest('.scope-panel');
+  monitor.insertBefore(measureStage, wavePanel);
+  measureStage.append(wavePanel);
+  const metrics = document.querySelector('.metrics[data-pages="measure"]');
+  wavePanel.insertBefore(metrics, wavePanel.querySelector('.canvas-wrap'));
+  const actionStrip = create('div', 'signal-action-strip');
+  actionStrip.append($('captureBtn'), $('stopBtn'));
+  const origin = create('span','signal-data-origin','尚无采集结果');
+  actionStrip.append(origin, create('span','signal-action-spacer'), $('saveNpz'), $('saveCsv'));
+  measureStage.append(actionStrip);
+  const lensBar = document.querySelector('.analysis-lens-bar');
+  monitor.insertBefore(analysisStage, lensBar);
+  analysisStage.append(lensBar);
+  const context = create('div','signal-context-strip');
+  context.hidden = true;
+  const contextLabel = create('div','signal-context-label','<span>TIME WINDOW</span><strong></strong><span class="signal-context-units"></span>');
+  const contextCanvas = create('canvas','signal-context-canvas');
+  contextCanvas.setAttribute('aria-label','当前时间窗真实波形');
+  context.append(contextLabel,contextCanvas);
+  analysisStage.append(context);
+  ['.analysis-workbench','.spectrum-panel','.time-frequency-panel','.experimental-result-panel','.analysis-inspector'].forEach(selector => {
+    const node = monitor.querySelector(selector); if(node) analysisStage.append(node);
+  });
+  const popover = $('analysisLensSettingsPopover');
+  analysisStage.append(popover);
+  const inspectorHeading = create('div','signal-inspector-heading','<strong>分析参数</strong>');
+  const closeInspector = create('button','','×');
+  closeInspector.type='button'; closeInspector.setAttribute('aria-label','关闭参数面板');
+  inspectorHeading.append(closeInspector); popover.prepend(inspectorHeading);
+  closeInspector.addEventListener('click', () => {setAnalysisSettingsOpen(false); $('analysisLensSettingsButton').focus();});
+  popover.setAttribute('role','region'); popover.setAttribute('aria-label','当前 Lens 参数');
+  const filterPanel = create('section','signal-filter-controls');
+  filterPanel.innerHTML='<div class="panel-heading"><h2>带通参数</h2></div>';
+  const bandHeading = document.querySelector('.analysis-band-heading');
+  filterPanel.append(bandHeading, bandHeading.nextElementSibling);
+  const applyFilter=create('button','','应用带通参数');applyFilter.type='button';
+  applyFilter.addEventListener('click',()=>{if(analysisSource)void refreshAnalysis();});
+  filterPanel.append(applyFilter);
+  popover.append(filterPanel);
+  ['analysisBandLow','analysisBandHigh','analysisTransition'].forEach(id=>$(id).addEventListener('change',()=>{if(analysisSource)scheduleAnalysisRefresh();}));
+  const focus = create('button','signal-focus-button','专注'); focus.type='button';
+  focus.classList.add('page-only');focus.dataset.pages='measure file-analysis';
+  focus.setAttribute('aria-pressed','false'); intro.append(focus);
+  focus.addEventListener('click', () => {
+    if (matchMedia('(max-width:760px)').matches) {
+      body.classList.toggle('signal-mobile-controls');
+      focus.textContent=body.classList.contains('signal-mobile-controls')?'关闭设置':'采集 / 文件设置';
+    } else {
+      body.classList.add('signal-focus-transition');
+      setTimeout(()=>body.classList.remove('signal-focus-transition'),360);
+      const enabled=body.classList.toggle('signal-focus');
+      focus.textContent=enabled?'退出专注':'专注'; focus.setAttribute('aria-pressed',String(enabled));
+      document.querySelector('.control-stack').inert=enabled;
+    }
+    window.dispatchEvent(new Event('signal-layout'));
+  });
+  const sourcePanel=document.querySelector('.analysis-source-panel[data-pages="file-analysis"]');
+  const fileButton=create('button','signal-file-summary','<span>↗</span><span><strong>打开数据文件</strong><small>NPZ / CSV · 选择文件或目录</small></span>');
+  fileButton.type='button'; fileButton.setAttribute('aria-label','打开文件抽屉'); fileButton.setAttribute('aria-expanded','false');
+  const fileDrawer=create('section','signal-file-drawer'); fileDrawer.hidden=true;
+  fileDrawer.setAttribute('aria-label','文件浏览');
+  const drawerHeading=create('div','signal-inspector-heading','<strong>文件浏览</strong>');
+  const closeDrawer=create('button','','×'); closeDrawer.type='button'; closeDrawer.setAttribute('aria-label','关闭文件抽屉'); drawerHeading.append(closeDrawer); fileDrawer.append(drawerHeading);
+  [...sourcePanel.children].filter(n=>!n.classList.contains('panel-heading')).forEach(n=>fileDrawer.append(n));
+  sourcePanel.append(fileButton); monitor.append(fileDrawer);
+  const setDrawer=(open)=>{fileDrawer.hidden=!open; fileButton.setAttribute('aria-expanded',String(open)); if(open) $('analysisPath').focus(); else fileButton.focus();};
+  fileButton.addEventListener('click',()=>setDrawer(fileDrawer.hidden)); closeDrawer.addEventListener('click',()=>setDrawer(false));
+  const candidates=$('modeCandidatesBody').closest('.result-table-wrap');
+  const details=create('details','signal-candidates','<summary>候选回波与匹配结果</summary>'); candidates.replaceWith(details); details.append(candidates);
+  // Trigger / AWG sections expand locally, leaving the acquisition settings visible.
+  document.querySelectorAll('.control-stack>.panel[data-pages="measure"]').forEach((panel,index)=>{
+    if(index===0) return;
+    const heading=panel.querySelector('.panel-heading'); if(!heading) return;
+    const contents=create('div','signal-control-contents');
+    [...panel.children].filter(n=>n!==heading).forEach(n=>contents.append(n));
+    const disclosure=create('details','signal-control-disclosure');
+    const summary=create('summary','','参数'); summary.setAttribute('aria-label',`${heading.querySelector('h2')?.textContent}参数`);
+    disclosure.append(summary,contents); disclosure.open=index===1; panel.append(disclosure);
+    disclosure.addEventListener('toggle',()=>{if(disclosure.open&&contents.contains($('awgPreviewCanvas')))scheduleAwgPreview();});
+  });
+  let resizeFrame=0;
+  let lastFile='';
+  let selection=null;
+  let dragSelection=null;
+  let timeCursor=null;
+  const redraw=()=>{
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame=requestAnimationFrame(()=>{
+      if(body.dataset.page==='measure') drawScope();
+      if(body.dataset.page==='file-analysis') {
+        if(['raw','filtered','mix'].includes(analysisLens)) drawAnalysisWaveform();
+        else if(analysisLens==='fft') drawSpectrum();
+        else if(analysisLens==='experimental') drawExperimentalModes();
+        else drawTimeFrequency();
+        drawContext();
+      }
+    });
+  };
+  const pulse=(node,className)=>{
+    if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+    node.classList.remove(className); void node.offsetWidth; node.classList.add(className);
+  };
+  function drawContext() {
+    const valid=['fft','stft','cwt','wpd'].includes(analysisLens)&&analysisResult?.time_s?.length;
+    context.hidden=!valid;
+    if(!valid) return;
+    const channel=['stft','cwt','wpd'].includes(analysisLens)?$('timeFrequencyChannel').value:analysisSelectedChannels[0];
+    const keys=Object.keys(analysisResult.waveform);
+    const key=keys.find(k=>k===`${channel}:raw`)||keys.find(k=>k.startsWith(`${channel}:`))||keys[0];
+    if(!key) return;
+    const values=analysisResult.waveform[key], times=analysisResult.time_s;
+    contextLabel.querySelector('strong').textContent=`${key.replace(':',' · ')}  /  ${(times[0]*1e6).toFixed(2)} — ${(times.at(-1)*1e6).toFixed(2)} μs`;
+    let peak=1e-12; for(const v of values) peak=Math.max(peak,Math.abs(v));
+    contextLabel.querySelector('.signal-context-units').textContent=`±${peak.toPrecision(3)} V`;
+    const {ctx,width,height}=canvasSetup(contextCanvas);
+    ctx.clearRect(0,0,width,height); if(width<=0||height<=0) return;
+    ctx.strokeStyle='#293d58'; ctx.beginPath(); ctx.moveTo(72,height/2); ctx.lineTo(width-18,height/2); ctx.stroke();
+    // Pixel envelopes retain true minima/maxima; source arrays stay untouched.
+    ctx.strokeStyle='#59a9ff'; ctx.lineWidth=1.1;
+    const pixels=Math.max(1,Math.floor(width-90));
+    ctx.beginPath();
+    for(let x=0;x<pixels;x++) {
+      const from=Math.floor(x*values.length/pixels), to=Math.min(values.length,Math.max(from+1,Math.floor((x+1)*values.length/pixels)));
+      let low=Infinity,high=-Infinity; for(let i=from;i<to;i++){low=Math.min(low,values[i]);high=Math.max(high,values[i]);}
+      if(!Number.isFinite(low))continue;
+      ctx.moveTo(72+x,height/2-high/peak*height*.42);ctx.lineTo(72+x,height/2-low/peak*height*.42);
+    } ctx.stroke();
+    if(timeCursor!==null){const x=72+(timeCursor-times[0]*1e6)/Math.max((times.at(-1)-times[0])*1e6,1e-12)*(width-90);if(x>=72&&x<=width-18){ctx.strokeStyle='#d4e6ff';ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke();}}
+  }
+  const layout=()=>{
+    if(body.dataset.page!=='file-analysis'){fileDrawer.hidden=true;fileButton.setAttribute('aria-expanded','false');}
+    if(!body.classList.contains('signal-workstation')) { document.querySelector('.control-stack').inert=false; return; }
+    focus.textContent=matchMedia('(max-width:760px)').matches?'采集 / 文件设置':body.classList.contains('signal-focus')?'退出专注':'专注';
+    focus.setAttribute('aria-pressed',String(body.classList.contains('signal-focus')));
+    document.querySelector('.control-stack').inert=body.classList.contains('signal-focus');
+    filterPanel.hidden=!['filtered','mix','fft'].includes(analysisLens);
+    redraw();
+  };
+  window.addEventListener('signal-layout',layout);
+  new ResizeObserver(redraw).observe(analysisStage);
+  new ResizeObserver(redraw).observe(measureStage);
+  // Dock transitions resize chart parents without resizing the outer stage.
+  ['scopeCanvas','analysisWaveCanvas','spectrumCanvas','timeFrequencyCanvas','modeWaveCanvas'].forEach(id=>new ResizeObserver(redraw).observe($(id).parentElement));
+  window.addEventListener('signal-lens-change',()=>requestAnimationFrame(()=>{
+    filterPanel.hidden=!['filtered','mix','fft'].includes(analysisLens);
+    drawContext(); pulse(analysisStage,'signal-lens-settle');
+    const enabled=['filtered','mix','fft','stft','cwt','wpd'].includes(analysisLens);
+    $('analysisLensSettings').style.setProperty('display',enabled?'flex':'none','important');
+  }));
+  window.addEventListener('signal-capture-ready',()=>{
+    origin.textContent=latestResult?.summary?.simulated?'SIMULATED · 仿真采集':'PicoSDK · 实机采集';
+    pulse(measureStage,'signal-result-settle');
+  });
+  window.addEventListener('signal-analysis-ready',()=>requestAnimationFrame(()=>{
+    const metadata=analysisResult?.metadata;
+    fileButton.querySelector('strong').textContent=analysisSource?.split(/[\\/]/).at(-1)||'打开数据文件';
+    fileButton.querySelector('small').textContent=metadata?`${(metadata.sample_rate_hz/1e6).toFixed(2)} MS/s · ${metadata.channels.join(' / ')}`:'NPZ / CSV';
+    if(lastFile!==analysisSource){selection=null;timeCursor=null;lastFile=analysisSource;fileDrawer.hidden=true;fileButton.setAttribute('aria-expanded','false');fileButton.focus();}
+    drawContext(); redraw();
+  }));
+  const waveform=$('analysisWaveCanvas');
+  const waveCursor=create('div','signal-crosshair');waveCursor.hidden=true;waveform.parentElement.append(waveCursor);
+  const selectBand=create('div','signal-selection'); selectBand.hidden=true; waveform.parentElement.append(selectBand);
+  const xToTime=(event)=>{
+    const rect=waveform.getBoundingClientRect();
+    const times=analysisResult.time_s;
+    return signalTimeAtPixel(event.clientX-rect.left,rect.width,times[0]*1e6,times.at(-1)*1e6);
+  };
+  const linkSelectionWindow=()=>{
+    const start=number('analysisTimeStart'),end=number('analysisTimeEnd');
+    if(!analysisSource||!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return;
+    const first=$('spectrumWindows').firstElementChild;
+    if(first){first.querySelector('.spec-start').value=start.toFixed(3);first.querySelector('.spec-end').value=end.toFixed(3);first.querySelector('.spec-label').value='选区';}
+  };
+  // Capture phase updates the existing FFT window before refreshAnalysis builds
+  // its payload. Extra comparison windows are preserved.
+  $('analysisApplyBtn').addEventListener('click',linkSelectionWindow,true);
+  $('analysisResetViewBtn').addEventListener('click',linkSelectionWindow);
+  waveform.addEventListener('dblclick',linkSelectionWindow);
+  waveform.addEventListener('mousedown',event=>{
+    if(event.button!==0||!event.shiftKey||!analysisResult)return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    dragSelection={start:xToTime(event),end:xToTime(event)};
+    selectBand.hidden=false;
+  },true);
+  waveform.addEventListener('mousemove',event=>{
+    if(!analysisResult)return;
+    timeCursor=xToTime(event);
+    waveCursor.hidden=false;waveCursor.style.left=`${Math.max(68,Math.min(waveform.clientWidth-16,event.clientX-waveform.getBoundingClientRect().left))}px`;
+    if(dragSelection){event.stopImmediatePropagation();dragSelection.end=timeCursor;const rect=waveform.getBoundingClientRect(),times=analysisResult.time_s,span=(times.at(-1)-times[0])*1e6;const left=68+(Math.min(dragSelection.start,dragSelection.end)-times[0]*1e6)/span*(rect.width-84);const width=Math.abs(dragSelection.end-dragSelection.start)/span*(rect.width-84);selectBand.style.left=`${left}px`;selectBand.style.width=`${width}px`;}
+  },true);
+  waveform.addEventListener('mouseleave',()=>waveCursor.hidden=true);
+  window.addEventListener('mouseup',()=>{
+    if(!dragSelection)return;
+    selection=[Math.min(dragSelection.start,dragSelection.end),Math.max(dragSelection.start,dragSelection.end)];dragSelection=null;selectBand.hidden=true;
+    if(selection[1]-selection[0]<.01)return;
+    $('analysisTimeStart').value=selection[0].toFixed(3);$('analysisTimeEnd').value=selection[1].toFixed(3);syncAnalysisTimeRange('time');
+    linkSelectionWindow();
+    scheduleAnalysisRefresh();
+  });
+  waveform.setAttribute('aria-label','波形；Shift 拖动选择分析时间段');
+  const help=document.querySelector('.analysis-workbench .scope-toolbar');
+  help.title='Shift 拖动：选择分析时间段；滚轮：缩放；拖动：平移；双击：全时段';
+  $('spectrumCanvas').addEventListener('mousemove',event=>{
+    const windowData=analysisResult?.spectra?.[0];if(!windowData?.frequency_hz?.length)return;
+    const rect=event.currentTarget.getBoundingClientRect();const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left-72)/(rect.width-88)));
+    const freqs=windowData.frequency_hz;const index=Math.round(ratio*(freqs.length-1));
+    $('analysisCursorTime').textContent=`f = ${(freqs[index]/1000).toFixed(3)} kHz`;
+    $('analysisCursorValue').textContent='时间窗保留于上方';
+  });
+  const tfCursor=create('div','signal-crosshair');tfCursor.hidden=true;$('timeFrequencyCanvas').parentElement.append(tfCursor);
+  $('timeFrequencyCanvas').addEventListener('mouseleave',()=>{tfCursor.hidden=true;});
+  $('timeFrequencyCanvas').addEventListener('mousemove',event=>{
+    const result=timeFrequencyResult;if(!result?.time_us?.length)return;
+    const rect=event.currentTarget.getBoundingClientRect();const rx=Math.max(0,Math.min(1,(event.clientX-rect.left-72)/(rect.width-90)));const ry=Math.max(0,Math.min(1,1-(event.clientY-rect.top-17)/(rect.height-51)));
+    const col=Math.round(rx*(result.time_us.length-1)),row=Math.round(ry*(result.frequency_hz.length-1));
+    timeCursor=result.time_us[col];$('analysisCursorTime').textContent=`t = ${timeCursor.toFixed(3)} μs`;
+    tfCursor.hidden=false;tfCursor.style.left=`${72+rx*(rect.width-90)}px`;
+    $('analysisCursorValue').textContent=`${(result.frequency_hz[row]/1000).toFixed(2)} kHz · ${result.values_db[row][col].toFixed(1)} dB`;
+    drawContext();
+  });
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'){if(!fileDrawer.hidden)setDrawer(false);body.classList.remove('signal-mobile-controls');}});
+  // Bottom export actions remain available without opening FFT settings.
+  const footer=analysisStage.querySelector('.analysis-inspector');
+  const exportActions=create('div','signal-action-strip');
+  exportActions.append(create('span','signal-data-origin','派生带通数据 · 原始文件保留'),create('span','signal-action-spacer'),$('exportFilteredNpzBtn'),$('exportFilteredCsvBtn'));
+  footer.after(exportActions);
+  layout();
+})();

@@ -1918,3 +1918,165 @@ body[data-page] .trip-alarm-dialog {
 @media (prefers-reduced-motion:reduce) {
   body[data-page] *, body[data-page] *::before, body[data-page] *::after { scroll-behavior:auto!important; transition-duration:.01ms!important; animation-duration:.01ms!important; animation-iteration-count:1!important; }
 }
+
+/* Signal workstation: one scoped presentation module for measure / file-analysis.
+   Explicit overrides contain the legacy !important rules; no other route opts in. */
+body.signal-workstation[data-page] { height:100dvh!important; overflow:hidden!important; font-family:"Segoe UI","Microsoft YaHei UI",sans-serif; }
+body.signal-workstation[data-page] .topbar { height:64px!important; min-height:64px!important; padding:0 24px!important; gap:24px; }
+body.signal-workstation[data-page] .brand { min-width:174px; }
+body.signal-workstation[data-page] .brand h1 { font-size:21px; letter-spacing:-.035em; }
+body.signal-workstation[data-page] .brand .eyebrow { display:none; }
+body.signal-workstation[data-page] .page-nav { gap:2px; }
+body.signal-workstation[data-page] .page-nav a { font-size:12px!important; padding:0 12px; letter-spacing:.04em; }
+body.signal-workstation[data-page] .analysis-global-tools>span { display:none; }
+body.signal-workstation[data-page] .connection>#statusDot, body.signal-workstation[data-page] .connection>div:not(.analysis-global-tools) { display:none; }
+body.signal-workstation[data-page] .workspace { width:100%!important; height:calc(100dvh - 64px)!important; min-height:0!important; padding:20px 24px 16px!important; display:grid!important; grid-template-columns:264px minmax(0,1fr)!important; gap:24px!important; align-items:stretch!important; overflow:hidden!important; }
+body.signal-workstation[data-page].signal-focus-transition .workspace { transition:grid-template-columns 350ms cubic-bezier(.2,.75,.2,1),gap 350ms; }
+body.signal-workstation[data-page].signal-focus .workspace { grid-template-columns:0 minmax(0,1fr)!important; gap:0!important; }
+body.signal-workstation[data-page] .control-stack { position:relative!important; top:0!important; align-self:stretch!important; max-height:100%!important; min-height:0; min-width:0; padding:0!important; border:0!important; border-radius:0!important; background:none!important; box-shadow:none!important; overflow:auto!important; scrollbar-width:thin; }
+body.signal-workstation[data-page].signal-focus .control-stack { overflow:hidden!important; opacity:0; pointer-events:none; }
+body.signal-workstation[data-page] .control-stack>.panel { padding:18px 0!important; background:none!important; border:0!important; border-bottom:1px solid var(--wg-line)!important; border-radius:0!important; box-shadow:none!important; }
+body.signal-workstation[data-page] .control-stack>.panel:first-child { padding-top:4px!important; }
+body.signal-workstation[data-page] .panel-heading h2 { font-size:16px!important; font-weight:650; letter-spacing:.04em; }
+body.signal-workstation[data-page] .panel-heading { margin-bottom:16px!important; }
+body.signal-workstation[data-page] .step, body.signal-workstation[data-page] .analysis-panel-kicker { display:none; }
+body.signal-workstation[data-page] label { font-size:12px!important; line-height:1.5; letter-spacing:.04em; }
+body.signal-workstation[data-page] input,body.signal-workstation[data-page] select { font:12px/1.4 Consolas,"Microsoft YaHei UI",monospace!important; min-height:36px!important; padding:8px!important; border-radius:6px!important; }
+body.signal-workstation[data-page] input[type=checkbox] { min-height:0!important; padding:0!important; }
+body.signal-workstation[data-page] .form-grid { gap:12px 10px!important; }
+body.signal-workstation[data-page] button { font-size:12px!important; letter-spacing:.04em; }
+body.signal-workstation[data-page] .subhead { margin:18px 0 10px!important; font-size:12px!important; }
+body.signal-workstation[data-page] .subhead small { font-size:10px!important; }
+body.signal-workstation[data-page] .analysis-meta { font:10px/1.7 Consolas,monospace!important; background:transparent!important; border:0!important; padding:10px 0!important; overflow-wrap:anywhere; }
+body.signal-workstation[data-page] .wiring-note { font-size:11px!important; line-height:1.7; }
+body.signal-workstation[data-page] .analysis-channel-grid { gap:6px!important; }
+body.signal-workstation[data-page] .analysis-channel-grid button.active { color:var(--wg-signal)!important; background:color-mix(in srgb,var(--wg-signal) 9%,var(--wg-surface))!important; border-color:color-mix(in srgb,var(--wg-signal) 28%,var(--wg-line))!important; box-shadow:none!important; }
+body.signal-workstation[data-page] .channel-grid { grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:6px!important; }
+body.signal-workstation[data-page] .channel-card { background:transparent!important; box-shadow:none!important; }
+body.signal-workstation[data-page] .monitor-stack { display:flex!important; flex-direction:column!important; position:relative; min-width:0; min-height:0; gap:14px!important; overflow:hidden!important; }
+body.signal-workstation[data-page] .workstation-intro { min-height:56px!important; padding:0!important; border:0!important; flex-shrink:0; gap:14px; }
+body.signal-workstation[data-page] .workstation-intro h2 { font:700 28px/1.2 "Segoe UI","Microsoft YaHei UI",sans-serif!important; letter-spacing:-.025em; }
+body.signal-workstation[data-page] .workstation-intro .eyebrow { font:10px/1.3 Consolas,monospace!important; letter-spacing:.14em; margin-bottom:5px!important; }
+body.signal-workstation[data-page] .analysis-instrument-id { font:10px/1.3 Consolas,monospace!important; letter-spacing:.04em; }
+body.signal-workstation[data-page] .analysis-view-state { font-size:11px!important; }
+body.signal-workstation[data-page] .signal-focus-button { margin-left:auto; min-height:34px; white-space:nowrap; color:var(--wg-ink); border:1px solid var(--wg-line); background:var(--wg-surface); border-radius:6px; padding:0 12px; }
+body.signal-workstation[data-page] .signal-stage { flex:1 1 0; min-height:0; min-width:0; display:flex; flex-direction:column; position:relative; isolation:isolate; overflow:hidden; background:#0b1320; border:1px solid #253448; border-radius:14px; color:#e4edf7; box-shadow:0 14px 35px -28px #07101c66; }
+body.signal-workstation[data-page="file-analysis"] .signal-stage[data-pages="file-analysis"],body.signal-workstation[data-page="measure"] .signal-stage[data-pages="measure"] { display:flex!important; }
+body.signal-workstation[data-page="measure"] .signal-stage>.scope-panel { display:flex!important; flex-direction:column!important; }
+body.signal-workstation[data-page] .signal-stage>.scope-panel { flex:1 1 0!important; min-height:0!important; height:0!important; width:auto!important; border:0!important; box-shadow:none!important; border-radius:0!important; background:transparent!important; padding:14px 20px 8px!important; overflow:hidden!important; }
+body.signal-workstation[data-page] .signal-stage .scope-toolbar { min-height:40px!important; margin:0 0 10px!important; align-items:center; gap:12px; }
+body.signal-workstation[data-page] .scope-toolbar h2 { font-size:16px!important; color:#e4edf7!important; }
+body.signal-workstation[data-page] .scope-toolbar .eyebrow { display:none; }
+body.signal-workstation[data-page] .scope-toolbar small { font-size:11px!important; color:#97a9c0!important; }
+body.signal-workstation[data-page] .signal-stage .canvas-wrap,body.signal-workstation[data-page] .signal-stage .analysis-canvas-wrap,body.signal-workstation[data-page] .signal-stage .spectrum-canvas-wrap,body.signal-workstation[data-page] .signal-stage .tf-canvas-wrap { flex:1 1 0!important; height:0!important; min-height:100px!important; background:transparent!important; border:0!important; border-radius:0!important; margin:0!important; }
+body.signal-workstation[data-page] .signal-stage canvas { width:100%!important; height:100%!important; }
+body.signal-workstation[data-page] .signal-stage .legend { margin:0 0 10px!important; min-height:24px; }
+body.signal-workstation[data-page] .signal-stage .legend button { background:transparent!important; border-color:#2a3c53!important; color:#aebfd2!important; padding:4px 9px!important; }
+body.signal-workstation[data-page] .signal-stage .empty-state,body.signal-workstation[data-page] .signal-stage .run-empty { color:#8597ae!important; background:none!important; }
+body.signal-workstation[data-page] .pulse-ring { animation:none!important; }
+body.signal-workstation[data-page] .signal-stage .analysis-lens-bar { min-height:56px!important; flex-shrink:0; gap:0!important; padding:0 16px; border-bottom:1px solid #253448; background:#101c2c; margin:0!important; z-index:auto!important; }
+body.signal-workstation[data-page] .analysis-lenses { min-height:56px!important; background:none!important; border:0!important; border-radius:0!important; padding:0!important; gap:0!important; overflow:auto; scrollbar-width:none; }
+body.signal-workstation[data-page] .lens-group { border-color:#253448!important; padding:0 8px!important; gap:2px!important; }
+body.signal-workstation[data-page] .lens-group>span { display:none!important; }
+body.signal-workstation[data-page] .analysis-lenses button { color:#8ea1bb!important; font:12px/1 Consolas,"Microsoft YaHei UI",monospace!important; min-height:34px!important; padding:0 12px!important; background:transparent!important; border:0!important; box-shadow:none!important; border-radius:5px!important; }
+body.signal-workstation[data-page] .analysis-lenses button[aria-selected=true] { background:#1c3559!important; color:#a3ccff!important; box-shadow:inset 0 -2px #59a9ff!important; }
+body.signal-workstation[data-page] .analysis-lens-settings { position:static!important; margin-left:auto; }
+body.signal-workstation[data-page] .analysis-lens-settings-trigger { background:transparent!important; border-color:#30445e!important; color:#b4c9e1!important; padding:0 10px!important; height:34px!important; min-height:34px!important; white-space:nowrap; }
+body.signal-workstation[data-page] #analysisLensSettingsPopover { position:absolute!important; top:56px!important; right:0!important; bottom:0!important; left:auto!important; width:300px!important; max-width:300px!important; max-height:none!important; border:0!important; border-left:1px solid var(--wg-line)!important; border-radius:0!important; padding:18px!important; background:var(--wg-surface)!important; color:var(--wg-ink)!important; box-shadow:none!important; overflow:auto!important; z-index:30; }
+body.signal-workstation[data-page] .analysis-lens-settings-popover[hidden] { display:none!important; }
+body.signal-workstation[data-page] .analysis-lens-settings-popover .panel { padding:0!important; border:0!important; background:transparent!important; border-radius:0!important; }
+body.signal-workstation[data-page] .analysis-lens-settings-popover .form-grid { grid-template-columns:1fr 1fr!important; }
+body.signal-workstation[data-page] .signal-stage>.scope-panel,body.signal-workstation[data-page] .signal-context-strip,body.signal-workstation[data-page] .analysis-inspector { transition:margin-right 250ms cubic-bezier(.2,.75,.2,1); }
+body.signal-workstation[data-page].signal-inspector-open .signal-stage>.scope-panel,body.signal-workstation[data-page].signal-inspector-open .signal-context-strip,body.signal-workstation[data-page].signal-inspector-open .analysis-inspector { margin-right:300px!important; }
+body.signal-workstation[data-page] .signal-inspector-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; font-size:15px; }
+body.signal-workstation[data-page] .signal-inspector-heading button { background:none; border:1px solid var(--wg-line); color:var(--wg-muted); border-radius:5px; width:28px; height:28px; }
+body.signal-workstation[data-page] .signal-stage .analysis-inspector { flex-shrink:0; padding:12px 20px!important; min-height:58px; border:0!important; border-top:1px solid #253448!important; color:#a3b2c5!important; background:#101c2c!important; gap:14px!important; grid-template-columns:minmax(90px,1fr) auto auto auto auto!important; }
+body.signal-workstation[data-page] .analysis-inspector strong { color:#d5e0ee!important; font-size:11px!important; }
+body.signal-workstation[data-page] .analysis-inspector span { color:#8093ad!important; font-size:9px!important; }
+body.signal-workstation[data-page] .signal-stage .metrics { background:none!important; border:0!important; border-bottom:1px solid #253448!important; padding:0 0 12px!important; margin:0 0 14px!important; min-height:44px; flex-shrink:0; }
+body.signal-workstation[data-page] .metrics article { min-height:0!important; background:none!important; border:0!important; padding:0 16px 0 0!important; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+body.signal-workstation[data-page] .metrics article span { font-size:11px!important; color:#8093ad!important; }
+body.signal-workstation[data-page] .metrics article strong { margin:0!important; font:18px/1.2 Consolas,monospace!important; color:#d8e8fb!important; }
+body.signal-workstation[data-page] .metrics article small { font-size:10px!important; color:#8093ad!important; }
+body.signal-workstation[data-page] .signal-action-strip { display:flex; flex-shrink:0; min-height:58px; padding:10px 18px; gap:8px; align-items:center; border-top:1px solid #253448; background:#101c2c; }
+body.signal-workstation[data-page] .signal-action-strip button { min-height:34px; padding:0 14px; background:#17273b; border:1px solid #30445e; color:#b8cbe1; border-radius:6px; white-space:nowrap; }
+body.signal-workstation[data-page] .signal-action-strip #captureBtn { background:#2f73ff!important; color:white!important; border-color:#2f73ff!important; width:auto!important; flex:0 0 auto!important; margin:0!important; }
+body.signal-workstation[data-page] .signal-action-strip #stopBtn { width:auto!important; margin:0!important; }
+body.signal-workstation[data-page] .signal-action-spacer { flex:1; }
+body.signal-workstation[data-page] .signal-data-origin { font:10px/1.4 Consolas,"Microsoft YaHei UI",monospace; color:#a7bdd7; }
+body.signal-workstation[data-page] .signal-stage .timebar { font-size:11px; padding:8px 0 4px; color:#8ea1bb; }
+body.signal-workstation[data-page] .event-panel { flex:0 0 28px; padding:0 2px!important; border:0!important; min-height:0!important; font-size:10px!important; }
+body.signal-workstation[data-page] .event-panel strong { font-size:10px!important; font-weight:400; }
+body.signal-workstation[data-page] .signal-file-summary { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:var(--wg-surface); color:var(--wg-ink); border:1px solid var(--wg-line); border-radius:8px; padding:12px; }
+body.signal-workstation[data-page] .signal-file-summary strong { display:block; font-size:14px; max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+body.signal-workstation[data-page] .signal-file-summary small { display:block; color:var(--wg-muted); font:10px/1.6 Consolas,monospace; }
+body.signal-workstation[data-page] .signal-file-drawer { position:absolute; z-index:80; inset:0 0 0 auto; width:min(540px,100%); background:var(--wg-shell); color:var(--wg-ink); border:1px solid var(--wg-line); border-radius:10px; padding:18px; overflow:auto; box-shadow:-12px 0 40px #0002; }
+body.signal-workstation[data-page] .signal-file-drawer[hidden] { display:none; }
+body.signal-workstation[data-page] .signal-file-drawer #analysisFileList { min-height:180px; width:100%; }
+body.signal-workstation[data-page] .signal-filter-controls { margin-top:18px; border-top:1px solid var(--wg-line); padding-top:16px; }
+body.signal-workstation[data-page] .signal-context-strip { height:78px; flex-shrink:0; padding:8px 20px 0; border-bottom:1px solid #253448; }
+body.signal-workstation[data-page] .signal-context-label { display:flex; gap:12px; align-items:center; font:10px/1.2 Consolas,"Microsoft YaHei UI",monospace; color:#90a7c4; height:18px; }
+body.signal-workstation[data-page] .signal-context-label strong { font-weight:400; color:#d0e2fa; }
+body.signal-workstation[data-page] .signal-stage .signal-context-canvas { display:block; height:46px!important; width:100%; }
+body.signal-workstation[data-page] .signal-context-strip[hidden] { display:none!important; }
+body.signal-workstation[data-page] .signal-stage .experimental-result-panel { overflow-y:auto!important; }
+body.signal-workstation[data-page] .experimental-result-panel>.scope-toolbar { flex-shrink:0; }
+body.signal-workstation[data-page] .experimental-result-panel #modeMetricCards { flex:0 0 auto; grid-template-columns:repeat(7,minmax(108px,1fr)); height:auto; overflow-x:auto; border:0; border-bottom:1px solid #253448; border-radius:0; margin:0 0 12px; }
+body.signal-workstation[data-page] #modeMetricCards article { padding:8px 10px; background:none!important; border:0!important; }
+body.signal-workstation[data-page] #modeMetricCards strong { font-size:14px; }
+body.signal-workstation[data-page] .signal-stage .mode-canvas-wrap { flex:0 0 auto!important; height:220px!important; min-height:220px!important; background:none!important; border:0!important; margin:0!important; border-bottom:1px solid #253448!important; border-radius:0!important; }
+body.signal-workstation[data-page] .signal-stage .match-canvas-wrap { height:140px!important; min-height:140px!important; }
+body.signal-workstation[data-page] .signal-candidates summary { cursor:pointer; color:#8ea1bb; padding:14px 0; font-size:12px; }
+body.signal-workstation[data-page] .signal-selection { pointer-events:none; position:absolute; top:16px; bottom:30px; background:#59a9ff20; border-left:1px solid #59a9ff; border-right:1px solid #59a9ff; }
+body.signal-workstation[data-page] .signal-crosshair { pointer-events:none; position:absolute; top:17px; bottom:34px; border-left:1px solid #bfd8f080; }
+body.signal-workstation[data-page] .signal-crosshair[hidden] { display:none; }
+body.signal-workstation[data-page] .signal-control-disclosure>summary { cursor:pointer; color:var(--wg-muted); font-size:12px; padding:4px 0 12px; }
+body.signal-workstation[data-page] #analysisLensSettingsButton { background:transparent!important; color:#b4c9e1!important; }
+body.signal-workstation[data-page] .signal-filter-controls>.analysis-band-heading { display:none!important; }
+body.signal-workstation[data-page] .spectrum-window-row { grid-template-columns:10px minmax(0,1fr) minmax(0,1fr) 28px!important; gap:6px!important; }
+body.signal-workstation[data-page] .spectrum-window-row .spec-label { grid-column:2 / 4; }
+body.signal-workstation[data-page] .spectrum-window-row .spec-start { grid-column:2; }
+body.signal-workstation[data-page] .spectrum-window-row .spec-end { grid-column:3; }
+body.signal-workstation[data-page] .tf-colorbar i { background:linear-gradient(90deg,#080f19,#132848,#224b89,#2f73ff,#6fa4ff,#dce9ff)!important; }
+@keyframes signal-result-settle { from { opacity:.65; transform:translateY(3px); } to { opacity:1; transform:none; } }
+body.signal-workstation[data-page] .signal-result-settle { animation:signal-result-settle 180ms ease-out; }
+body.signal-workstation[data-page] .signal-lens-settle { animation:signal-result-settle 280ms ease-out; }
+@media (max-width:1366px) {
+  body.signal-workstation[data-page] .topbar { gap:12px; padding:0 20px!important; }
+  body.signal-workstation[data-page] .brand { min-width:150px; }
+  body.signal-workstation[data-page] .page-nav a { padding:0 8px; font-size:11px!important; }
+  body.signal-workstation[data-page] .analysis-instrument-id { display:none; }
+  body.signal-workstation[data-page] .workspace { padding:16px 20px 12px!important; gap:20px!important; }
+}
+@media (max-width:1100px) {
+  body.signal-workstation[data-page].signal-inspector-open .signal-stage>.scope-panel,body.signal-workstation[data-page].signal-inspector-open .signal-context-strip,body.signal-workstation[data-page].signal-inspector-open .analysis-inspector { margin-right:0!important; }
+  body.signal-workstation[data-page] .analysis-inspector { grid-template-columns:1fr 1fr 1fr!important; }
+  body.signal-workstation[data-page] .analysis-readout { grid-column:2 / 4; }
+  body.signal-workstation[data-page] .analysis-lenses button { padding:0 8px!important; }
+  body.signal-workstation[data-page] .page-nav a { padding:0 5px; font-size:10px!important; }
+}
+@media (max-width:980px) {
+  body.signal-workstation[data-page] .topbar { flex-wrap:nowrap!important; }
+  body.signal-workstation[data-page] .page-nav { order:0; width:auto; height:64px; min-width:0; }
+  body.signal-workstation[data-page] .page-nav a { flex:0 0 auto; }
+  body.signal-workstation[data-page] .workspace { grid-template-columns:230px minmax(0,1fr)!important; gap:16px!important; }
+}
+@media (max-width:760px) {
+  body.signal-workstation[data-page] .brand { min-width:130px; }
+  body.signal-workstation[data-page] .topbar { height:106px!important; min-height:106px!important; flex-wrap:wrap!important; justify-content:space-between; gap:0; padding-top:8px!important; }
+  body.signal-workstation[data-page] .page-nav { display:flex; order:3; width:100%; height:38px; }
+  body.signal-workstation[data-page] .workspace { height:calc(100dvh - 106px)!important; grid-template-columns:minmax(0,1fr)!important; padding:12px!important; }
+  body.signal-workstation[data-page] .control-stack { position:fixed!important; inset:118px 12px 12px; width:264px; max-width:calc(100vw - 24px); z-index:45; background:var(--wg-shell)!important; padding:16px!important; border:1px solid var(--wg-line)!important; border-radius:10px!important; display:none!important; }
+  body.signal-workstation[data-page].signal-mobile-controls .control-stack { display:block!important; }
+  body.signal-workstation[data-page] .signal-stage .analysis-inspector { grid-template-columns:1fr 1fr!important; padding:8px 12px!important; }
+  body.signal-workstation[data-page] .analysis-readout { grid-column:auto; }
+  body.signal-workstation[data-page] .workstation-intro { flex-direction:row!important; align-items:center!important; }
+  body.signal-workstation[data-page] .workstation-intro h2 { font-size:24px!important; }
+  body.signal-workstation[data-page] .analysis-app-status { display:none; }
+  body.signal-workstation[data-page] .signal-stage>.scope-panel { padding:12px!important; }
+  body.signal-workstation[data-page] .scope-interaction-help { display:none; }
+  body.signal-workstation[data-page] .metrics { grid-template-columns:repeat(4,1fr)!important; }
+  body.signal-workstation[data-page] .metrics article strong { font-size:14px!important; }
+  body.signal-workstation[data-page] .signal-data-origin { display:none; }
+}
+@media (prefers-reduced-motion:reduce) { body.signal-workstation[data-page] .signal-result-settle,body.signal-workstation[data-page] .signal-lens-settle { animation:none!important; } }
