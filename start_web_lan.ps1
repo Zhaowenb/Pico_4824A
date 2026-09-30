@@ -1,4 +1,4 @@
-param([switch]$FirewallOnly)
+﻿param([switch]$FirewallOnly)
 
 $ErrorActionPreference = "Stop"
 $ScriptPath = $MyInvocation.MyCommand.Path
