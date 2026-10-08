@@ -97,3 +97,32 @@ window.INTERFERENCE_GUIDE = [
     caution:"不要用闭合金属环包围磁致伸缩区域，以免涡流改变 TX 磁场与真实激励。"
   }
 ];
+
+/* Shared appearance for the independent experiment and its manual. */
+document.addEventListener('DOMContentLoaded',()=>{
+ const byId=id=>document.getElementById(id),panel=byId('workstationAppearanceSettings'),button=byId('workstationSettingsButton');
+ if(!panel||!button)return;
+ let accent='#2f73ff';
+ try {const saved=localStorage.getItem('waveguard-workstation-accent');if(/^#[0-9a-f]{6}$/i.test(saved||''))accent=saved;}catch(_){}
+ const color=byId('workstationAccentColor'),presets=byId('workstationAccentPreset');
+ const apply=()=>{
+  document.body.style.setProperty('--signal',accent);
+  const rgb=[1,3,5].map(i=>parseInt(accent.slice(i,i+2),16));
+  const high=rgb.map(v=>Math.round(v+(242-v)*.4));
+  document.body.style.setProperty('--signal-hi',`rgb(${high.join(',')})`);
+  document.body.style.setProperty('--wg-on-accent',rgb.map(v=>{const c=v/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0)>.179?'#111820':'#fff');
+  color.value=accent;presets.value=[...presets.options].some(o=>o.value===accent)?accent:'custom';
+  document.querySelectorAll('[data-analysis-theme-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.analysisThemeChoice===document.body.dataset.uiTheme)));
+  if(typeof drawWave==='function'){drawWave(selectedPreview||latestWave);drawCompare();drawFft();}
+ };
+ const setOpen=open=>{panel.hidden=!open;button.setAttribute('aria-expanded',String(open));if(open)panel.querySelector('button').focus();};
+ button.addEventListener('click',()=>setOpen(panel.hidden));byId('workstationSettingsClose').addEventListener('click',()=>{setOpen(false);button.focus();});
+ document.querySelectorAll('[data-analysis-theme-choice]').forEach(b=>b.addEventListener('click',()=>{
+  if(typeof applyUiTheme==='function')applyUiTheme(b.dataset.analysisThemeChoice,true);else applyManualTheme(b.dataset.analysisThemeChoice,true);apply();
+ }));
+ const save=value=>{if(!/^#[0-9a-f]{6}$/i.test(value))return;accent=value;try{localStorage.setItem('waveguard-workstation-accent',value);}catch(_){}apply();};
+ color.addEventListener('input',()=>save(color.value));presets.addEventListener('change',()=>{if(presets.value!=='custom')save(presets.value);else color.focus();});byId('workstationAppearanceReset').addEventListener('click',()=>save('#2f73ff'));
+ document.addEventListener('pointerdown',e=>{if(!panel.contains(e.target)&&!button.contains(e.target))setOpen(false);});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){setOpen(false);button.focus();}});
+ apply();
+});

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>WaveGuard · 实时测量</title>
-    <link rel="stylesheet" href="/styles.css?v=20260930-signal-workstation" />
+    <link rel="stylesheet" href="/styles.css?v=20261008-global-appearance-v1" />
   </head>
   <body data-page="measure" data-analysis-theme="light">
     <header class="topbar">
@@ -33,6 +33,9 @@
             <button type="button" data-analysis-theme-choice="dark" aria-pressed="false">Dark</button>
           </div>
         </div>
+        <button id="workstationSettingsButton" type="button" class="workstation-settings-button" aria-label="界面设置" title="界面设置" aria-expanded="false" aria-controls="workstationAppearanceSettings">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9.5 3-.6 2.4-2 .9L4.6 5.6 2.8 8.7l1.8 1.7-.2 2.3L2.8 14.5l1.8 3.1 2.4-.7 1.9 1.1.6 2.5h3.6l.6-2.5 2-1.1 2.3.7 1.8-3.1-1.7-1.8.1-2.3 1.6-1.7-1.8-3.1-2.3.7-2-.9L13.1 3Z"/><circle cx="11.3" cy="11.8" r="3.1"/></svg>
+        </button>
         <span id="statusDot" class="status-dot"></span>
         <div>
           <strong id="stateText">系统就绪</strong>
@@ -40,6 +43,21 @@
         </div>
       </div>
     </header>
+
+    <section id="workstationAppearanceSettings" class="workstation-appearance-settings" role="dialog" aria-label="界面设置" hidden>
+      <div class="appearance-heading"><h2>界面设置</h2><button id="workstationSettingsClose" type="button" aria-label="关闭界面设置">×</button></div>
+      <fieldset><legend>显示模式</legend><div class="appearance-modes">
+        <button type="button" data-analysis-theme-choice="light" aria-pressed="true">Light · 浅色</button>
+        <button type="button" data-analysis-theme-choice="dark" aria-pressed="false">Dark · 深色</button>
+      </div></fieldset>
+      <fieldset><legend>界面强调色</legend>
+        <div class="appearance-colors"><select id="workstationAccentPreset" aria-label="界面强调色方案">
+          <option value="#2f73ff">钴蓝</option><option value="#98704a">铜棕</option><option value="#478463">森林绿</option><option value="#8269b8">紫灰</option><option value="#667587">石板灰</option><option value="custom">自定义</option>
+        </select><input id="workstationAccentColor" type="color" value="#2f73ff" aria-label="自定义界面强调色" /></div>
+        <p>用于导航、按钮与选中状态。通道颜色保持 PicoScope 色序。</p>
+      </fieldset>
+      <button id="workstationAppearanceReset" type="button" class="appearance-reset">恢复默认强调色</button>
+    </section>
 
     <main class="workspace">
       <aside class="control-stack">
@@ -1054,6 +1072,6 @@
         <small class="trip-alarm-footnote">这是基于监测波形的“疑似跳闸”判断，不是 ATA 硬件状态回读；本次已完成采集及原始数据已保存。</small>
       </section>
     </div>
-    <script src="/app.js?v=20260930-signal-workstation"></script>
+    <script src="/app.js?v=20261008-global-appearance-v1"></script>
   </body>
 </html>
