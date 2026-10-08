@@ -58,6 +58,7 @@ from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
 from .time_frequency import time_frequency_map
 from . import interference
+from .file_browser import list_directory
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -1136,7 +1137,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {"/ui/workstation.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js"}:
+            if path in {"/ui/workstation.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js"}:
                 self._send_asset(path.lstrip("/"), "text/javascript; charset=utf-8")
             elif path == "/ui/workstation.css":
                 self._send_asset("ui/workstation.css", "text/css; charset=utf-8")
@@ -1307,6 +1308,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/awg-preview":
                 self._send_json(awg_preview_payload(payload))
+            elif path == "/api/files/list":
+                self._send_json(list_directory(str(payload.get("path", "")), PROJECT_DIR))
             elif path == "/api/analysis/browse":
                 self._send_json(discover_sources(str(payload.get("path", ""))))
             elif path == "/api/analysis/process":

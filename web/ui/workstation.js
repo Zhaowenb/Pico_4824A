@@ -45,13 +45,27 @@
     if(persist){write('waveguard-ui-theme',state.theme);write('waveguard-analysis-theme',state.theme);write('waveguard-workstation-accent',state.accent);}
     emit('signal-appearance');requestPaint();
   }
+  const motionRuns = new WeakMap(), activeMotions = new Set();
+  const motionPreference = matchMedia("(prefers-reduced-motion:reduce)");
+  motionPreference.addEventListener("change",()=>{if(motionPreference.matches){activeMotions.forEach(run=>run.cancel());activeMotions.clear();}});
+  function transition(node, kind='view') {
+    if (!node || node.hidden || motionPreference.matches) return;
+    motionRuns.get(node)?.cancel();
+    const panel = kind === 'panel';
+    const run = node.animate([
+      {opacity: panel ? .5 : .72, transform: panel ? 'translateX(14px)' : 'translateY(7px)'},
+      {opacity: 1, transform: 'translate(0,0)'}
+    ], {duration: panel ? 260 : 320, easing: 'cubic-bezier(.16,1,.3,1)'});
+    motionRuns.set(node, run);activeMotions.add(run);
+    run.onfinish=run.oncancel=()=>activeMotions.delete(run);
+  }
   function panelController({panel,trigger,host,onChange=()=>{},exclusive=true}) {
     const controller={panel,trigger,isOpen:()=>!panel.hidden,set(open,{focus=false}={}){
       const changed=panel.hidden===Boolean(open);
       if(open&&exclusive)panels.forEach(p=>{if(p!==controller)p.set(false);});
       panel.hidden=!open;trigger?.setAttribute('aria-expanded',String(open));
       host?.classList.toggle('wg-inspector-open',Boolean(open));
-      if(changed){onChange(Boolean(open));requestPaint();}
+      if(changed){onChange(Boolean(open));if(open)transition(panel,"panel");requestPaint();}
       if(focus){if(open)panel.querySelector('button,input,select,textarea')?.focus();else trigger?.focus();}
     }};
     panels.add(controller);
@@ -81,7 +95,7 @@
     return stage.control;
   }
   function tabs({buttons,onSelect,selected=0}) {
-    const select=index=>{buttons.forEach((button,i)=>{button.setAttribute('aria-pressed',String(i===index));button.setAttribute('aria-selected',String(i===index));});onSelect(index);requestPaint();};
+    const select=index=>{buttons.forEach((button,i)=>{button.setAttribute('aria-pressed',String(i===index));button.setAttribute('aria-selected',String(i===index));});onSelect(index);transition(buttons[index]?.closest(".wg-stage")?.querySelector(".wg-stage-main"));requestPaint();};
     buttons.forEach((button,index)=>{button.type='button';button.addEventListener('click',()=>select(index));});select(selected);return {select};
   }
   function markSelection(buttons,predicate) {
@@ -114,10 +128,12 @@
     observe(main);return {shell,controls,main,intro};
   }
   function activate(route) {
-    if(state.route!==route){state.route=route;panels.forEach(p=>p.set(false));if(state.focus)setFocus(false);}
+    const routeChanged=state.route!==route;
+    if(routeChanged){state.route=route;panels.forEach(p=>p.set(false));if(state.focus)setFocus(false);}
     stages.forEach((view,key)=>view.stage.hidden=key!==route);
     document.querySelectorAll('[data-pages]:not(.wg-stage)').forEach(node=>node.dataset.wgRouteHidden=String(!node.dataset.pages.split(/\s+/).includes(route)));
     document.querySelectorAll('.wg-nav a').forEach(link=>{const active=link.dataset.nav===route;link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
+    if(routeChanged){const rail=document.querySelector('.wg-controls');if(rail)rail.scrollTop=0;transition(stages.get(route)?.stage);transition(document.querySelector(".wg-intro"));transition(document.querySelector(".wg-controls"));}
     requestPaint();
   }
   function bootstrap() {
@@ -137,9 +153,15 @@
     document.addEventListener('pointerdown',e=>{if(control.isOpen()&&!settings.contains(e.target)&&!button.contains(e.target))control.set(false);});
     appearance();
   }
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'){const open=[...panels].reverse().find(p=>p.isOpen());if(open){event.preventDefault();open.set(false,{focus:true});}document.body.classList.remove('wg-controls-open');}});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'){if(event.target.closest('dialog[open]'))return;const open=[...panels].reverse().find(p=>p.isOpen());if(open){event.preventDefault();open.set(false,{focus:true});}document.body.classList.remove('wg-controls-open');}});
   window.addEventListener('resize',requestPaint);
   window.addEventListener('storage',event=>{if(['waveguard-ui-theme','waveguard-workstation-accent'].includes(event.key))appearance({theme:read('waveguard-ui-theme','light'),accent:read('waveguard-workstation-accent','#2f73ff')});});
-  window.WaveGuardUI=Object.freeze({el,createStage,bindInspector,panelController,tabs,markSelection,mountShell,activate,appearance,palette,observe,requestPaint,registerPainter:(key,paint)=>painters.set(key,paint),getStage:key=>stages.get(key),channelColors,state});
+  window.WaveGuardUI=Object.freeze({transition,el,createStage,bindInspector,panelController,tabs,markSelection,mountShell,activate,appearance,palette,observe,requestPaint,registerPainter:(key,paint)=>painters.set(key,paint),getStage:key=>stages.get(key),channelColors,state});
+  document.addEventListener('change', event=>{
+    if(event.target.matches('.application-view-picker select,#lcrAnalysisMode,#lcrMeasurementMode'))
+      requestAnimationFrame(()=>transition(stages.get(state.route)?.content));
+  });
+  window.addEventListener('signal-lens-change',()=>requestAnimationFrame(()=>transition(stages.get(state.route)?.content)));
+  document.addEventListener('toggle',event=>{if(event.target.matches('details')&&event.target.open)transition(event.target);},true);
   bootstrap();
 })();

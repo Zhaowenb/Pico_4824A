@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WaveGuard · 干扰类型判别实验操作手册</title><link rel="stylesheet" href="manual.css?v=shared-ui-v1"><link rel="stylesheet" href="/ui/workstation.css?v=shared-ui-v1"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WaveGuard · 干扰类型判别实验操作手册</title><link rel="stylesheet" href="manual.css?v=shared-ui-v2"><link rel="stylesheet" href="/ui/workstation.css?v=shared-ui-v2"></head>
 <body data-ui-theme="light" class="waveguard-appearance">
 <header data-wg-header></header>
 
@@ -14,4 +14,5 @@
 <section id="files"><div class="tag">数据</div><h2>06 · 保存位置、文件与复算</h2><table><thead><tr><th>文件</th><th>内容</th><th>用途</th></tr></thead><tbody><tr><td><code>data/interference/&lt;会话编号&gt;/session.json</code></td><td>锁定配置、条件、人工变量、时间窗、逐次指标、完成状态</td><td>刷新恢复、JSON 导出</td></tr><tr><td><code>runs/&lt;run_id&gt;.npz</code></td><td>所有启用通道的完整原始时间序列与配置</td><td>复核波形、重新分析</td></tr><tr><td><code>runs/&lt;run_id&gt;_fft.npz</code></td><td>各窗口完整 FFT 频率/幅值/相位</td><td>频谱复核</td></tr><tr><td><code>runs.csv</code></td><td>导出时生成的逐次指标表</td><td>在表格软件中整理</td></tr></tbody></table><p>改变统一基线、尾振或回波窗后，使用“用当前窗口重新分析已存数据”；这会更新指标和 FFT 文件，不改写原始波形。单次 t₀ 可在待保存波形上标记。若需要完全不同的采样设置，建立新会话，避免跨条件比较不同仪器配置。</p></section>
 <section id="trouble"><div class="tag">排查</div><h2>07 · 常见问题与处理</h2><dl class="faq"><dt>页面打不开或按钮无响应</dt><dd>确认 WaveGuard 本机服务仍在运行，并从主工作站进入干扰实验；直接双击采集页 HTML 无法调用本机 API。</dd><dt>等待触发后报错</dt><dd>确认参考通道已接入有效低压监测信号、触发阈值位于量程内、触发沿与脉冲一致。不要为绕过错误而随意关闭触发。</dd><dt>保存提示窗口超出记录</dt><dd>检查 t₀、触发前比例、采样时长、尾振和回波窗，确保所有窗口完整落在波形内。</dd><dt>回波指标为空</dt><dd>先填写回波开始/结束，再点击重新分析；窗口必须完整落在当前记录内。</dd><dt>原始波形与图上的点数不同</dt><dd>绘图使用降采样预览，指标、原始 NPZ 和 FFT 由完整采样计算。</dd><dt>两个条件看起来差很多，但页面说证据不足</dt><dd>先确认重复数、溢出、实际接线记录和拟合所需的多个参数点；相关和经验拟合不是唯一机制证明。</dd><dt>Star/Kelvin 没改善</dt><dd>核查长 BNC 屏蔽、USB、机壳和供电线是否仍构成并联公共回流；若实际回流未分开，不能用该负结果排除公共阻抗。</dd></dl></section>
 <footer>WaveGuard · 对应本地 PicoScope 4824A 干扰类型判别工作区。实际硬件额定值、接线安全以设备手册和现场核验为准。</footer>
-</main></div><script src="/ui/workstation.js?v=shared-ui-v1"></script><script src="guide.js?v=shared-ui-v1"></script><script src="manual.js?v=shared-ui-v1"></script></body></html>
+</main></div><script src="/ui/workstation.js?v=shared-ui-v2"></script><script src="guide.js?v=shared-ui-v2"></script><script src="manual.js?v=shared-ui-v2"></script><script src="/ui/file-picker.js?v=shared-ui-v2"></script>
+  </body></html>

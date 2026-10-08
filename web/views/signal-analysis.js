@@ -210,7 +210,7 @@ function signalTimeAtPixel(pixelX, width, startUs, endUs) {
     $('analysisCursorValue').textContent=`${(result.frequency_hz[row]/1000).toFixed(2)} kHz · ${result.values_db[row][col].toFixed(1)} dB`;
     drawContext();
   });
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'){if(!fileDrawer.hidden)setDrawer(false);body.classList.remove('signal-mobile-controls');}});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'){if(event.target.closest('dialog[open]'))return;if(!fileDrawer.hidden)setDrawer(false);body.classList.remove('signal-mobile-controls');}});
   // Bottom export actions remain available without opening FFT settings.
   const footer=analysisStage.querySelector('.analysis-inspector');
   const exportActions=create('div','signal-action-strip');
