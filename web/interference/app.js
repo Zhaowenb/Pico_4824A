@@ -85,3 +85,30 @@ $("waveChart").onclick=event=>{if(!captureReady||!latestWave)return;const rect=$
 document.querySelectorAll("[data-ui-theme-choice]").forEach(button=>button.addEventListener("click",()=>applyUiTheme(button.dataset.uiThemeChoice,true)));
 applyUiTheme(localStorage.getItem(UI_THEME_KEY)||"light");
 initialize().catch(e=>message(e.message));
+
+
+// Presentation only: experiment context, genuine data, and a persistent action strip.
+(() => {
+ const main=document.querySelector('section.main'),task=document.querySelector('.experiment-workspace');
+ const make=(tag,cls,text='')=>{const n=document.createElement(tag);n.className=cls;n.textContent=text;return n;};
+ document.body.classList.add('experiment-workstation');
+ document.querySelector('main>aside').append($('newSession'));
+ const intro=make('div','experiment-intro'),heading=make('h1','','干扰实验'),detail=make('span','','PicoScope 4824A · 实验会话');intro.append(heading,detail);
+ const stage=make('section','experiment-signal-stage'),bar=make('div','experiment-view-tabs'),viewport=make('div','experiment-viewport'),inspector=make('aside','experiment-inspector'),footer=make('footer','experiment-actions');
+ const panels=[task,...main.querySelectorAll('.data-stage,.evidence-stage')];
+ const names=['接线与条件','波形 / 频谱','条件比较','综合证据'];
+ let currentView=0;
+ function paint(){requestAnimationFrame(()=>{if(latestWave||selectedPreview)drawWave(latestWave||selectedPreview);drawFft();drawCompare();});}
+ panels.forEach((panel,i)=>{viewport.append(panel);const b=make('button','',names[i]);b.type='button';bar.append(b);b.onclick=()=>selectView(i);});
+ function selectView(index){currentView=index;panels.forEach((n,i)=>n.hidden=i!==index);[...bar.querySelectorAll('[data-view]')].forEach((n,i)=>n.setAttribute('aria-pressed',String(i===index)));paint();}
+ [...bar.children].forEach((n,i)=>n.dataset.view=String(i));
+ const params=make('button','experiment-parameters','会话 / 分析窗口');params.type='button';params.setAttribute('aria-expanded','false');bar.append(params);
+ const title=make('div','experiment-inspector-heading'),close=make('button','','×');close.type='button';close.setAttribute('aria-label','关闭实验参数');title.append(make('strong','','实验参数'),close);inspector.append(title,$('setup'),$('windowsBox'));inspector.hidden=true;
+ function toggle(open){inspector.hidden=!open;stage.classList.toggle('has-inspector',open);params.setAttribute('aria-expanded',String(open));paint();}params.onclick=()=>toggle(inspector.hidden);close.onclick=()=>toggle(false);
+ footer.append(task.querySelector('.actions'),task.querySelector('#message'));stage.append(bar,viewport,inspector,footer);main.prepend(intro,stage);
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!inspector.hidden){toggle(false);params.focus();}});
+ $('createSession').addEventListener('click',()=>{const check=()=>{if(session){toggle(false);selectView(0);}else setTimeout(()=>{if(session){toggle(false);selectView(0);}},800);};setTimeout(check,400);});
+ $('startCondition').addEventListener('click',()=>{if(checklistReady()&&session)selectView(1);});
+ $('newSession').addEventListener('click',()=>setTimeout(()=>{if(!session)toggle(true);},400));
+ const observer=new ResizeObserver(paint);observer.observe(viewport);selectView(0);toggle(!session);
+})();

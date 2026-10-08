@@ -188,3 +188,56 @@ body.waveguard-appearance .data-stage :is(th,td) { border-color:var(--stage-line
 @media print { .workstation-settings-button,.workstation-appearance-settings { display:none!important; } }
 
 body.waveguard-appearance :is(.actions button,.button,#createSession,#restoreSession) { color:var(--wg-on-accent,#fff); }
+
+/* Same spatial model as the signal workstation; original experiment controls survive. */
+body.experiment-workstation {height:100dvh;overflow:hidden;}
+.experiment-workstation .topbar {height:64px;min-height:64px;padding:0 24px;gap:24px;}
+.experiment-workstation .brand {min-width:174px;}.experiment-workstation .brand strong {font-size:21px;}.experiment-workstation .brand small {display:none;}.experiment-workstation .workspaceHeading {display:none;}
+.experiment-workstation .headerActions {margin-left:auto;}
+.experiment-workstation>main {height:calc(100dvh - 64px);display:grid;grid-template-columns:264px minmax(0,1fr);gap:24px;padding:20px 24px 16px;max-width:none;margin:0;overflow:hidden;}
+.experiment-workstation main>aside {width:auto;position:static;min-height:0;overflow:auto;background:none;border:0;border-radius:0;box-shadow:none;padding:0;scrollbar-width:thin;}
+.experiment-workstation main>aside .asideHeading {padding:4px 0 16px;}.experiment-workstation main>aside h2 {font-size:16px;}
+.experiment-workstation #experimentList button {border:0;border-radius:6px;background:transparent;margin:3px 0;padding:10px 12px;font-size:12px;}
+.experiment-workstation #experimentList button.active {background:color-mix(in srgb,var(--signal) 9%,var(--surface));box-shadow:inset 2px 0 var(--signal);}
+.experiment-workstation section.main {display:flex;flex-direction:column;min-width:0;min-height:0;gap:14px;overflow:hidden;}
+.experiment-intro {min-height:56px;display:flex;align-items:center;gap:20px;}.experiment-intro h1 {font-size:28px;line-height:1.2;margin:0;}.experiment-intro span {font:11px Consolas,monospace;color:var(--muted);margin-left:auto;}
+.experiment-signal-stage {position:relative;display:flex;flex-direction:column;flex:1;min-height:0;border:1px solid var(--stage-line);border-radius:14px;overflow:hidden;background:var(--stage);color:var(--stage-text);}
+.experiment-view-tabs {display:flex;gap:4px;padding:10px 16px;min-height:54px;align-items:center;background:var(--stage-2);border-bottom:1px solid var(--stage-line);flex-shrink:0;}
+.experiment-view-tabs button {font-size:12px;background:none;color:var(--muted);border:0;padding:8px 12px;border-radius:5px;white-space:nowrap;}
+.experiment-view-tabs button[aria-pressed=true] {background:color-mix(in srgb,var(--signal) 14%,var(--stage-2));color:var(--signal-hi);}
+.experiment-view-tabs .experiment-parameters {margin-left:auto;border:1px solid var(--stage-line);color:var(--stage-text);}
+.experiment-viewport {flex:1;min-height:0;overflow:auto;padding:18px 20px;scrollbar-width:thin;transition:margin-right 240ms ease;}
+.experiment-workstation .experiment-viewport>article {background:none;border:0;border-radius:0;padding:0;box-shadow:none;margin:0;color:var(--stage-text);}
+.experiment-workstation .experiment-viewport>article[hidden] {display:none!important;}
+.experiment-viewport h2 {font-size:16px;}.experiment-viewport h3 {font-size:13px;}.experiment-viewport p {font-size:12px;line-height:1.75;}
+.experiment-workstation .experiment-viewport .guidePanel {background:transparent;border:0;border-top:1px solid var(--stage-line);border-radius:0;padding:14px 0;box-shadow:none;}
+.experiment-workstation .experiment-viewport input,.experiment-workstation .experiment-viewport select,.experiment-workstation .experiment-viewport textarea {background:var(--stage-2);color:var(--stage-text);border-color:var(--stage-line);}
+.experiment-workstation .experiment-viewport .charts {display:grid;grid-template-columns:minmax(0,1fr);gap:20px;}.experiment-workstation .experiment-viewport .charts canvas {height:clamp(240px,35dvh,520px);}
+.experiment-inspector {position:absolute;right:0;top:54px;bottom:0;width:300px;padding:18px;background:var(--surface);color:var(--ink);border-left:1px solid var(--line);overflow:auto;z-index:15;scrollbar-width:thin;}
+.experiment-inspector[hidden] {display:none!important;}.experiment-inspector-heading {display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}.experiment-inspector-heading button {background:none;color:var(--muted);border:1px solid var(--line);padding:2px 9px;}
+.experiment-workstation .experiment-inspector details {background:none;box-shadow:none;border:0;border-radius:0;padding:0;margin-bottom:20px;}.experiment-inspector summary {font-size:13px;}.experiment-inspector .grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px;}.experiment-inspector label {font-size:12px;}.experiment-inspector input,.experiment-inspector select {min-height:36px;font:12px Consolas,"Microsoft YaHei UI",monospace;}.experiment-inspector p {font-size:11px;}
+.experiment-signal-stage.has-inspector .experiment-viewport,.experiment-signal-stage.has-inspector .experiment-actions {margin-right:300px;}
+.experiment-actions {flex-shrink:0;min-height:62px;padding:12px 20px;border-top:1px solid var(--stage-line);background:var(--stage-2);}.experiment-actions .actions {display:flex;flex-wrap:wrap;gap:8px;margin:0;}.experiment-actions button {font-size:12px;min-height:36px;padding:8px 14px;}.experiment-actions #message {margin:8px 0 0;font-size:11px;}.experiment-actions #message:empty {display:none;}
+@media(max-width:1100px){.experiment-signal-stage.has-inspector .experiment-viewport,.experiment-signal-stage.has-inspector .experiment-actions {margin-right:0;}.experiment-workstation>main {gap:16px;padding:16px;grid-template-columns:240px minmax(0,1fr);}.experiment-view-tabs {flex-wrap:wrap;}}
+@media(max-width:760px){body.experiment-workstation {height:auto;overflow:auto;}.experiment-workstation .topbar {padding:10px 16px;gap:10px;height:auto;flex-wrap:wrap;}.experiment-workstation>main {height:auto;display:block;padding:12px;}.experiment-workstation main>aside {max-height:200px;margin-bottom:16px;}.experiment-signal-stage {min-height:75dvh;}.experiment-intro span {display:none;}.experiment-view-tabs {padding:8px;}.experiment-inspector {width:min(300px,100%);}.experiment-actions {padding:10px;}}
+@media(prefers-reduced-motion:reduce){.experiment-viewport {transition:none;}}
+
+.experiment-workstation>main {align-items:stretch;min-height:0;}
+.experiment-workstation section.main {height:100%;}
+.experiment-workstation .experiment-viewport #conditions button {background:var(--stage-2);color:var(--stage-text);border-color:var(--stage-line);}
+.experiment-workstation .experiment-viewport #conditions button.active {background:color-mix(in srgb,var(--signal) 12%,var(--stage-2));border-color:var(--signal);}
+.experiment-workstation .experiment-viewport .muted,.experiment-workstation .experiment-viewport #purpose,.experiment-workstation .experiment-viewport #wiring,.experiment-workstation .experiment-viewport .guidePanel {color:#a5adb8;}
+.experiment-workstation .experiment-viewport .warning {color:var(--copper);}
+@media(max-width:760px){.experiment-workstation section.main {height:auto;}}
+
+.application-navigation {display:flex;gap:2px;flex:1;justify-content:flex-end;min-width:0;height:64px;align-items:stretch;}
+.application-navigation a {display:flex;align-items:center;padding:0 12px;color:var(--muted);text-decoration:none;font-size:12px;white-space:nowrap;letter-spacing:.04em;}
+.application-navigation a[aria-current="page"] {color:var(--signal);background:color-mix(in srgb,var(--signal) 6%,var(--surface));box-shadow:inset 0 -2px var(--signal);}
+.experiment-workstation .headerState {display:none;}.experiment-workstation main>aside>#newSession {margin:8px 0;}
+.experiment-workstation .experiment-viewport .condition {background:var(--stage-2);color:var(--stage-text);border-color:var(--stage-line);}
+.experiment-workstation .experiment-viewport .condition.active {border-color:color-mix(in srgb,var(--signal) 50%,var(--stage-line));background:color-mix(in srgb,var(--signal) 8%,var(--stage-2));}
+.experiment-workstation .experiment-viewport .guideCheck {background:var(--stage-2);color:var(--stage-text);border-color:var(--stage-line);}
+.experiment-workstation .experiment-viewport .guidePanel li {color:#a5adb8;font-size:12px;line-height:1.8;}
+.experiment-workstation .experiment-inspector .restore {display:block;}.experiment-inspector .restore label {min-width:0;}.experiment-inspector .restore button {margin-top:8px;}
+@media(max-width:1100px){.application-navigation a {padding:0 8px;font-size:11px;}.experiment-workstation .topbar {gap:12px;}}
+@media(max-width:760px){.application-navigation {order:3;flex:0 0 100%;height:36px;overflow:auto;justify-content:flex-start;}.application-navigation a {padding:0 10px;}}

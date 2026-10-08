@@ -2147,3 +2147,122 @@ body.waveguard-appearance[data-page] :is(.sweep-run-canvas-wrap,.lcr-chart,.lcr-
 body.waveguard-appearance[data-page] .panel-heading h2 { font-size:16px!important; }
 body.waveguard-appearance[data-page] label { font-size:12px!important; }
 body.waveguard-appearance[data-page] :is(.progress-track i,.workspace-idle-signal) { background:var(--wg-signal)!important; }
+
+/* Application structure follows the approved signal workstation. */
+body.instrument-workstation[data-page] { height:100dvh!important; overflow:hidden!important; font-family:"Segoe UI","Microsoft YaHei UI",sans-serif; }
+body.instrument-workstation[data-page] .topbar { height:64px!important; min-height:64px!important; padding:0 24px!important; gap:24px; }
+body.instrument-workstation[data-page] .brand { min-width:174px; }
+body.instrument-workstation[data-page] .brand h1 { font-size:21px; letter-spacing:-.035em; }
+body.instrument-workstation[data-page] .brand .eyebrow { display:none; }
+body.instrument-workstation[data-page] .page-nav { gap:2px; }
+body.instrument-workstation[data-page] .page-nav a { font-size:12px!important; padding:0 12px; letter-spacing:.04em; }
+body.instrument-workstation[data-page] .analysis-global-tools>span { display:none; }
+body.instrument-workstation[data-page] .connection>#statusDot, body.instrument-workstation[data-page] .connection>div:not(.analysis-global-tools) { display:none; }
+body.instrument-workstation[data-page] .workspace { width:100%!important; height:calc(100dvh - 64px)!important; min-height:0!important; padding:20px 24px 16px!important; display:grid!important; grid-template-columns:264px minmax(0,1fr)!important; gap:24px!important; align-items:stretch!important; overflow:hidden!important; }
+body.instrument-workstation[data-page].signal-focus-transition .workspace { transition:grid-template-columns 350ms cubic-bezier(.2,.75,.2,1),gap 350ms; }
+body.instrument-workstation[data-page].signal-focus .workspace { grid-template-columns:0 minmax(0,1fr)!important; gap:0!important; }
+body.instrument-workstation[data-page] .control-stack { position:relative!important; top:0!important; align-self:stretch!important; max-height:100%!important; min-height:0; min-width:0; padding:0!important; border:0!important; border-radius:0!important; background:none!important; box-shadow:none!important; overflow:auto!important; scrollbar-width:thin; }
+body.instrument-workstation[data-page].signal-focus .control-stack { overflow:hidden!important; opacity:0; pointer-events:none; }
+body.instrument-workstation[data-page] .control-stack>.panel { padding:18px 0!important; background:none!important; border:0!important; border-bottom:1px solid var(--wg-line)!important; border-radius:0!important; box-shadow:none!important; }
+body.instrument-workstation[data-page] .control-stack>.panel:first-child { padding-top:4px!important; }
+body.instrument-workstation[data-page] .panel-heading h2 { font-size:16px!important; font-weight:650; letter-spacing:.04em; }
+body.instrument-workstation[data-page] .panel-heading { margin-bottom:16px!important; }
+body.instrument-workstation[data-page] .step, body.instrument-workstation[data-page] .analysis-panel-kicker { display:none; }
+body.instrument-workstation[data-page] label { font-size:12px!important; line-height:1.5; letter-spacing:.04em; }
+body.instrument-workstation[data-page] input,body.instrument-workstation[data-page] select { font:12px/1.4 Consolas,"Microsoft YaHei UI",monospace!important; min-height:36px!important; padding:8px!important; border-radius:6px!important; }
+body.instrument-workstation[data-page] input[type=checkbox] { min-height:0!important; padding:0!important; }
+body.instrument-workstation[data-page] .form-grid { gap:12px 10px!important; }
+body.instrument-workstation[data-page] button { font-size:12px!important; letter-spacing:.04em; }
+body.instrument-workstation[data-page] .subhead { margin:18px 0 10px!important; font-size:12px!important; }
+body.instrument-workstation[data-page] .subhead small { font-size:10px!important; }
+body.instrument-workstation[data-page] .analysis-meta { font:10px/1.7 Consolas,monospace!important; background:transparent!important; border:0!important; padding:10px 0!important; overflow-wrap:anywhere; }
+body.instrument-workstation[data-page] .wiring-note { font-size:11px!important; line-height:1.7; }
+body.instrument-workstation[data-page] .analysis-channel-grid { gap:6px!important; }
+body.instrument-workstation[data-page] .analysis-channel-grid button.active { color:var(--wg-signal)!important; background:color-mix(in srgb,var(--wg-signal) 9%,var(--wg-surface))!important; border-color:color-mix(in srgb,var(--wg-signal) 28%,var(--wg-line))!important; box-shadow:none!important; }
+body.instrument-workstation[data-page] .channel-grid { grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:6px!important; }
+body.instrument-workstation[data-page] .channel-card { background:transparent!important; box-shadow:none!important; }
+body.instrument-workstation[data-page] .monitor-stack { display:flex!important; flex-direction:column!important; position:relative; min-width:0; min-height:0; gap:14px!important; overflow:hidden!important; }
+body.instrument-workstation[data-page] .workstation-intro { min-height:56px!important; padding:0!important; border:0!important; flex-shrink:0; gap:14px; }
+body.instrument-workstation[data-page] .workstation-intro h2 { font:700 28px/1.2 "Segoe UI","Microsoft YaHei UI",sans-serif!important; letter-spacing:-.025em; }
+body.instrument-workstation[data-page] .workstation-intro .eyebrow { font:10px/1.3 Consolas,monospace!important; letter-spacing:.14em; margin-bottom:5px!important; }
+body.instrument-workstation[data-page] .analysis-instrument-id { font:10px/1.3 Consolas,monospace!important; letter-spacing:.04em; }
+body.instrument-workstation[data-page] .analysis-view-state { font-size:11px!important; }
+body.instrument-workstation[data-page] .signal-focus-button { margin-left:auto; min-height:34px; white-space:nowrap; color:var(--wg-ink); border:1px solid var(--wg-line); background:var(--wg-surface); border-radius:6px; padding:0 12px; }
+
+body.instrument-workstation .application-stage {display:flex;flex-direction:column;flex:1;min-height:0;position:relative;overflow:hidden;background:var(--wg-stage);color:var(--wg-stage-text);border:1px solid var(--wg-stage-line);border-radius:14px;}
+body.instrument-workstation .application-stage.page-only {display:none;}
+body.instrument-workstation[data-page="sweep"] .application-stage[data-pages="sweep"],body.instrument-workstation[data-page="sweep-analysis"] .application-stage[data-pages="sweep-analysis"],body.instrument-workstation[data-page="lcr"] .application-stage[data-pages="lcr"],body.instrument-workstation[data-page="lcr-linearity"] .application-stage[data-pages="lcr-linearity"] {display:flex!important;}
+.application-stage-bar {min-height:54px;display:flex;align-items:center;gap:18px;padding:10px 20px;border-bottom:1px solid var(--wg-stage-line);background:var(--wg-stage-2);flex-shrink:0;}
+.application-stage-caption {font:12px Consolas,"Microsoft YaHei UI",monospace;color:var(--wg-data-muted);}
+.application-inspector-toggle {margin-left:auto;background:transparent!important;color:var(--wg-stage-text)!important;border:1px solid var(--wg-stage-line)!important;border-radius:6px;min-height:32px;padding:6px 12px;}
+.application-stage-content {flex:1;min-height:0;overflow:auto;scrollbar-width:thin;padding:16px 20px;transition:margin-right 240ms ease;}
+.application-stage.has-inspector .application-stage-content,.application-stage.has-inspector .application-action-strip {margin-right:300px;}
+.application-inspector {position:absolute;right:0;top:54px;bottom:0;width:300px;overflow:auto;z-index:20;background:var(--wg-surface);color:var(--wg-ink);border-left:1px solid var(--wg-line);padding:18px;scrollbar-width:thin;}
+.application-inspector[hidden] {display:none!important;}
+.application-inspector-heading {display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;font-size:16px;}
+.application-inspector-heading button {background:transparent;border:1px solid var(--wg-line);color:var(--wg-muted);border-radius:5px;width:28px;height:28px;}
+body.instrument-workstation .application-inspector .panel {background:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:12px 0!important;}
+.application-inspector .evaluation-grid,.application-inspector .form-grid {display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px 10px!important;}
+.application-action-strip {min-height:62px;display:flex;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid var(--wg-stage-line);flex-wrap:wrap;flex-shrink:0;background:var(--wg-stage-2);}
+.application-action-strip:empty {display:none;}
+body.instrument-workstation .application-action-strip .sweep-action-row {display:flex;gap:10px;margin:0!important;flex:0 1 auto;}
+body.instrument-workstation .application-action-strip button {min-height:36px!important;white-space:nowrap;padding:8px 16px!important;}
+body.instrument-workstation .application-stage-content>.scope-panel {background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;padding:0!important;margin:0!important;}
+body.instrument-workstation .application-stage .scope-toolbar {gap:16px;margin-bottom:16px;align-items:center;}
+body.instrument-workstation .application-stage .scope-toolbar h2 {font-size:16px!important;color:var(--wg-stage-text)!important;}
+body.instrument-workstation .application-stage .scope-toolbar .eyebrow {display:none;}
+body.instrument-workstation .application-stage .scope-toolbar small {font-size:11px!important;color:var(--wg-data-muted)!important;overflow-wrap:anywhere;}
+.application-view-picker {margin-left:auto;display:flex;align-items:center;gap:10px;white-space:nowrap;color:var(--wg-data-muted);}
+body.instrument-workstation .application-view-picker select {background:var(--wg-stage-2)!important;color:var(--wg-stage-text)!important;border-color:var(--wg-stage-line)!important;max-width:320px;}
+body.instrument-workstation .application-stage .lcr-metrics,body.instrument-workstation .application-stage .big-lcr-status-grid {display:flex!important;flex-wrap:wrap;gap:12px 22px;padding:12px 0!important;margin:0 0 12px!important;border-bottom:1px solid var(--wg-stage-line);}
+body.instrument-workstation .application-stage .lcr-metrics article,body.instrument-workstation .application-stage .big-lcr-status-grid>div {background:none!important;border:0!important;padding:0!important;min-height:0!important;}
+body.instrument-workstation .application-stage .lcr-metrics strong {font-size:20px!important;color:var(--wg-stage-text)!important;}
+body.instrument-workstation .application-stage .big-lcr-status-grid strong {font-size:13px!important;color:var(--wg-stage-text)!important;}
+body.instrument-workstation .application-stage .subhead,body.instrument-workstation .application-stage .subhead small {color:var(--wg-data-muted)!important;}
+body.instrument-workstation .application-plot-grid {display:block!important;margin:0!important;}
+body.instrument-workstation .application-stage .lcr-canvas-wrap,body.instrument-workstation .application-stage .lcr-wave-wrap,body.instrument-workstation .application-stage .sweep-canvas-wrap,body.instrument-workstation .application-stage .sweep-run-canvas-wrap,body.instrument-workstation .application-stage .archive-heatmap-wrap {height:clamp(280px,48dvh,760px)!important;min-height:260px!important;background:transparent!important;border:0!important;border-radius:0!important;}
+body.instrument-workstation .application-stage canvas {width:100%!important;height:100%!important;}
+body.instrument-workstation .application-stage .archive-layout {grid-template-columns:minmax(0,1fr)!important;}
+.application-view-hidden {display:none!important;}
+.application-local-tabs {display:flex;gap:4px;flex-wrap:wrap;}
+.application-local-tabs button {background:transparent!important;border:0!important;color:var(--wg-data-muted)!important;padding:8px 12px;border-radius:5px;}
+.application-local-tabs button[aria-pressed="true"] {color:var(--wg-signal-hi)!important;background:color-mix(in srgb,var(--wg-signal) 14%,var(--wg-stage-2))!important;}
+body.instrument-workstation .idle-stage {height:100%;min-height:280px!important;background:transparent!important;border:0!important;}
+body.instrument-workstation .event-panel {flex-shrink:0;min-height:26px!important;padding:4px 0!important;background:none!important;border:0!important;box-shadow:none!important;font-size:11px!important;}
+body.instrument-workstation .application-stage .result-table-wrap {max-height:52dvh!important;overflow:auto;}
+body.instrument-workstation .control-stack .wiring-note {font-size:11px!important;line-height:1.7;}
+body[data-lcr-analysis-mode="big_lcr"] .application-folder-options:not([data-lcr-analysis-mode="big_lcr"]),body[data-lcr-analysis-mode="small_lcr"] .application-folder-options:not([data-lcr-analysis-mode="small_lcr"]),body[data-lcr-analysis-mode="linearity"] .application-folder-options:not([data-lcr-analysis-mode="linearity"]),body[data-lcr-analysis-mode="big_lcr"] .application-folder-action:not([data-lcr-analysis-mode="big_lcr"]),body[data-lcr-analysis-mode="small_lcr"] .application-folder-action:not([data-lcr-analysis-mode="small_lcr"]),body[data-lcr-analysis-mode="linearity"] .application-folder-action:not([data-lcr-analysis-mode="linearity"]) {display:none!important;}
+body[data-lcr-mode="small"] .application-stage[data-pages="lcr"]>.application-stage-bar .application-local-tabs {display:none;}
+@media(max-width:1100px){.application-stage.has-inspector .application-stage-content,.application-stage.has-inspector .application-action-strip {margin-right:0;}body.instrument-workstation .workspace {gap:16px!important;padding:16px!important;grid-template-columns:240px minmax(0,1fr)!important;}.application-stage-bar {gap:8px;padding:10px 14px;}.application-stage-caption {display:none;}}
+@media(max-width:760px){body.instrument-workstation[data-page] .topbar {height:auto!important;min-height:64px!important;flex-wrap:wrap;padding:10px 16px!important;gap:10px;}body.instrument-workstation .page-nav {order:3;width:100%;overflow:auto;}body.instrument-workstation[data-page] .workspace {height:calc(100dvh - 112px)!important;grid-template-columns:minmax(0,1fr)!important;padding:12px!important;}body.instrument-workstation .control-stack {display:none!important;}body.instrument-workstation.signal-mobile-controls .control-stack {display:block!important;position:absolute!important;top:112px!important;left:12px;bottom:12px;width:280px;z-index:45;background:var(--wg-surface)!important;padding:16px!important;border:1px solid var(--wg-line)!important;}body.instrument-workstation .workstation-intro h2 {font-size:23px!important;}.application-stage-content {padding:12px;}.application-view-picker {white-space:normal;}.application-view-picker select {max-width:180px!important;}.application-inspector {width:min(300px,100%);}.application-action-strip {gap:6px;padding:10px;}}
+@media(prefers-reduced-motion:reduce){.application-stage-content {transition:none!important;}}
+
+/* Visibility wins over legacy route/mode display declarations. */
+body.instrument-workstation[data-page] .application-stage .application-view-hidden {display:none!important;}
+body.instrument-workstation .base-summary>div {background:transparent!important;border:0!important;border-bottom:1px solid var(--wg-line)!important;padding:8px 0!important;}
+body.instrument-workstation .base-summary strong {color:var(--wg-ink)!important;font-size:13px!important;}
+body.instrument-workstation .base-summary {gap:10px!important;}
+body.instrument-workstation .sweep-receiver-grid button {background:transparent!important;color:var(--wg-muted)!important;border:1px solid var(--wg-line)!important;box-shadow:none!important;}
+body.instrument-workstation .sweep-receiver-grid button.active {background:color-mix(in srgb,var(--wg-signal) 8%,var(--wg-surface))!important;color:var(--wg-signal)!important;border-color:color-mix(in srgb,var(--wg-signal) 30%,var(--wg-line))!important;}
+body.instrument-workstation .application-action-strip button:disabled {background:var(--wg-stage-line)!important;border-color:var(--wg-stage-line)!important;color:var(--wg-data-muted)!important;opacity:.6!important;}
+body.instrument-workstation .application-stage [hidden] {display:none!important;}
+
+body.instrument-workstation .application-action-strip .lcr-action-row {display:flex;flex-wrap:wrap;gap:8px;margin:0!important;}
+body.instrument-workstation .application-stage .idle-axis {display:none!important;}
+body.instrument-workstation .application-stage .idle-copy {max-width:480px;}
+body.instrument-workstation .application-stage .idle-copy h2 {font-size:22px!important;}
+body.instrument-workstation .application-stage .idle-copy p {font-size:12px!important;line-height:1.75;}
+
+body.instrument-workstation .application-stage .workspace-idle-axis {display:none!important;}
+
+body.instrument-workstation .sweep-receiver-grid label span {background:transparent!important;color:var(--wg-muted)!important;border-color:var(--wg-line)!important;border-radius:5px!important;}
+body.instrument-workstation .sweep-receiver-grid label input:checked+span {background:color-mix(in srgb,var(--wg-signal) 8%,var(--wg-surface))!important;color:var(--wg-signal)!important;border-color:color-mix(in srgb,var(--wg-signal) 30%,var(--wg-line))!important;}
+body.instrument-workstation .application-action-strip>.sweep-start {width:auto!important;flex:0 1 auto;}
+body.instrument-workstation .application-action-strip .sweep-start,body.instrument-workstation .application-action-strip button:not(.secondary):not(.sweep-stop):not(:disabled) {color:#fff!important;}
+body.instrument-workstation .application-stage .sweep-run-canvas-wrap {background:transparent!important;border:0!important;}
+body.instrument-workstation .application-stage .lcr-canvas-wrap,body.instrument-workstation .application-stage .lcr-wave-wrap,body.instrument-workstation .application-stage .sweep-canvas-wrap,body.instrument-workstation .application-stage .sweep-run-canvas-wrap,body.instrument-workstation .application-stage .archive-heatmap-wrap {height:clamp(240px,calc(100dvh - 540px),800px)!important;min-height:220px!important;}
+.application-run-picker {display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--wg-data-muted);white-space:nowrap;}
+body.instrument-workstation .application-stage .scope-toolbar select {background:var(--wg-stage-2)!important;color:var(--wg-stage-text)!important;border-color:var(--wg-stage-line)!important;}
+body.instrument-workstation .application-stage .scope-toolbar {flex-wrap:wrap;}
+
+.application-progress {min-width:120px;max-width:250px;flex:1;font-size:11px;color:var(--wg-data-muted);}.application-progress .progress-track {margin:0 0 6px;height:2px;}.application-progress .progress-text {margin:0!important;}
