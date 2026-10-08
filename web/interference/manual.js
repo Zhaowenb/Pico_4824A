@@ -1,6 +1,6 @@
 const guide=window.INTERFERENCE_GUIDE||[];
 const manualThemeKey="waveguard-ui-theme";
-function applyManualTheme(theme,persist=false){const normalized=theme==="dark"?"dark":"light";document.body.dataset.uiTheme=normalized;document.querySelectorAll("[data-ui-theme-choice]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.uiThemeChoice===normalized)));if(persist)localStorage.setItem(manualThemeKey,normalized)}
+function applyManualTheme(theme,persist=false){WaveGuardUI.appearance({theme},persist);}
 const cards=document.getElementById("experimentCards");
 const toc=document.getElementById("experimentToc");
 guide.forEach((item,index)=>{
@@ -18,3 +18,5 @@ guide.forEach((item,index)=>{
 });
 document.querySelectorAll("[data-ui-theme-choice]").forEach(button=>button.addEventListener("click",()=>applyManualTheme(button.dataset.uiThemeChoice,true)));
 applyManualTheme(localStorage.getItem(manualThemeKey)||"light");
+
+WaveGuardUI.mountShell({shell:document.querySelector(".layout"),controls:document.querySelector(".toc"),main:document.querySelector(".layout>main"),intro:document.querySelector(".manual-intro"),documentMode:true});WaveGuardUI.activate("interference");

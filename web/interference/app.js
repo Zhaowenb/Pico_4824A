@@ -1,13 +1,8 @@
 const $ = id => document.getElementById(id);
 const UI_THEME_KEY = "waveguard-ui-theme";
-function applyUiTheme(theme, persist=false) {
-  const normalized=theme==="dark"?"dark":"light";
-  document.body.dataset.uiTheme=normalized;
-  document.querySelectorAll("[data-ui-theme-choice]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.uiThemeChoice===normalized)));
-  if(persist)localStorage.setItem(UI_THEME_KEY,normalized);
-}
+function applyUiTheme(theme,persist=false){WaveGuardUI.appearance({theme},persist);}
 const names = [..."ABCDEFGH"];
-const picoTraceColors=["#2e73e8","#e34b4b","#39ae50","#e5ce29","#a060cb","#a3a3a3","#56b5df","#d44bb7"];
+const picoTraceColors=WaveGuardUI.channelColors;
 function experimentAccent(){return getComputedStyle(document.body).getPropertyValue('--signal').trim()||'#2f73ff';}
 
 const fullGuide = window.INTERFERENCE_GUIDE || [];
@@ -82,33 +77,5 @@ async function updateSpectra(){if(!session)return;const generation=++spectraGene
 function drawFft(){const region=$("fftRegion").value,items=comparisonSpectra.length?comparisonSpectra:selectedPreview?[{name:"当前采集",preview:selectedPreview}]:[];plot($("fftChart"),items.flatMap(item=>{const s=item.preview.spectra?.[region];return s?[{name:item.name,points:s.fft_hz.map((f,i)=>[f/1000,s.fft_amplitude_v[i]])}]:[]}),"kHz")}
 $("createSession").onclick=createSession;$("newSession").onclick=newSession;$("restoreSession").onclick=restoreSession;$("startCondition").onclick=startCondition;$("saveCondition").onclick=saveCondition;$("nextCondition").onclick=nextCondition;$("finishExperiment").onclick=finishExperiment;$("reanalyze").onclick=reanalyze;$("stopCapture").onclick=stopCapture;$("metric").onchange=drawCompare;$("fftRegion").onchange=drawFft;$("exportJson").onclick=()=>{const blob=new Blob([JSON.stringify({session,summary},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`interference_${session.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 $("waveChart").onclick=event=>{if(!captureReady||!latestWave)return;const rect=$("waveChart").getBoundingClientRect(),fraction=((event.clientX-rect.left)*devicePixelRatio-50*devicePixelRatio)/($("waveChart").width-65*devicePixelRatio);if(fraction<0||fraction>1)return;const t0=(latestWave.time_s[0]+fraction*(latestWave.time_s.at(-1)-latestWave.time_s[0]))*1e6;$("t0").value=t0.toFixed(2);drawWave(latestWave);message(`当前采集激励起点设为 ${t0.toFixed(2)} μs；请检查分析窗口是否仍落在记录范围内。`)};
-document.querySelectorAll("[data-ui-theme-choice]").forEach(button=>button.addEventListener("click",()=>applyUiTheme(button.dataset.uiThemeChoice,true)));
 applyUiTheme(localStorage.getItem(UI_THEME_KEY)||"light");
 initialize().catch(e=>message(e.message));
-
-
-// Presentation only: experiment context, genuine data, and a persistent action strip.
-(() => {
- const main=document.querySelector('section.main'),task=document.querySelector('.experiment-workspace');
- const make=(tag,cls,text='')=>{const n=document.createElement(tag);n.className=cls;n.textContent=text;return n;};
- document.body.classList.add('experiment-workstation');
- document.querySelector('main>aside').append($('newSession'));
- const intro=make('div','experiment-intro'),heading=make('h1','','干扰实验'),detail=make('span','','PicoScope 4824A · 实验会话');intro.append(heading,detail);
- const stage=make('section','experiment-signal-stage'),bar=make('div','experiment-view-tabs'),viewport=make('div','experiment-viewport'),inspector=make('aside','experiment-inspector'),footer=make('footer','experiment-actions');
- const panels=[task,...main.querySelectorAll('.data-stage,.evidence-stage')];
- const names=['接线与条件','波形 / 频谱','条件比较','综合证据'];
- let currentView=0;
- function paint(){requestAnimationFrame(()=>{if(latestWave||selectedPreview)drawWave(latestWave||selectedPreview);drawFft();drawCompare();});}
- panels.forEach((panel,i)=>{viewport.append(panel);const b=make('button','',names[i]);b.type='button';bar.append(b);b.onclick=()=>selectView(i);});
- function selectView(index){currentView=index;panels.forEach((n,i)=>n.hidden=i!==index);[...bar.querySelectorAll('[data-view]')].forEach((n,i)=>n.setAttribute('aria-pressed',String(i===index)));paint();}
- [...bar.children].forEach((n,i)=>n.dataset.view=String(i));
- const params=make('button','experiment-parameters','会话 / 分析窗口');params.type='button';params.setAttribute('aria-expanded','false');bar.append(params);
- const title=make('div','experiment-inspector-heading'),close=make('button','','×');close.type='button';close.setAttribute('aria-label','关闭实验参数');title.append(make('strong','','实验参数'),close);inspector.append(title,$('setup'),$('windowsBox'));inspector.hidden=true;
- function toggle(open){inspector.hidden=!open;stage.classList.toggle('has-inspector',open);params.setAttribute('aria-expanded',String(open));paint();}params.onclick=()=>toggle(inspector.hidden);close.onclick=()=>toggle(false);
- footer.append(task.querySelector('.actions'),task.querySelector('#message'));stage.append(bar,viewport,inspector,footer);main.prepend(intro,stage);
- document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!inspector.hidden){toggle(false);params.focus();}});
- $('createSession').addEventListener('click',()=>{const check=()=>{if(session){toggle(false);selectView(0);}else setTimeout(()=>{if(session){toggle(false);selectView(0);}},800);};setTimeout(check,400);});
- $('startCondition').addEventListener('click',()=>{if(checklistReady()&&session)selectView(1);});
- $('newSession').addEventListener('click',()=>setTimeout(()=>{if(!session)toggle(true);},400));
- const observer=new ResizeObserver(paint);observer.observe(viewport);selectView(0);toggle(!session);
-})();

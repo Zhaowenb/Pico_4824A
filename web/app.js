@@ -2,20 +2,14 @@ const channelNames = [..."ABCDEFGH"];
 const colors = ["#2f73ff", "#59a9ff", "#7eb6e8", "#9bc9ff", "#3d5fca", "#75a2d4", "#a7cce8", "#c8d8eb"];
 // PicoScope channel identity: A blue, B red, C green, D yellow,
 // E purple, F gray, G light blue, H magenta. Never tied to UI accent.
-const picoChannelColors = Object.freeze(["#2e73e8", "#e34b4b", "#39ae50", "#e5ce29", "#a060cb", "#a3a3a3", "#56b5df", "#d44bb7"]);
+const picoChannelColors = WaveGuardUI.channelColors;
 function channelDisplayColor(name) {
   const index = Math.max(0, channelNames.indexOf(name));
   return picoChannelColors[index];
 }
 // Cached appearance palette for Canvas. Values and channel colors never change.
-let workstationDataPalette = {accent:'#2f73ff', high:'#59a9ff', stops:[[12,13,15],[22,38,67],[34,70,130],[47,115,255],[111,164,255],[220,233,255]]};
-function updateWorkstationDataPalette(hex) {
-  const rgb = [1,3,5].map(index=>parseInt(hex.slice(index,index+2),16));
-  const mix = (a,b,t)=>a.map((value,index)=>Math.round(value+(b[index]-value)*t));
-  const floor=[12,13,15], white=[242,242,243];
-  const vivid=mix(rgb,white,.1), high=mix(rgb,white,.4);
-  workstationDataPalette={accent:hex,high:`rgb(${high.join(',')})`,stops:[floor,mix(floor,vivid,.18),mix(floor,vivid,.48),vivid,high,mix(rgb,white,.86)]};
-}
+let workstationDataPalette = WaveGuardUI.palette();
+function updateWorkstationDataPalette() { workstationDataPalette = WaveGuardUI.palette(); }
 function workstationDataColor(tone='accent') {
   return workstationDataPalette[tone];
 }
@@ -2454,34 +2448,7 @@ function storedAnalysisTheme() {
   }
 }
 
-function applyAnalysisTheme(theme, persist = false) {
-  const selected = theme === "dark" ? "dark" : "light";
-  document.body.dataset.analysisTheme = selected;
-  window.dispatchEvent(new Event('signal-appearance'));
-  document.querySelectorAll("[data-analysis-theme-choice]").forEach((button) => {
-    button.setAttribute("aria-pressed", String(button.dataset.analysisThemeChoice === selected));
-  });
-  if (persist) {
-    try {
-      localStorage.setItem("waveguard-ui-theme", selected);
-      localStorage.setItem("waveguard-analysis-theme", selected);
-    } catch (_) { /* Browser storage is optional. */ }
-  }
-  requestAnimationFrame(() => {
-    const page = document.body.dataset.page;
-    if (page === "measure") drawScope();
-    if (page === "sweep") { drawSweepResult(); drawSweepRun(); }
-    if (page === "file-analysis") {
-      drawAnalysisWaveform(); drawSpectrum(); drawTimeFrequency(); drawExperimentalModes();
-    }
-    if (page === "sweep-analysis") { drawArchiveHeatmap(); drawArchiveRun(); }
-    if (page === "lcr") {
-      drawLcrParameterCharts(); drawLcrBode(); drawLcrNyquist(); drawLcrWave();
-      drawBigLcrCharts(); drawBigLcrWaves();
-    }
-    if (page === "lcr-linearity" && latestLinearity) updateLinearityView(false);
-  });
-}
+function applyAnalysisTheme(theme, persist = false) { WaveGuardUI.appearance({theme}, persist); }
 
 function setAnalysisViewState(state) {
   document.body.dataset.analysisState = state;
@@ -2579,18 +2546,9 @@ function syncAnalysisLensChrome(lens) {
 }
 
 function setAnalysisSettingsOpen(open) {
-  const settings = $("analysisLensSettings");
-  const button = $("analysisLensSettingsButton");
-  const popover = $("analysisLensSettingsPopover");
-  if (!settings || !button || !popover) return;
-  const expanded = Boolean(open);
-  const changed = popover.hidden === expanded
-    || document.body.classList.contains("signal-inspector-open") !== expanded;
-  popover.hidden = !expanded;
-  button.setAttribute("aria-expanded", String(expanded));
-  settings.classList.toggle("is-open", expanded);
-  document.body.classList.toggle("signal-inspector-open", expanded);
-  if (changed) window.dispatchEvent(new Event("signal-layout"));
+  const stage=WaveGuardUI.getStage('file-analysis');
+  if(stage)stage.setInspector(Boolean(open));
+  else $('analysisLensSettingsPopover').hidden=!open;
 }
 
 function setAnalysisLens(lens, refresh = true) {
@@ -2613,9 +2571,7 @@ function setAnalysisLens(lens, refresh = true) {
   analysisLens = lens;
   document.body.dataset.analysisLens = lens;
   syncAnalysisLensChrome(lens);
-  document.querySelectorAll(".analysis-lenses [data-analysis-lens]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.analysisLens === lens));
-  });
+  WaveGuardUI.markSelection(document.querySelectorAll('.analysis-lenses [data-analysis-lens]'),button=>button.dataset.analysisLens===lens);
   syncAnalysisLensContext();
   requestAnimationFrame(() => {
     if (["raw", "filtered", "mix"].includes(lens)) drawAnalysisWaveform();
@@ -2694,6 +2650,7 @@ function mountLcrMode(mode) {
     }
   });
   document.body.dataset.lcrMode = selected;
+  WaveGuardUI.activate(document.body.dataset.page);
   bindLcrModeListeners();
   if (selected === "small") updateLcrControls();
   else { updateBigLcrControls(); updateBigSafetyStatus(); }
@@ -2799,8 +2756,8 @@ function showPage(page, push = false) {
   };
   const copy = workspaceCopy[page] || workspaceCopy.measure;
   document.body.dataset.page = page;
-  document.body.classList.toggle("signal-workstation", ["measure", "file-analysis"].includes(page));
-  document.body.classList.add("waveguard-appearance");
+  WaveGuardUI.activate(page);
+
   document.body.classList.remove("signal-focus", "signal-inspector-open", "signal-mobile-controls");
   setAnalysisSettingsOpen(false);
   window.dispatchEvent(new Event("signal-layout"));
@@ -4493,22 +4450,6 @@ $("analysisChannels").addEventListener("click", syncAnalysisLensContext);
 document.querySelectorAll(".analysis-lenses [data-analysis-lens]").forEach((button) => {
   button.addEventListener("click", () => setAnalysisLens(button.dataset.analysisLens));
 });
-document.querySelectorAll("[data-analysis-theme-choice]").forEach((button) => {
-  button.addEventListener("click", () => applyAnalysisTheme(button.dataset.analysisThemeChoice, true));
-});
-$("analysisLensSettingsButton").addEventListener("click", (event) => {
-  event.stopPropagation();
-  const popover = $("analysisLensSettingsPopover");
-  setAnalysisSettingsOpen(popover.hidden);
-});
-$("analysisLensSettingsPopover").addEventListener("click", (event) => event.stopPropagation());
-document.addEventListener("click", (event) => {
-  const settings = $("analysisLensSettings");
-  if (!settings.contains(event.target)) setAnalysisSettingsOpen(false);
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setAnalysisSettingsOpen(false);
-});
 $("calculateTimeFrequencyBtn").addEventListener("click", calculateTimeFrequency);
 $("calculateModesBtn").addEventListener("click", calculateExperimentalModes);
 $("captureBtn").addEventListener("click", startCapture);
@@ -4556,24 +4497,6 @@ $("measureFilterEnabled").addEventListener("change", scheduleMeasureFilterRefres
   "archiveRecommendationDuration", "archiveRecommendationStrength",
   "archiveRecommendationStrong", "archiveRecommendationSnr",
 ].forEach((id) => $(id).addEventListener("input", updateArchiveRecommendations));
-window.addEventListener("resize", () => {
-  drawScope();
-  drawSweepResult();
-  drawSweepRun();
-  drawAnalysisWaveform();
-  drawSpectrum();
-  drawArchiveHeatmap();
-  drawArchiveRun();
-  drawTimeFrequency();
-  drawExperimentalModes();
-  drawLcrParameterCharts();
-  drawLcrBode();
-  drawLcrNyquist();
-  drawLcrWave();
-  drawBigLcrCharts();
-  drawBigLcrWaves();
-  scheduleAwgPreview();
-});
 bindLcrModeListeners();
 document.addEventListener("change", (event) => {
   if (event.target.matches("input,select")) {
@@ -4611,436 +4534,5 @@ updateTimeFrequencyControls();
 setEvent("系统就绪，可以开始配置。", "idle");
 pollStatus();
 
-/* Signal workstation presentation adapter. Existing controls are moved, never cloned.
-   No acquisition request, transform, source array or export is changed here. */
-function signalTimeAtPixel(pixelX, width, startUs, endUs) {
-  const ratio = Math.max(0, Math.min(1, (pixelX - 68) / Math.max(1, width - 84)));
-  return startUs + (endUs - startUs) * ratio;
-}
-
-(() => {
-  const body = document.body;
-  const monitor = document.querySelector('.monitor-stack');
-  const intro = document.querySelector('.workstation-intro');
-  const create = (tag, className, html = '') => {
-    const node = document.createElement(tag); node.className = className;
-    if (html) node.innerHTML = html;
-    return node;
-  };
-  const analysisStage = create('section', 'signal-stage page-only');
-  analysisStage.dataset.pages = 'file-analysis';
-  analysisStage.setAttribute('aria-label', '信号分析工作面');
-  const measureStage = create('section', 'signal-stage page-only');
-  measureStage.dataset.pages = 'measure';
-  measureStage.setAttribute('aria-label', '实时采集工作面');
-  const wavePanel = $('scopeCanvas').closest('.scope-panel');
-  monitor.insertBefore(measureStage, wavePanel);
-  measureStage.append(wavePanel);
-  const metrics = document.querySelector('.metrics[data-pages="measure"]');
-  wavePanel.insertBefore(metrics, wavePanel.querySelector('.canvas-wrap'));
-  const actionStrip = create('div', 'signal-action-strip');
-  actionStrip.append($('captureBtn'), $('stopBtn'));
-  const origin = create('span','signal-data-origin','尚无采集结果');
-  actionStrip.append(origin, create('span','signal-action-spacer'), $('saveNpz'), $('saveCsv'));
-  measureStage.append(actionStrip);
-  const lensBar = document.querySelector('.analysis-lens-bar');
-  monitor.insertBefore(analysisStage, lensBar);
-  analysisStage.append(lensBar);
-  const context = create('div','signal-context-strip');
-  context.hidden = true;
-  const contextLabel = create('div','signal-context-label','<span>TIME WINDOW</span><strong></strong><span class="signal-context-units"></span>');
-  const contextCanvas = create('canvas','signal-context-canvas');
-  contextCanvas.setAttribute('aria-label','当前时间窗真实波形');
-  context.append(contextLabel,contextCanvas);
-  analysisStage.append(context);
-  ['.analysis-workbench','.spectrum-panel','.time-frequency-panel','.experimental-result-panel','.analysis-inspector'].forEach(selector => {
-    const node = monitor.querySelector(selector); if(node) analysisStage.append(node);
-  });
-  const popover = $('analysisLensSettingsPopover');
-  analysisStage.append(popover);
-  const inspectorHeading = create('div','signal-inspector-heading','<strong>分析参数</strong>');
-  const closeInspector = create('button','','×');
-  closeInspector.type='button'; closeInspector.setAttribute('aria-label','关闭参数面板');
-  inspectorHeading.append(closeInspector); popover.prepend(inspectorHeading);
-  closeInspector.addEventListener('click', () => {setAnalysisSettingsOpen(false); $('analysisLensSettingsButton').focus();});
-  popover.setAttribute('role','region'); popover.setAttribute('aria-label','当前 Lens 参数');
-  const filterPanel = create('section','signal-filter-controls');
-  filterPanel.innerHTML='<div class="panel-heading"><h2>带通参数</h2></div>';
-  const bandHeading = document.querySelector('.analysis-band-heading');
-  filterPanel.append(bandHeading, bandHeading.nextElementSibling);
-  const applyFilter=create('button','signal-apply-filter','应用带通参数');applyFilter.type='button';applyFilter.id='analysisApplyBandBtn';
-  applyFilter.addEventListener('click',()=>{if(analysisSource)void refreshAnalysis();});
-  filterPanel.append(applyFilter);
-  popover.append(filterPanel);
-  ['analysisBandLow','analysisBandHigh','analysisTransition'].forEach(id=>$(id).addEventListener('change',()=>{if(analysisSource)scheduleAnalysisRefresh();}));
-  const focus = create('button','signal-focus-button','专注'); focus.type='button';
-  focus.classList.add('page-only');focus.dataset.pages='measure file-analysis sweep sweep-analysis lcr lcr-linearity';
-  focus.setAttribute('aria-pressed','false'); intro.append(focus);
-  focus.addEventListener('click', () => {
-    if (matchMedia('(max-width:760px)').matches) {
-      body.classList.toggle('signal-mobile-controls');
-      focus.textContent=body.classList.contains('signal-mobile-controls')?'关闭设置':'采集 / 文件设置';
-    } else {
-      body.classList.add('signal-focus-transition');
-      setTimeout(()=>body.classList.remove('signal-focus-transition'),360);
-      const enabled=body.classList.toggle('signal-focus');
-      focus.textContent=enabled?'退出专注':'专注'; focus.setAttribute('aria-pressed',String(enabled));
-      document.querySelector('.control-stack').inert=enabled;
-    }
-    window.dispatchEvent(new Event('signal-layout'));
-  });
-  const sourcePanel=document.querySelector('.analysis-source-panel[data-pages="file-analysis"]');
-  const fileButton=create('button','signal-file-summary','<span>↗</span><span><strong>打开数据文件</strong><small>NPZ / CSV · 选择文件或目录</small></span>');
-  fileButton.type='button'; fileButton.setAttribute('aria-label','打开文件抽屉'); fileButton.setAttribute('aria-expanded','false');
-  const fileDrawer=create('section','signal-file-drawer'); fileDrawer.hidden=true;
-  fileDrawer.setAttribute('aria-label','文件浏览');
-  const drawerHeading=create('div','signal-inspector-heading','<strong>文件浏览</strong>');
-  const closeDrawer=create('button','','×'); closeDrawer.type='button'; closeDrawer.setAttribute('aria-label','关闭文件抽屉'); drawerHeading.append(closeDrawer); fileDrawer.append(drawerHeading);
-  [...sourcePanel.children].filter(n=>!n.classList.contains('panel-heading')).forEach(n=>fileDrawer.append(n));
-  sourcePanel.append(fileButton); monitor.append(fileDrawer);
-  const setDrawer=(open)=>{fileDrawer.hidden=!open; fileButton.setAttribute('aria-expanded',String(open)); if(open) $('analysisPath').focus(); else fileButton.focus();};
-  fileButton.addEventListener('click',()=>setDrawer(fileDrawer.hidden)); closeDrawer.addEventListener('click',()=>setDrawer(false));
-  const candidates=$('modeCandidatesBody').closest('.result-table-wrap');
-  const details=create('details','signal-candidates','<summary>候选回波与匹配结果</summary>'); candidates.replaceWith(details); details.append(candidates);
-  // Trigger / AWG sections expand locally, leaving the acquisition settings visible.
-  document.querySelectorAll('.control-stack>.panel[data-pages="measure"]').forEach((panel,index)=>{
-    if(index===0) return;
-    const heading=panel.querySelector('.panel-heading'); if(!heading) return;
-    const contents=create('div','signal-control-contents');
-    [...panel.children].filter(n=>n!==heading).forEach(n=>contents.append(n));
-    const disclosure=create('details','signal-control-disclosure');
-    const summary=create('summary','','参数'); summary.setAttribute('aria-label',`${heading.querySelector('h2')?.textContent}参数`);
-    disclosure.append(summary,contents); disclosure.open=index===1; panel.append(disclosure);
-    disclosure.addEventListener('toggle',()=>{if(disclosure.open&&contents.contains($('awgPreviewCanvas')))scheduleAwgPreview();});
-  });
-  let resizeFrame=0;
-  let lastFile='';
-  let selection=null;
-  let dragSelection=null;
-  let timeCursor=null;
-  const redraw=()=>{
-    cancelAnimationFrame(resizeFrame);
-    resizeFrame=requestAnimationFrame(()=>{
-      if(body.dataset.page==='measure') drawScope();
-      if(body.dataset.page==='file-analysis') {
-        if(['raw','filtered','mix'].includes(analysisLens)) drawAnalysisWaveform();
-        else if(analysisLens==='fft') drawSpectrum();
-        else if(analysisLens==='experimental') drawExperimentalModes();
-        else drawTimeFrequency();
-        drawContext();
-      }
-    });
-  };
-  const pulse=(node,className)=>{
-    if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
-    node.classList.remove(className); void node.offsetWidth; node.classList.add(className);
-  };
-  function drawContext() {
-    const valid=['fft','stft','cwt','wpd'].includes(analysisLens)&&analysisResult?.time_s?.length;
-    context.hidden=!valid;
-    if(!valid) return;
-    const channel=['stft','cwt','wpd'].includes(analysisLens)?$('timeFrequencyChannel').value:analysisSelectedChannels[0];
-    const keys=Object.keys(analysisResult.waveform);
-    const key=keys.find(k=>k===`${channel}:raw`)||keys.find(k=>k.startsWith(`${channel}:`))||keys[0];
-    if(!key) return;
-    const values=analysisResult.waveform[key], times=analysisResult.time_s;
-    contextLabel.querySelector('strong').textContent=`${key.replace(':',' · ')}  /  ${(times[0]*1e6).toFixed(2)} — ${(times.at(-1)*1e6).toFixed(2)} μs`;
-    let peak=1e-12; for(const v of values) peak=Math.max(peak,Math.abs(v));
-    contextLabel.querySelector('.signal-context-units').textContent=`±${peak.toPrecision(3)} V`;
-    const {ctx,width,height}=canvasSetup(contextCanvas);
-    ctx.clearRect(0,0,width,height); if(width<=0||height<=0) return;
-    ctx.strokeStyle='#343638'; ctx.beginPath(); ctx.moveTo(72,height/2); ctx.lineTo(width-18,height/2); ctx.stroke();
-    // Pixel envelopes retain true minima/maxima; source arrays stay untouched.
-    ctx.strokeStyle=channelDisplayColor(key.split(':')[0]); ctx.lineWidth=1.1;
-    const pixels=Math.max(1,Math.floor(width-90));
-    ctx.beginPath();
-    for(let x=0;x<pixels;x++) {
-      const from=Math.floor(x*values.length/pixels), to=Math.min(values.length,Math.max(from+1,Math.floor((x+1)*values.length/pixels)));
-      let low=Infinity,high=-Infinity; for(let i=from;i<to;i++){low=Math.min(low,values[i]);high=Math.max(high,values[i]);}
-      if(!Number.isFinite(low))continue;
-      ctx.moveTo(72+x,height/2-high/peak*height*.42);ctx.lineTo(72+x,height/2-low/peak*height*.42);
-    } ctx.stroke();
-    if(timeCursor!==null){const x=72+(timeCursor-times[0]*1e6)/Math.max((times.at(-1)-times[0])*1e6,1e-12)*(width-90);if(x>=72&&x<=width-18){ctx.strokeStyle=workstationDataColor('high');ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke();}}
-  }
-  const layout=()=>{
-    if(body.dataset.page!=='file-analysis'){fileDrawer.hidden=true;fileButton.setAttribute('aria-expanded','false');}
-    if(!body.classList.contains('signal-workstation')) { document.querySelector('.control-stack').inert=false; return; }
-    focus.textContent=matchMedia('(max-width:760px)').matches?'采集 / 文件设置':body.classList.contains('signal-focus')?'退出专注':'专注';
-    focus.setAttribute('aria-pressed',String(body.classList.contains('signal-focus')));
-    document.querySelector('.control-stack').inert=body.classList.contains('signal-focus');
-    filterPanel.hidden=!['filtered','mix','fft'].includes(analysisLens);
-    redraw();
-  };
-  window.addEventListener('signal-layout',layout);
-  window.addEventListener('signal-appearance',redraw);
-  new ResizeObserver(redraw).observe(analysisStage);
-  new ResizeObserver(redraw).observe(measureStage);
-  // Dock transitions resize chart parents without resizing the outer stage.
-  ['scopeCanvas','analysisWaveCanvas','spectrumCanvas','timeFrequencyCanvas','modeWaveCanvas'].forEach(id=>new ResizeObserver(redraw).observe($(id).parentElement));
-  window.addEventListener('signal-lens-change',()=>requestAnimationFrame(()=>{
-    filterPanel.hidden=!['filtered','mix','fft'].includes(analysisLens);
-    drawContext(); pulse(analysisStage,'signal-lens-settle');
-    const enabled=['filtered','mix','fft','stft','cwt','wpd'].includes(analysisLens);
-    $('analysisLensSettings').style.setProperty('display',enabled?'flex':'none','important');
-  }));
-  window.addEventListener('signal-capture-ready',()=>{
-    origin.textContent=latestResult?.summary?.simulated?'SIMULATED · 仿真采集':'PicoSDK · 实机采集';
-    pulse(measureStage,'signal-result-settle');
-  });
-  window.addEventListener('signal-analysis-ready',()=>requestAnimationFrame(()=>{
-    const metadata=analysisResult?.metadata;
-    fileButton.querySelector('strong').textContent=analysisSource?.split(/[\\/]/).at(-1)||'打开数据文件';
-    fileButton.querySelector('small').textContent=metadata?`${(metadata.sample_rate_hz/1e6).toFixed(2)} MS/s · ${metadata.channels.join(' / ')}`:'NPZ / CSV';
-    if(lastFile!==analysisSource){selection=null;timeCursor=null;lastFile=analysisSource;fileDrawer.hidden=true;fileButton.setAttribute('aria-expanded','false');fileButton.focus();}
-    drawContext(); redraw();
-  }));
-  const waveform=$('analysisWaveCanvas');
-  const waveCursor=create('div','signal-crosshair');waveCursor.hidden=true;waveform.parentElement.append(waveCursor);
-  const selectBand=create('div','signal-selection'); selectBand.hidden=true; waveform.parentElement.append(selectBand);
-  const xToTime=(event)=>{
-    const rect=waveform.getBoundingClientRect();
-    const times=analysisResult.time_s;
-    return signalTimeAtPixel(event.clientX-rect.left,rect.width,times[0]*1e6,times.at(-1)*1e6);
-  };
-  const linkSelectionWindow=()=>{
-    const start=number('analysisTimeStart'),end=number('analysisTimeEnd');
-    if(!analysisSource||!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return;
-    const first=$('spectrumWindows').firstElementChild;
-    if(first){first.querySelector('.spec-start').value=start.toFixed(3);first.querySelector('.spec-end').value=end.toFixed(3);first.querySelector('.spec-label').value='选区';}
-  };
-  // Capture phase updates the existing FFT window before refreshAnalysis builds
-  // its payload. Extra comparison windows are preserved.
-  $('analysisApplyBtn').addEventListener('click',linkSelectionWindow,true);
-  $('analysisResetViewBtn').addEventListener('click',linkSelectionWindow);
-  waveform.addEventListener('dblclick',linkSelectionWindow);
-  waveform.addEventListener('mousedown',event=>{
-    if(event.button!==0||!event.shiftKey||!analysisResult)return;
-    event.preventDefault(); event.stopImmediatePropagation();
-    dragSelection={start:xToTime(event),end:xToTime(event)};
-    selectBand.hidden=false;
-  },true);
-  waveform.addEventListener('mousemove',event=>{
-    if(!analysisResult)return;
-    timeCursor=xToTime(event);
-    waveCursor.hidden=false;waveCursor.style.left=`${Math.max(68,Math.min(waveform.clientWidth-16,event.clientX-waveform.getBoundingClientRect().left))}px`;
-    if(dragSelection){event.stopImmediatePropagation();dragSelection.end=timeCursor;const rect=waveform.getBoundingClientRect(),times=analysisResult.time_s,span=(times.at(-1)-times[0])*1e6;const left=68+(Math.min(dragSelection.start,dragSelection.end)-times[0]*1e6)/span*(rect.width-84);const width=Math.abs(dragSelection.end-dragSelection.start)/span*(rect.width-84);selectBand.style.left=`${left}px`;selectBand.style.width=`${width}px`;}
-  },true);
-  waveform.addEventListener('mouseleave',()=>waveCursor.hidden=true);
-  window.addEventListener('mouseup',()=>{
-    if(!dragSelection)return;
-    selection=[Math.min(dragSelection.start,dragSelection.end),Math.max(dragSelection.start,dragSelection.end)];dragSelection=null;selectBand.hidden=true;
-    if(selection[1]-selection[0]<.01)return;
-    $('analysisTimeStart').value=selection[0].toFixed(3);$('analysisTimeEnd').value=selection[1].toFixed(3);syncAnalysisTimeRange('time');
-    linkSelectionWindow();
-    scheduleAnalysisRefresh();
-  });
-  waveform.setAttribute('aria-label','波形；Shift 拖动选择分析时间段');
-  const help=document.querySelector('.analysis-workbench .scope-toolbar');
-  help.title='Shift 拖动：选择分析时间段；滚轮：缩放；拖动：平移；双击：全时段';
-  $('spectrumCanvas').addEventListener('mousemove',event=>{
-    const windowData=analysisResult?.spectra?.[0];if(!windowData?.frequency_hz?.length)return;
-    const rect=event.currentTarget.getBoundingClientRect();const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left-72)/(rect.width-88)));
-    const freqs=windowData.frequency_hz;const index=Math.round(ratio*(freqs.length-1));
-    $('analysisCursorTime').textContent=`f = ${(freqs[index]/1000).toFixed(3)} kHz`;
-    $('analysisCursorValue').textContent='时间窗保留于上方';
-  });
-  const tfCursor=create('div','signal-crosshair');tfCursor.hidden=true;$('timeFrequencyCanvas').parentElement.append(tfCursor);
-  $('timeFrequencyCanvas').addEventListener('mouseleave',()=>{tfCursor.hidden=true;});
-  $('timeFrequencyCanvas').addEventListener('mousemove',event=>{
-    const result=timeFrequencyResult;if(!result?.time_us?.length)return;
-    const rect=event.currentTarget.getBoundingClientRect();const rx=Math.max(0,Math.min(1,(event.clientX-rect.left-72)/(rect.width-90)));const ry=Math.max(0,Math.min(1,1-(event.clientY-rect.top-17)/(rect.height-51)));
-    const col=Math.round(rx*(result.time_us.length-1)),row=Math.round(ry*(result.frequency_hz.length-1));
-    timeCursor=result.time_us[col];$('analysisCursorTime').textContent=`t = ${timeCursor.toFixed(3)} μs`;
-    tfCursor.hidden=false;tfCursor.style.left=`${72+rx*(rect.width-90)}px`;
-    $('analysisCursorValue').textContent=`${(result.frequency_hz[row]/1000).toFixed(2)} kHz · ${result.values_db[row][col].toFixed(1)} dB`;
-    drawContext();
-  });
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'){if(!fileDrawer.hidden)setDrawer(false);body.classList.remove('signal-mobile-controls');}});
-  // Bottom export actions remain available without opening FFT settings.
-  const footer=analysisStage.querySelector('.analysis-inspector');
-  const exportActions=create('div','signal-action-strip');
-  exportActions.append(create('span','signal-data-origin','派生带通数据 · 原始文件保留'),create('span','signal-action-spacer'),$('exportFilteredNpzBtn'),$('exportFilteredCsvBtn'));
-  footer.after(exportActions);
-  layout();
-})();
-
-/* Appearance settings are presentation-only and scoped to the two workstations. */
-(() => {
-  const button = $('workstationSettingsButton');
-  const panel = $('workstationAppearanceSettings');
-  const color = $('workstationAccentColor');
-  const presets = $('workstationAccentPreset');
-  const defaultAccent = '#2f73ff';
-  let accent = defaultAccent;
-  try {
-    const saved = localStorage.getItem('waveguard-workstation-accent');
-    if (/^#[0-9a-f]{6}$/i.test(saved || '')) accent = saved;
-  } catch (_) { /* Optional browser preferences. */ }
-  const enabled = () => Boolean(document.body.dataset.page);
-  const syncControls = () => {
-    color.value = accent;
-    presets.value = [...presets.options].some(option => option.value === accent) ? accent : 'custom';
-  };
-  const applyAccent = () => {
-    ['--wg-signal','--lab-signal','--signal'].forEach(name => {
-      if(enabled()) document.body.style.setProperty(name,accent);
-      else document.body.style.removeProperty(name);
-    });
-    // Keep arbitrary custom colors readable without changing channel identity.
-    const components = [1,3,5].map(index => parseInt(accent.slice(index,index+2),16)/255);
-    const linear = components.map(value => value <= .04045 ? value/12.92 : ((value+.055)/1.055)**2.4);
-    const luminance = .2126*linear[0]+.7152*linear[1]+.0722*linear[2];
-    if(enabled()) document.body.style.setProperty('--wg-on-accent',luminance > .179 ? '#111820' : '#ffffff');
-    else document.body.style.removeProperty('--wg-on-accent');
-    updateWorkstationDataPalette(accent);
-    if(enabled()) {
-      document.body.style.setProperty('--wg-signal-hi',workstationDataColor('high'));
-      workstationDataPalette.stops.forEach((stop,index)=>document.body.style.setProperty(`--wg-heat-${index}`,`rgb(${stop.join(',')})`));
-    } else {
-      document.body.style.removeProperty('--wg-signal-hi');
-      workstationDataPalette.stops.forEach((_,index)=>document.body.style.removeProperty(`--wg-heat-${index}`));
-    }
-    window.dispatchEvent(new Event('signal-appearance'));
-    syncControls();
-  };
-  const saveAccent = value => {
-    if(!/^#[0-9a-f]{6}$/i.test(value)) return;
-    accent = value.toLowerCase(); applyAccent();
-    try { localStorage.setItem('waveguard-workstation-accent',accent); } catch (_) {}
-  };
-  const setOpen = (open, returnFocus=false) => {
-    if(open) setAnalysisSettingsOpen(false);
-    panel.hidden = !open;
-    button.setAttribute('aria-expanded',String(open));
-    if(open) panel.querySelector('[data-analysis-theme-choice]').focus();
-    else if(returnFocus && enabled()) button.focus();
-  };
-  button.addEventListener('click',event=>{event.stopPropagation();setOpen(panel.hidden);});
-  panel.addEventListener('click',event=>event.stopPropagation());
-  $('workstationSettingsClose').addEventListener('click',()=>setOpen(false,true));
-  presets.addEventListener('change',()=>{if(presets.value!=='custom') saveAccent(presets.value);else color.focus();});
-  color.addEventListener('input',()=>saveAccent(color.value));
-  $('workstationAppearanceReset').addEventListener('click',()=>saveAccent(defaultAccent));
-  document.addEventListener('pointerdown',event=>{
-    if(!panel.hidden && !panel.contains(event.target) && !button.contains(event.target)) setOpen(false);
-  });
-  document.addEventListener('keydown',event=>{
-    if(event.key==='Escape'&&!panel.hidden){event.preventDefault();setOpen(false,true);}
-  });
-  let appearancePage = document.body.dataset.page;
-  window.addEventListener('signal-layout',()=>{
-    const page = document.body.dataset.page;
-    if(page !== appearancePage || !enabled()) setOpen(false);
-    appearancePage = page;
-    applyAccent();
-  });
-  applyAccent();
-})();
-
-// Redraw existing results on appearance changes; never issue a calculation/request.
-(() => {
-  let frame=0;
-  window.addEventListener('signal-appearance',()=>{
-    cancelAnimationFrame(frame);
-    frame=requestAnimationFrame(()=>{
-      const page=document.body.dataset.page;
-      if(page==='sweep'){drawSweepResult();drawSweepRun();}
-      if(page==='sweep-analysis'){drawArchiveHeatmap();drawArchiveRun();}
-      if(page==='lcr'){drawLcrParameterCharts();drawLcrBode();drawLcrNyquist();drawLcrWave();drawBigLcrCharts();drawBigLcrWaves();}
-      if(page==='lcr-linearity'&&latestLinearity)updateLinearityView(false);
-    });
-  });
-})();
-
-
-/* Whole application presentation: original nodes, original actions, original results. */
-(() => {
-  const body=document.body, monitor=document.querySelector('.monitor-stack');
-  const routes=['sweep','sweep-analysis','lcr','lcr-linearity'];
-  const create=(tag,cls,text='')=>{const n=document.createElement(tag);n.className=cls;n.textContent=text;return n;};
-  const allNodes=()=>[...new Set([...document.querySelectorAll('.page-only'),...(lcrModeRecords||[]).map(r=>r.node)])];
-  const stages=new Map();
-  const find=id=>document.getElementById(id)||(lcrModeRecords||[]).map(r=>r.node).flatMap(n=>[n,...n.querySelectorAll('[id]')]).find(n=>n.id===id);
-  function move(node,destination){
-    if(!node)return;
-    const record=(lcrModeRecords||[]).find(r=>r.node===node);
-    if(record){destination.append(record.placeholder);if(node.isConnected)destination.append(node);}
-    else destination.append(node);
-  }
-  function modeNode(node,mode,destination){
-    node.classList.add('page-only');node.dataset.pages='lcr';node.dataset.lcrMode=mode;
-    if(lcrModeRecords){const placeholder=document.createComment('lcr-presentation-'+mode);destination.append(placeholder);lcrModeRecords.push({node,placeholder,mode});if(body.dataset.lcrMode===mode)destination.append(node);}
-    else destination.append(node);
-  }
-  // Use a resize event for existing painters; folder canvases also retain their pixels.
-  function schedulePaint(){requestAnimationFrame(()=>{const page=body.dataset.page;if(page==='sweep'){drawSweepResult();drawSweepRun();}if(page==='sweep-analysis'){drawArchiveHeatmap();drawArchiveRun();}if(page==='lcr'){drawLcrParameterCharts();drawLcrBode();drawLcrNyquist();drawLcrWave();drawBigLcrCharts();drawBigLcrWaves();drawLinearityMeasurementCharts();drawLinearityMeasurementWave();}if(body.dataset.page==='lcr-linearity'){if(latestLinearity)updateLinearityView(false);const mode=body.dataset.lcrAnalysisMode;if(mode==='big_lcr'||mode==='small_lcr'){renderLcrFolder(mode,false);const id=mode==='big_lcr'?'bigFolderWaveCanvas':'smallFolderWaveCanvas';if(folderDisplayWaves.has(id))drawFolderRawWave(id,folderDisplayWaves.get(id));}}});}
-  routes.forEach(page=>{
-    const stage=create('section','application-stage page-only');stage.dataset.pages=page;
-    const bar=create('div','application-stage-bar'), label=create('span','application-stage-caption',({sweep:'扫描结果','sweep-analysis':'参数空间',lcr:'阻抗与响应','lcr-linearity':'测量记录'})[page]);
-    const button=create('button','application-inspector-toggle','参数设置');button.type='button';button.setAttribute('aria-expanded','false');
-    const content=create('div','application-stage-content'), inspector=create('aside','application-inspector'), head=create('div','application-inspector-heading'), title=create('strong','','任务参数'), close=create('button','','×');close.type='button';close.setAttribute('aria-label','关闭任务参数');inspector.hidden=true;head.append(title,close);inspector.append(head);
-    const footer=create('div','application-action-strip');bar.append(label,button);stage.append(bar,content,inspector,footer);monitor.insertBefore(stage,document.querySelector('.event-panel'));
-    const setOpen=open=>{inspector.hidden=!open;stage.classList.toggle('has-inspector',open);button.setAttribute('aria-expanded',String(open));schedulePaint();};button.onclick=()=>setOpen(inspector.hidden);close.onclick=()=>setOpen(false);
-    stage.addEventListener('keydown',e=>{if(e.key==='Escape'&&!inspector.hidden){setOpen(false);button.focus();}});
-    stages.set(page,{stage,content,inspector,footer,setOpen});
-  });
-  allNodes().filter(n=>n.parentNode===monitor||((lcrModeRecords||[]).some(r=>r.node===n)&&n.classList.contains('scope-panel'))).forEach(node=>{
-    const page=node.dataset.pages;if(!stages.has(page))return;
-    if(node.classList.contains('scope-panel')||node.classList.contains('idle-stage'))move(node,stages.get(page).content);
-  });
-  // One mathematical view at a time. Each canvas and table keeps its original ID.
-  const resultPanels=allNodes().filter(n=>n.classList.contains('scope-panel')&&routes.includes(n.dataset.pages));
-  resultPanels.forEach(panel=>{
-    if(['scanArchivePanel','sweepResultPanel'].includes(panel.id))return;
-    const views=[];
-    [...panel.children].forEach(node=>{
-      if(node.matches('.lcr-chart-grid,.lcr-parameter-grid')){
-        node.classList.add('application-plot-grid');[...node.children].forEach(child=>views.push({node:child,label:child.querySelector('.subhead span')?.textContent||child.querySelector('h3')?.textContent||'曲线'}));
-      }else if(node.matches('.lcr-canvas-wrap,.lcr-wave-wrap,.result-table-wrap')){
-        const previous=node.previousElementSibling;
-        views.push({node,heading:previous?.classList.contains('subhead')?previous:null,label:node.matches('.result-table-wrap')?'数据明细':previous?.querySelector('span')?.textContent||'波形'});
-      }
-    });
-    if(views.length<2)return;
-    const picker=create('label','application-view-picker','观察视图'), select=create('select','');select.setAttribute('aria-label','结果观察视图');
-    views.forEach((view,i)=>{const option=create('option','',view.label);option.value=String(i);select.append(option);view.node.classList.add('application-plot-view');});picker.append(select);(panel.querySelector('.scope-toolbar')||panel).append(picker);
-    function choose(){views.forEach((view,i)=>{view.node.classList.toggle('application-view-hidden',i!==Number(select.value));if(view.heading)view.heading.classList.toggle('application-view-hidden',i!==Number(select.value));});[...panel.querySelectorAll('.application-plot-grid')].forEach(grid=>grid.classList.toggle('application-view-hidden',![...grid.children].some(n=>!n.classList.contains('application-view-hidden'))));schedulePaint();}
-    select.addEventListener('change',choose);choose();
-  });
-  function relocateGroup(page,selector){const source=document.querySelector(selector);if(!source)return;const target=stages.get(page).inspector;[...source.querySelectorAll('.evaluation-grid')].forEach(n=>{const prev=n.previousElementSibling;if(prev?.classList.contains('subhead'))move(prev,target);move(n,target);});}
-  relocateGroup('sweep','.sweep-control-panel');relocateGroup('sweep-analysis','.panel[data-pages="sweep-analysis"]:not(.analysis-source-panel)');
-  const sweepActions=find('sweepBtn')?.closest('.sweep-action-row');move(sweepActions,stages.get('sweep').footer);['sweepProgressText'].forEach(id=>move(find(id),stages.get('sweep').footer));
-  move(find('archiveReevaluateBtn'),stages.get('sweep-analysis').footer);
-  const archive=stages.get('sweep-analysis');
-  move(find('archiveConfigCards'),archive.inspector);
-  // Archive overview versus original run detail, retaining all run selectors.
-  const archivePanel=find('scanArchivePanel');
-  if(archivePanel){const runCanvas=find('archiveRunCanvas')?.parentElement;const runTable=find('archiveRunsTableBody')?.closest('.result-table-wrap');const summaryTable=find('archiveTableBody')?.closest('.result-table-wrap');const map=archivePanel.querySelector('.archive-layout');const legend=find('archiveRunLegend');const switcher=create('div','application-local-tabs');const overview=create('button','','参数地图'),runs=create('button','','采集记录');overview.type=runs.type='button';switcher.append(overview,runs);archivePanel.insertBefore(switcher,map);const setView=detail=>{[map,summaryTable].filter(Boolean).forEach(n=>n.classList.toggle('application-view-hidden',detail));[runCanvas,runTable,legend].filter(Boolean).forEach(n=>n.classList.toggle('application-view-hidden',!detail));const sub=runCanvas?.previousElementSibling;if(sub?.classList.contains('subhead'))sub.classList.toggle('application-view-hidden',!detail);overview.setAttribute('aria-pressed',String(!detail));runs.setAttribute('aria-pressed',String(detail));schedulePaint();};overview.onclick=()=>setView(false);runs.onclick=()=>setView(true);setView(false);}
-
-  // Run picker forwards to the original delegated preview action, with no duplicate API.
-  if(archivePanel){
-    const picker=create('label','application-run-picker','采集记录'),select=create('select','');select.setAttribute('aria-label','选择归档采集记录');picker.append(select);
-    archivePanel.querySelector('.scope-toolbar').append(picker);
-    const bodyRows=find('archiveRunsTableBody');
-    const refresh=()=>{const previous=select.value;select.replaceChildren(new Option('选择记录查看原始波形',''));[...bodyRows.querySelectorAll('tr')].forEach(row=>{const cells=row.querySelectorAll('td');select.append(new Option('#'+cells[0].textContent+' · '+cells[1].textContent+' kHz · '+cells[2].textContent+' 周期',row.dataset.archiveRun));});select.value=previous;};
-    select.onchange=()=>{const button=bodyRows.querySelector('[data-archive-preview="'+select.value+'"]');if(button){archivePanel.querySelector('.application-local-tabs button:last-child').click();button.click();}};
-    new MutationObserver(refresh).observe(bodyRows,{childList:true});refresh();
-  }
-
-  // Keep mode placeholders beside moved nodes: the hardware guard still owns mode changes.
-  const lcr=stages.get('lcr');
-  const controls=allNodes().filter(n=>n.dataset.pages==='lcr'&&n.classList.contains('panel')&&n.dataset.lcrMode);
-  controls.forEach(node=>{
-    if(node.matches('#bigLcrScanPanel,.linearity-acquisition-panel')||(node.dataset.lcrMode==='small'&&!node.classList.contains('hero-control')))move(node,lcr.inspector);
-    const rows=[...node.querySelectorAll('.sweep-action-row,.lcr-action-row')];rows.forEach(row=>modeNode(row,node.dataset.lcrMode,lcr.footer));
-  });
-  ['bigLcrProgressText','linearityProgressText','lcrProgressText'].forEach(id=>{const text=find(id);if(!text)return;const mode=id==='lcrProgressText'?'small':'big';const wrap=create('div','application-progress');const bar=text.previousElementSibling;if(bar?.classList.contains('progress-track'))wrap.append(bar);wrap.append(text);if(id==='linearityProgressText')wrap.dataset.lcrProgressTask='linearity';else if(id==='bigLcrProgressText')wrap.dataset.lcrProgressTask='impedance';modeNode(wrap,mode,lcr.footer);});
-  const big=find('bigLcrResultPanel'), linear=find('linearityMeasurementResult');
-  if(big&&linear){const tabs=create('div','application-local-tabs'),imp=create('button','','阻抗测量'),lin=create('button','','线性度测试');imp.type=lin.type='button';tabs.append(imp,lin);lcr.stage.querySelector('.application-stage-bar').insertBefore(tabs,lcr.stage.querySelector('.application-inspector-toggle'));const switchTask=task=>{body.dataset.lcrTask=task;big.classList.toggle('application-view-hidden',task!=='impedance');linear.classList.toggle('application-view-hidden',task!=='linearity');controls.forEach(n=>{if(n.id==='bigLcrScanPanel'||n.classList.contains('big-lcr-safety-panel'))n.classList.toggle('application-view-hidden',task!=='impedance');if(n.classList.contains('linearity-acquisition-panel'))n.classList.toggle('application-view-hidden',task!=='linearity');});lcr.footer.querySelectorAll('[data-lcr-mode="big"]').forEach(row=>row.classList.toggle('application-view-hidden',(row.dataset.lcrProgressTask?row.dataset.lcrProgressTask==='linearity':Boolean(row.querySelector('#linearityStartBtn')))!== (task==='linearity')));imp.setAttribute('aria-pressed',String(task==='impedance'));lin.setAttribute('aria-pressed',String(task==='linearity'));schedulePaint();};imp.onclick=()=>switchTask('impedance');lin.onclick=()=>switchTask('linearity');switchTask('impedance');}
-  const small=find('lcrResultPanel');if(small)move(small.querySelector('.lcr-unit-controls'),lcr.inspector);
-  // Keep file/source identity left; advanced reconstruction options live in Inspector.
-  const folder=stages.get('lcr-linearity');document.querySelectorAll('.lcr-folder-source').forEach(source=>{const mode=source.dataset.lcrAnalysisMode;const advanced=create('section','application-folder-options');advanced.dataset.lcrAnalysisMode=mode;[...source.querySelectorAll('.form-grid')].forEach(n=>move(n,advanced));if(advanced.children.length)folder.inspector.append(advanced);[...source.querySelectorAll('button')].forEach(button=>{const wrapper=create('span','application-folder-action');wrapper.dataset.lcrAnalysisMode=mode;wrapper.append(button);folder.footer.append(wrapper);});});
-  function sync(){const page=body.dataset.page;body.classList.toggle('instrument-workstation',routes.includes(page));stages.forEach(({setOpen},key)=>{if(key!==page)setOpen(false);});if(!body.classList.contains('signal-focus'))document.querySelector('.control-stack').inert=false;schedulePaint();}
-  window.addEventListener('signal-layout',sync);window.addEventListener('signal-appearance',schedulePaint);document.getElementById('lcrMeasurementMode').addEventListener('change',()=>setTimeout(schedulePaint,180));document.getElementById('lcrAnalysisMode').addEventListener('change',schedulePaint);
-  const observer=new ResizeObserver(()=>schedulePaint());stages.forEach(({content})=>observer.observe(content));sync();
-})();
+// Shared UI publishes material state; controller drawing keeps original arrays.
+window.addEventListener('signal-appearance',()=>{workstationDataPalette=WaveGuardUI.palette();});

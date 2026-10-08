@@ -30,25 +30,47 @@ class WorkstationPresentationTests(unittest.TestCase):
         self.assertEqual(len(markup.ids), len(set(markup.ids)))
         js = (ROOT / 'web/app.js').read_text(encoding='utf-8')
         references = set(re.findall(r'''\$\(["']([\w-]+)["']\)''', js))
-        self.assertFalse(references - set(markup.ids), references - set(markup.ids))
+        ui = (ROOT / 'web/ui/workstation.js').read_text(encoding='utf-8')
+        shared_ids = set(re.findall(r'id="([\w-]+)"', ui)) | set(re.findall(r"\.id='([\w-]+)'", ui))
+        self.assertFalse(references - set(markup.ids) - shared_ids, references - set(markup.ids) - shared_ids)
         self.assertEqual(markup.lenses, {'raw', 'filtered', 'mix', 'fft', 'stft', 'cwt', 'wpd', 'experimental'})
 
     def test_presentation_does_not_add_network_dependencies(self):
         html = (ROOT / 'web/index.html').read_text(encoding='utf-8')
         self.assertFalse(re.search(r'(?:src|href)=["\']https?://', html))
-        js = (ROOT / 'web/app.js').read_text(encoding='utf-8').split('/* Signal workstation presentation adapter.')[1]
-        self.assertNotIn('fetch(', js)
-        self.assertNotIn('setInterval(', js)
-        self.assertIn('prefers-reduced-motion:reduce', js)
+        for name in ['ui/workstation.js','views/signal-analysis.js','views/instruments.js','views/experiment.js']:
+            js = (ROOT / 'web' / name).read_text(encoding='utf-8')
+            self.assertNotIn('fetch(', js)
+            self.assertNotIn('setInterval(', js)
+        self.assertIn('prefers-reduced-motion:reduce', (ROOT / 'web/ui/workstation.css').read_text(encoding='utf-8'))
 
     def test_scope_and_discrete_wpd_rendering(self):
-        css = (ROOT / 'web/styles.css').read_text(encoding='utf-8')
-        self.assertIn('body.signal-workstation[data-page]', css)
-        self.assertIn('grid-template-columns:264px minmax(0,1fr)', css)
-        self.assertIn('#analysisLensSettingsPopover { position:absolute', css)
+        css = (ROOT / 'web/ui/workstation.css').read_text(encoding='utf-8')
+        self.assertIn('--wg-rail-width:264px', css)
+        self.assertIn('--wg-inspector-width:300px', css)
+        self.assertIn('.wg-inspector {position:absolute', css)
+        for name in ['index.html','interference/index.html','interference/manual.html']:
+            html=(ROOT / 'web' / name).read_text(encoding='utf-8')
+            self.assertIn('/ui/workstation.js', html)
+            self.assertIn('/ui/workstation.css', html)
+            self.assertIn('data-wg-header', html)
+            self.assertNotIn('id="workstationAppearanceSettings"', html)
+        for name in ['views/signal-analysis.js','views/instruments.js','views/experiment.js']:
+            self.assertIn('WaveGuardUI.createStage', (ROOT / 'web' / name).read_text(encoding='utf-8'))
+        self.assertNotIn('new ResizeObserver', (ROOT / 'web/app.js').read_text(encoding='utf-8'))
         js = (ROOT / 'web/app.js').read_text(encoding='utf-8')
         self.assertIn('ctx.imageSmoothingEnabled = result.method !== "wpd"', js)
         self.assertIn('result.frequency_hz[Math.round(ratio * (rows - 1))]', js)
+
+    def test_action_bindings_survive_ui_extraction(self):
+        js = (ROOT / 'web/app.js').read_text(encoding='utf-8')
+        for identifier, action in {
+            'calculateTimeFrequencyBtn': 'calculateTimeFrequency',
+            'calculateModesBtn': 'calculateExperimentalModes',
+            'captureBtn': 'startCapture', 'sweepBtn': 'startSweep',
+            'stopBtn': 'stopCapture', 'sweepStopBtn': 'stopCapture',
+        }.items():
+            self.assertIn(f'$("{identifier}").addEventListener("click", {action})', js)
 
     def test_source_code_snapshot_is_unchanged(self):
         source = ROOT.with_name('Pico_4824A')

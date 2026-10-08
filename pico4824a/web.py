@@ -1136,7 +1136,11 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {"/interference", "/interference/"}:
+            if path in {"/ui/workstation.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js"}:
+                self._send_asset(path.lstrip("/"), "text/javascript; charset=utf-8")
+            elif path == "/ui/workstation.css":
+                self._send_asset("ui/workstation.css", "text/css; charset=utf-8")
+            elif path in {"/interference", "/interference/"}:
                 self._send_interference_asset("index.html", "text/html; charset=utf-8")
             elif path in {"/interference/manual", "/interference/manual.html"}:
                 self._send_interference_asset("manual.html", "text/html; charset=utf-8")

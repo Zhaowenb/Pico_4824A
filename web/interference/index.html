@@ -1,28 +1,9 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WaveGuard · 干扰类型判别实验</title><link rel="stylesheet" href="/interference/styles.css?v=20261008-application-structure-v2"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WaveGuard · 干扰类型判别实验</title><link rel="stylesheet" href="/interference/styles.css?v=shared-ui-v1"><link rel="stylesheet" href="/ui/workstation.css?v=shared-ui-v1"></head>
 <body data-ui-theme="light" class="waveguard-appearance">
-<header class="topbar">
-  <a class="brand" href="/measure" aria-label="返回 WaveGuard 实时测量"><span class="brandMark" aria-hidden="true"><i></i><i></i><i></i></span><span><small>SCIENTIFIC SIGNAL WORKSTATION</small><strong>WaveGuard</strong></span></a>
-  <nav class="application-navigation" aria-label="主功能"><a href="/measure">实时测量</a><a href="/sweep">参数扫描</a><a href="/lcr">LCR测量</a><a href="/lcr-linearity">LCR数据分析</a><a href="/file-analysis">单数据分析</a><a href="/sweep-analysis">参数数据分析</a><a href="/interference" aria-current="page">干扰实验</a></nav><div class="workspaceHeading"><small>EXPERIMENT WORKSPACE · PICO 4824A</small><h1>干扰类型判别实验</h1></div>
-  <div class="headerActions"><button id="workstationSettingsButton" type="button" class="workstation-settings-button" aria-label="界面设置" title="界面设置" aria-expanded="false" aria-controls="workstationAppearanceSettings">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9.5 3-.6 2.4-2 .9L4.6 5.6 2.8 8.7l1.8 1.7-.2 2.3L2.8 14.5l1.8 3.1 2.4-.7 1.9 1.1.6 2.5h3.6l.6-2.5 2-1.1 2.3.7 1.8-3.1-1.7-1.8.1-2.3 1.6-1.7-1.8-3.1-2.3.7-2-.9L13.1 3Z"/><circle cx="11.3" cy="11.8" r="3.1"/></svg>
-        </button><div class="headerState"><span id="status">准备配置</span><small>本机实验会话</small></div><button id="newSession" class="subtle" disabled>新建会话</button></div>
-</header>
-<section id="workstationAppearanceSettings" class="workstation-appearance-settings" role="dialog" aria-label="界面设置" hidden>
-      <div class="appearance-heading"><h2>界面设置</h2><button id="workstationSettingsClose" type="button" aria-label="关闭界面设置">×</button></div>
-      <fieldset><legend>显示模式</legend><div class="appearance-modes">
-        <button type="button" data-analysis-theme-choice="light" aria-pressed="true">Light · 浅色</button>
-        <button type="button" data-analysis-theme-choice="dark" aria-pressed="false">Dark · 深色</button>
-      </div></fieldset>
-      <fieldset><legend>界面强调色</legend>
-        <div class="appearance-colors"><select id="workstationAccentPreset" aria-label="界面强调色方案">
-          <option value="#2f73ff">钴蓝</option><option value="#98704a">铜棕</option><option value="#478463">森林绿</option><option value="#8269b8">紫灰</option><option value="#667587">石板灰</option><option value="custom">自定义</option>
-        </select><input id="workstationAccentColor" type="color" value="#2f73ff" aria-label="自定义界面强调色" /></div>
-        <p>用于导航、按钮与选中状态。通道颜色保持 PicoScope 色序。</p>
-      </fieldset>
-      <button id="workstationAppearanceReset" type="button" class="appearance-reset">恢复默认强调色</button>
-    </section>
+<header data-wg-header></header><div hidden><span id="status">准备配置</span></div><button id="newSession" class="subtle" disabled hidden>新建会话</button>
+
 <main>
 <aside><div class="asideHeading"><small>EXPERIMENT INDEX</small><h2>实验步骤</h2></div><div id="experimentList"></div><p class="muted">数据保存在当前 WaveGuard 工作目录的 <code>data/interference</code>。</p><div class="asideLinks"><a href="/interference/manual" target="_blank">完整操作手册</a><a href="/measure">返回 WaveGuard</a></div></aside>
 <section class="main">
@@ -47,4 +28,4 @@
 <article class="data-stage"><h2>当前波形与频谱</h2><p class="muted">采集后可点击波形标记实际激励起点 t₀，再保存该次数据。</p><div class="charts"><div><h3>波形叠加</h3><canvas id="waveChart"></canvas></div><div><h3>频谱比较</h3><canvas id="fftChart"></canvas></div></div><div id="runMetrics"></div></article>
 <article class="data-stage"><h2>条件对比</h2><p id="conclusion"></p><div class="chartToolbar"><label>指标 <select id="metric"><option value="tx_peak_v">发射峰值</option><option value="tail_peak_v">尾振峰值</option><option value="tx_energy_v2s">发射能量</option><option value="tail_energy_v2s">尾振能量</option><option value="echo_peak_v">回波峰值</option><option value="snr_echo_db">回波 SNR</option></select></label><label>频谱窗口 <select id="fftRegion"><option value="tx">发射</option><option value="tail">尾振</option><option value="echo">回波</option></select></label></div><canvas id="compareChart"></canvas><h3>配对抑制比（距离扫描为 K(r)）</h3><canvas id="ratioChart"></canvas><div id="fits"></div><div id="comparisons"></div><table><thead><tr><th>条件</th><th>次数</th><th>发射峰值</th><th>尾振峰值</th><th>回波峰值</th><th>溢出</th></tr></thead><tbody id="summaryRows"></tbody></table></article>
 <article class="evidence-stage"><h2>综合判别</h2><div id="evidence"></div><p class="muted">强弱表示目前收集的证据数量和一致性，不代表各物理路径的百分比。未完成的实验不参与判断。</p><a id="exportCsv" class="button disabled" href="#">导出 CSV 汇总</a> <button id="exportJson" disabled>导出 JSON 会话</button></article>
-</section></main><dialog id="confirmation"><p id="confirmationText"></p><div class="actions"><button id="confirmYes">已确认</button><button id="confirmNo" class="subtle">取消</button></div></dialog><script src="/interference/guide.js?v=20261008-application-structure-v2"></script><script src="/interference/app.js?v=20261008-application-structure-v2"></script></body></html>
+</section></main><dialog id="confirmation"><p id="confirmationText"></p><div class="actions"><button id="confirmYes">已确认</button><button id="confirmNo" class="subtle">取消</button></div></dialog><script src="/ui/workstation.js?v=shared-ui-v1"></script><script src="/interference/guide.js?v=shared-ui-v1"></script><script src="/interference/app.js?v=shared-ui-v1"></script><script src="/views/experiment.js?v=shared-ui-v1"></script></body></html>
