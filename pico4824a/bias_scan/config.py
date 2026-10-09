@@ -14,6 +14,13 @@ class BiasScanConfig:
     interval_s: float = 0.1
     record_duration_us: float = 2000.0
     pzt_channel: str = 'A'
+    excitation_voltage_channel: str = ''
+    excitation_current_channel: str = ''
+    excitation_voltage_scale: float = 1.0
+    excitation_current_scale: float = 1.0
+    excitation_start_us: float = 0.0
+    excitation_end_us: float = 100.0
+    aggregation: str = 'trimmed_mean'
     direct_start_us: float = 100.0
     direct_end_us: float = 400.0
     filter_enabled: bool = True
@@ -50,7 +57,7 @@ class BiasScanConfig:
 
     def validate(self, live=False):
         flags = {"inductive_protection_confirmed", "independent_cutoff_confirmed", "filter_enabled"}
-        text = {"pzt_channel", "cooling_mode", "protection_notes", "scan_name", "protection_mode"}
+        text = {"pzt_channel", "cooling_mode", "protection_notes", "scan_name", "protection_mode", "excitation_voltage_channel", "excitation_current_channel", "aggregation"}
         for name, value in asdict(self).items():
             if name in flags and not isinstance(value, bool):raise ValueError(f"{name} 必须为布尔值")
             if name in text and not isinstance(value, str):raise ValueError(f"{name} 必须为字符串")
@@ -68,6 +75,18 @@ class BiasScanConfig:
             raise ValueError('采集间隔或记录长度无效')
         if self.pzt_channel not in 'ABCDEFGH' or len(self.pzt_channel) != 1:
             raise ValueError('PZT 通道必须为 A–H')
+        for channel in [self.excitation_voltage_channel, self.excitation_current_channel]:
+            if channel and (len(channel) != 1 or channel not in 'ABCDEFGH'):
+                raise ValueError('激励通道必须为 A–H 或留空')
+        roles = [c for c in [self.pzt_channel, self.excitation_voltage_channel, self.excitation_current_channel] if c]
+        if len(set(roles)) != len(roles):
+            raise ValueError('PZT、激励电压和激励电流须选择不同通道')
+        if min(self.excitation_voltage_scale, self.excitation_current_scale) <= 0:
+            raise ValueError('探头换算系数必须大于 0')
+        if self.excitation_end_us <= self.excitation_start_us:
+            raise ValueError('激励窗口终点必须大于起点')
+        if self.aggregation not in {'mean', 'trimmed_mean', 'median'}:
+            raise ValueError('统计方式必须为 mean、trimmed_mean 或 median')
         if self.direct_end_us <= self.direct_start_us:
             raise ValueError('直达波窗口终点必须大于起点')
         if not 0 <= self.filter_low_hz < self.filter_high_hz or self.filter_transition_hz < 0:
@@ -139,6 +158,14 @@ class BiasScanConfig:
             raise ValueError(f'直达波窗口必须完整位于 {start:g}–{end:g} μs 记录内')
         if (self.direct_end_us-self.direct_start_us)*config.sample_rate_hz*1e-6 < 2:
             raise ValueError('时间窗至少需要两个采样点')
+        for channel in [self.excitation_voltage_channel, self.excitation_current_channel]:
+            if channel and channel not in config.enabled_channels:
+                raise ValueError(f'激励通道 {channel} 未在实时测量快照中启用')
+        if self.excitation_voltage_channel or self.excitation_current_channel:
+            if not start <= self.excitation_start_us < self.excitation_end_us <= end:
+                raise ValueError('激励窗口必须完整位于记录内')
+            if (self.excitation_end_us-self.excitation_start_us)*config.sample_rate_hz*1e-6 < 2:
+                raise ValueError('激励窗口至少需要两个采样点')
         budget = total * (len(config.enabled_channels)+1) * 8 * self.repeats
         if budget > self.memory_limit_mb * 1024**2:
             raise ValueError('单档原始数据超过内存预算')

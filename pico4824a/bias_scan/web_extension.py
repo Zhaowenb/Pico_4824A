@@ -174,7 +174,14 @@ class BiasScanWebMixin:
         if row is None:raise ValueError('记录不存在或尚未保存')
         result=load_npz(folder/row['file']);step=max(1,int(np.ceil(len(result.time_s)/4000)))
         evaluated = BiasScanAnalyzer.evaluation_signal(result, controller.config)
+        excitation = {}
+        for role, unit in [('voltage','V'),('current','A')]:
+            channel = getattr(controller.config,'excitation_'+role+'_channel')
+            if channel:
+                excitation[role] = {'channel':channel,'unit':unit,
+                    'values':(result.volts[channel][::step]*getattr(controller.config,'excitation_'+role+'_scale')).tolist()}
         return {'time_us':(result.time_s[::step]*1e6).tolist(),
+                'excitation':excitation,
                 'volts':evaluated[::step].tolist(),
                 'raw_volts':result.volts[controller.config.pzt_channel][::step].tolist(),
                 'vpp_basis':'filtered' if controller.config.filter_enabled else 'raw',

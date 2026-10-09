@@ -48,13 +48,30 @@ class BiasScanController:
         self._off_error = ''
         self.folder = None
         self._last_progress = {}
+        self._started_at = time.monotonic()
+        self._captured_count = 0
+        self._cooled_count = 0
 
     def event(self, name, **values):
         self.events.append({'event':name,'monotonic_time':time.monotonic(),'wall_time':time.time(),**values})
 
     def publish(self, phase, **values):
         self._last_progress.update(values)
+        points = self.config.points()
+        total = len(points)*self.config.repeats
+        durations = [r['capture_duration_s'] for r in self.rows]
+        capture_s = max(self.config.interval_s, sum(durations)/len(durations) if durations else .1)
+        cooling = sum(self.config.cooldown_for(p, self.simulate) for p in points[self._cooled_count:])
+        if phase == 'cooling' and self._off_at is not None:
+            cooling = max(0, cooling-min(self.config.cooldown_for(points[self._cooled_count], self.simulate), time.monotonic()-self._off_at))
+        remaining = (total-self._captured_count)*capture_s + max(0,len(points)-len(self.summaries))*self.config.stable_hold_s + cooling
+        fraction = (self._captured_count+self._cooled_count)/(total+len(points))
         self.progress({'phase':phase,'output_state':self.power.output_state,
+                       'elapsed_s':max(0,time.monotonic()-self._started_at),
+                       'estimated_remaining_s':0 if phase=='complete' else remaining,
+                       'eta_temperature_wait':self.config.cooling_mode in {'temperature','current_temperature'},
+                       'progress_fraction':1 if phase=='complete' else min(.99,fraction),
+                       'captured_count':self._captured_count,'total_captures':total,
                        'on_elapsed_s':max(0,time.monotonic()-self._on_at) if self._on_at else self._last_on_duration,
                        'actual_current_a':self._telemetry.get('current_a') if self._telemetry else None,
                        'completed_points':len(self.summaries),'total_points':len(self.config.points()),**self._last_progress})
@@ -239,6 +256,7 @@ class BiasScanController:
                             finally:captured.append((result,telemetry,started,ended))
                         else:captured.append((result,telemetry,started,ended))
                         self.event('capture_return',point=index,repeat=repeat+1,returned_at=ended)
+                        self._captured_count += 1
                         self.check()
                 except BaseException as exc:
                     error=RuntimeError(self._fault) if self._fault else exc
@@ -271,9 +289,10 @@ class BiasScanController:
                              'filter_low_hz':self.config.filter_low_hz,'filter_high_hz':self.config.filter_high_hz,
                              'filter_transition_hz':self.config.filter_transition_hz,'valid':value is not None,'invalid_reason':reason,
                              'file':(point_folder / f'重复{repeat+1:02d}__PZT-{self.config.pzt_channel}__原始波形.npz').relative_to(self.folder).as_posix()}
+                        row.update(BiasScanAnalyzer.excitation(result,self.config))
                         self.event('save_waveform',point=index,repeat=repeat+1)
                         save_npz(result,self.folder/row['file']);rows.append(row);self.rows.append(row)
-                    summary=BiasScanAnalyzer.summary(target,rows,self.config.repeats,eligible=error is None)
+                    summary=BiasScanAnalyzer.summary(target,rows,self.config.repeats,eligible=error is None,method=self.config.aggregation)
                     summary.update(batch_duration_s=max(0,time.monotonic()-batch_start) if batch_start else 0,
                                    capture_batch_duration_s=captured[-1][3]-batch_start if captured else 0,
                                    on_duration_s=self._off_at-on_start if on_start and self._off_at else 0)
@@ -289,6 +308,7 @@ class BiasScanController:
                 if error:raise error
                 self.publish('saved',point=index,target_a=target,repeat=len(captured))
                 self._cool(summary['cooldown_s'])
+                self._cooled_count += 1
             self.result['status']='complete'
         except BaseException as exc:
             self.result['status']='stopped' if self.stop_event.is_set() or isinstance(exc,KeyboardInterrupt) else 'error'
@@ -303,7 +323,9 @@ class BiasScanController:
                 self.result['power_diagnostics']=list(self.power.diagnostics)
             if self._unknown_latched:self.result.update(status='error',output_state='unknown',reason='输出状态未知：'+self._off_error+'；请确认断电并恢复',off_error=self._off_error)
             if self.folder:
-                try:self.persist()
+                try:
+                    self.result['elapsed_s'] = max(0,time.monotonic()-self._started_at)
+                    self.persist()
                 except Exception as exc:self.result.update(status='error',reason='保存失败：'+str(exc))
             self.publish(self.result['status'])
         return self.result

@@ -32,7 +32,14 @@
     "inductive_protection_confirmed": false,
     "independent_cutoff_confirmed": false,
     "protection_notes": "",
-    "memory_limit_mb": 256.0
+    "memory_limit_mb": 256.0,
+    "aggregation": "trimmed_mean",
+    "excitation_voltage_channel": "",
+    "excitation_current_channel": "",
+    "excitation_voltage_scale": 1,
+    "excitation_current_scale": 1,
+    "excitation_start_us": 0,
+    "excitation_end_us": 100
   },
   "acquisition": {},
   "resource": ""

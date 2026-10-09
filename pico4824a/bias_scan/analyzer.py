@@ -38,16 +38,68 @@ class BiasScanAnalyzer:
         return float(np.ptp(window)),''
 
     @staticmethod
-    def summary(target, rows, repeats, eligible=True):
+    def aggregate(values, method='mean'):
+        values = sorted(float(v) for v in values if v is not None and math.isfinite(v))
+        if method == 'trimmed_mean':
+            values = values[1:-1] if len(values) >= 3 else []
+        if not values:
+            return None, None, 0
+        center = np.median(values) if method == 'median' else np.mean(values)
+        return float(center), float(np.std(values, ddof=1)) if len(values)>1 else None, len(values)
+
+    @staticmethod
+    def excitation(result, config):
+        metrics = {}
+        for role, unit in [('voltage', 'v'), ('current', 'a')]:
+            channel = getattr(config, 'excitation_'+role+'_channel')
+            key = 'excitation_'+role+'_vpp_'+unit
+            metrics[key] = None
+            metrics['excitation_'+role+'_reason'] = ''
+            if not channel:
+                continue
+            values = result.volts.get(channel)
+            t = result.time_s * 1e6
+            reason = ''
+            if channel in result.overflow_channels:
+                reason = '激励通道输入溢出'
+            elif values is None or len(values)!=len(t) or len(t)<2 or not np.all(np.isfinite(values)):
+                reason = '激励原始数据无效'
+            elif not np.all(np.isfinite(t)) or np.any(np.diff(t)<=0):
+                reason = '时间轴无效'
+            elif config.excitation_start_us < t[0]-1e-8 or config.excitation_end_us > t[-1]+1e-8:
+                reason = '激励窗口不完整'
+            else:
+                window = values[(t>=config.excitation_start_us)&(t<=config.excitation_end_us)]
+                if len(window)<2:
+                    reason = '激励窗口样本不足'
+                else:
+                    converted = float(np.ptp(window))*getattr(config, 'excitation_'+role+'_scale')
+                    if math.isfinite(converted):
+                        metrics[key] = converted
+                    else:
+                        reason = '激励换算结果非有限值'
+            metrics['excitation_'+role+'_reason'] = reason
+        return metrics
+
+    @staticmethod
+    def summary(target, rows, repeats, eligible=True, method='mean'):
         valid=[row for row in rows if row['valid']]
         currents=[row['actual_current_a'] for row in rows if row.get('actual_current_a') is not None]
         values=[row['vpp_v'] for row in valid]
-        return {'target_a':target,'captured_count':len(rows),'valid_count':len(valid),
+        center, sd, count = BiasScanAnalyzer.aggregate(values, method)
+        summary = {'target_a':target,'captured_count':len(rows),'valid_count':len(valid),
                 'eligible':eligible and len(rows)==repeats and len(valid)==repeats,
                 'actual_current_mean_a':float(np.mean(currents)) if currents else None,
                 'actual_current_sd_a':float(np.std(currents,ddof=1)) if len(currents)>1 else None,
-                'vpp_mean_v':float(np.mean(values)) if values else None,
-                'vpp_sd_v':float(np.std(values,ddof=1)) if len(values)>1 else None}
+                'aggregation':method, 'statistics_count':count,
+                'vpp_mean_v':center, 'vpp_sd_v':sd}
+        for role, unit in [('voltage','v'), ('current','a')]:
+            key = 'excitation_'+role
+            values = [r.get(key+'_vpp_'+unit) for r in rows]
+            center, sd, count = BiasScanAnalyzer.aggregate(values, method)
+            summary.update({key+'_mean_'+unit:center, key+'_sd_'+unit:sd, key+'_statistics_count':count,
+                            key+'_valid_count':sum(v is not None for v in values)})
+        return summary
 
     @staticmethod
     def best(rows):
