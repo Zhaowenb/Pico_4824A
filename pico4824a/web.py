@@ -67,6 +67,13 @@ WEB_DIR = PROJECT_DIR / "web"
 INTERFERENCE_DIR = WEB_DIR / "interference"
 
 
+def snapshot_web_assets() -> dict[str, bytes]:
+    """Keep HTML/CSS/JS at one revision for this running backend."""
+    return {path.relative_to(WEB_DIR).as_posix(): path.read_bytes()
+            for path in WEB_DIR.rglob('*')
+            if path.is_file() and path.suffix in {'.html', '.css', '.js'}}
+
+
 @dataclass(slots=True)
 class WebStatus:
     state: str = "idle"
@@ -1146,8 +1153,11 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         return raw
 
     def _send_asset(self, name: str, content_type: str) -> None:
-        path = WEB_DIR / name
-        body = path.read_bytes()
+        assets = getattr(self.server, 'web_assets', None)
+        if assets is None:
+            # Also support embedded/test servers that do not call serve().
+            assets = self.server.web_assets = snapshot_web_assets()
+        body = assets[name]
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -1156,13 +1166,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _send_interference_asset(self, name: str, content_type: str) -> None:
-        body = (INTERFERENCE_DIR / name).read_bytes()
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_asset('interference/' + name, content_type)
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
         parsed = urlparse(self.path)
@@ -1523,6 +1527,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
 
 def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
     server = ThreadingHTTPServer((host, port), PicoWebHandler)
+    server.web_assets = snapshot_web_assets()  # type: ignore[attr-defined]
     server.control = WebControlState()  # type: ignore[attr-defined]
     try:
         server.control.initialize_hardware()  # type: ignore[attr-defined]

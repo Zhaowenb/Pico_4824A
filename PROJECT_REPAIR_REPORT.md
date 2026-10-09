@@ -49,3 +49,11 @@
 ## 发布
 
 发布目标：`https://github.com/Zhaowenb/Pico_4824A.git` 的 `btf` 分支。保留本地修复前版本 `0f4374e`，并保留已有远端历史；不强推、不改主分支。
+
+## 2026-10-09 页面叠加：运行中的旧后端混用新前端
+
+复现于 4824：旧 Python 服务运行中更新文件，HTML/app.js 被实时读取为新版本，但旧路由缺少 /ui/storage-naming.js、/ui/analysis-state.js、/analysis/time-frequency.js、/analysis/experimental.js，返回 404，继而出现 WaveGuardAnalysisState 等 ReferenceError，路由/通道初始化中断，造成多页内容叠加。4877 新服务同页无误。
+
+已确认原服务停止且偏置输出 off，经 /api/admin/shutdown 安全退出，再从 TARGET 启动当前代码于原 4824 地址。静态资源改为每次启动的一致快照，包括干扰页；运行中更新文件不会再混入新前端，更新后必须重启服务。README 补充更新步骤。
+
+159 项 Python 回归通过，新增运行期间修改磁盘文件不会混用版本的 HTTP 回归。全站 8 页 × 6 尺寸 × Light/Dark 共 96 项布局/导航/参数面板检查通过；4824 的 LCR 页面只有一个工作区，所有依赖 200，无页面脚本错误。SOURCE 只读校验通过。仅仿真验证，无实机通电。

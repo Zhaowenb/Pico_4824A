@@ -263,3 +263,7 @@ python -m unittest discover -s tests -v
 - PicoScope 4000A specifications: <https://www.picotech.com/oscilloscope/4000/picoscope-4000-specifications>
 - Pico Python wrappers/examples: <https://github.com/picotech/picosdk-python-wrappers>
 - ATA-2021B 官方规格（DC～1 MHz、交直流放大）：<https://www.aigtek.com/products/953.html>
+
+### 拉取更新后重启 Web 服务
+
+更新代码前先停止扫描并确认偏置电源输出关闭。在启动服务的终端按 Ctrl+C，执行 `git pull origin btf`，再运行 `./start_web.ps1`，最后刷新浏览器。仅刷新页面不会更新内存中的 Python 后端。服务启动时固定加载同一版 HTML/CSS/JS，防止旧 API 与新前端混用；更新前端文件也需要重启。
