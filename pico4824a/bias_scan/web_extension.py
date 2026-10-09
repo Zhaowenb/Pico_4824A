@@ -30,7 +30,11 @@ class BiasScanWebMixin:
         with self._lock:
             if self.status.state in {'running','paused'} or self.bias_cleanup_pending:raise RuntimeError('已有仪器任务正在运行')
             if self.bias_power:
-                self.bias_power.close();self.bias_power=None
+                try:self.bias_power.close()
+                except Exception as exc:
+                    self.bias_unknown=True
+                    raise RuntimeError('原连接未确认关闭，请点击确认断电并恢复：'+str(exc)) from exc
+                self.bias_power=None
             power=IT6524DController(str(raw.get('resource','')),str(raw.get('backend','')))
             self.bias_power=power
             try:identity=power.connect()
@@ -39,6 +43,51 @@ class BiasScanWebMixin:
                 raise
             self.bias_unknown=False
             return {'identity':identity,'output_state':power.output_state,'independent_cutoff_ready':self.bias_protection.ready()}
+
+    def bias_recover(self):
+        """Explicit OFF-only recovery. Never resume an interrupted scan."""
+        with self._lock:
+            controller=self.bias_controller
+            if self.status.state in {'running','paused'} or (self._worker_thread and self._worker_thread.is_alive()):
+                raise RuntimeError('请先停止扫描并等待采集退出，再确认断电并恢复')
+            if controller and any(t.is_alive() for t in controller._threads):
+                raise RuntimeError('安全监控尚未退出，不能解除仪器占用')
+            powers=[self.bias_power] if self.bias_power else []
+            if controller and controller.power not in powers:powers.append(controller.power)
+            if not powers:raise RuntimeError('尚无电源连接，请先选择 USB 资源并连接')
+            try:
+                for power in powers:
+                    try:
+                        power.connect()
+                        power.output_off()
+                    except Exception:
+                        if not isinstance(power,IT6524DController):raise
+                        # Reopen only the same user-selected USB resource. Model
+                        # identity and OFF are confirmed again before unlocking.
+                        power.close_transport()
+                        power.connect()
+                        power.output_off()
+                    if power.output_state!='off':raise RuntimeError('电源未确认关闭')
+            except Exception as exc:
+                self.bias_unknown=True
+                self.status.state='error';self.status.task_kind='bias_scan'
+                self.status.message='断电恢复失败：'+str(exc)
+                self.status.progress={**(self.status.progress or {}),'output_state':'unknown','phase':'error'}
+                raise RuntimeError(self.status.message) from exc
+            self.bias_unknown=False;self.bias_cleanup_pending=False
+            warning=''
+            if controller:
+                controller._unknown_latched=False
+                controller.event('manual_off_recovery',output_state='off')
+                controller.result['recovery']={'output_state':'off','wall_time':time.time()}
+                if controller.folder:
+                    try:controller.persist()
+                    except Exception as exc:warning='；恢复记录保存失败：'+str(exc)
+            self.status.state='idle';self.status.task_kind='bias_scan'
+            self.status.message='已确认输出关闭，可以重新开始'+warning
+            self.status.progress={**(self.status.progress or {}),'output_state':'off','phase':'recovered'}
+            self.status.finished_at=time.time()
+            return {'output_state':'off','message':self.status.message,'recovered':True}
 
     def bias_preflight(self, raw):
         simulate=raw.get('simulate',True)
@@ -114,7 +163,7 @@ class BiasScanWebMixin:
             if result is None:raise RuntimeError('尚无偏置扫描结果')
             # Publish only summaries saved after OFF, never stream raw powered captures.
             return {k:list(result.get(k,[])) if k in {'summary','runs'} else result.get(k) for k in ['status','simulated','reason','output_state','summary','runs','revision',
-                'best_current_a','best_vpp_mean_v','ties_a','output_dir','device_identity','acquisition','configuration','protection_mode','evaluation']}
+                'best_current_a','best_vpp_mean_v','ties_a','output_dir','device_identity','acquisition','configuration','protection_mode','evaluation','off_error','recovery']}
 
     def bias_preview(self, point, repeat):
         with self._lock:

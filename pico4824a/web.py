@@ -124,6 +124,7 @@ class WebControlState(BiasScanWebMixin):
                 "trip_alarm": dict(self._trip_alarm) if self._trip_alarm else None,
                 "has_bias_result": self.bias_controller is not None,
                 "bias_output_unknown": self.bias_unknown,
+                "bias_power_state": self.bias_power.output_state if self.bias_power else "disconnected",
                 "bias_cleanup_pending": self.bias_cleanup_pending,
                 "has_result": self.result is not None,
                 "has_sweep_result": self.sweep_result is not None,
@@ -1332,6 +1333,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             if path == "/api/bias-scan/connect":
                 self._send_json(self.control.bias_connect(payload))
+            elif path == "/api/bias-scan/recover":
+                self._send_json(self.control.bias_recover())
             elif path == "/api/bias-scan/preflight":
                 self._send_json(self.control.bias_preflight(payload))
             elif path == "/api/bias-scan/start":

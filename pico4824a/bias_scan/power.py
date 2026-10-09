@@ -16,6 +16,8 @@ class IT6524DController:
         self.output_state = 'unknown'
         self._lock = threading.Lock()
         self._off_requested = threading.Event()
+        self._needs_clear = False
+        self.last_error = ''
 
     @staticmethod
     def resources(backend='', manager=None):
@@ -39,6 +41,7 @@ class IT6524DController:
     def connect(self):
         if self.instrument is not None:
             return self.identity
+        self._model_confirmed = False
         try:
             if self.manager_factory is None:
                 import pyvisa
@@ -46,15 +49,20 @@ class IT6524DController:
             else:
                 self.manager = self.manager_factory(self.backend)
             self.instrument = self.manager.open_resource(self.resource)
-            self.instrument.timeout = self.timeout_ms
+            # Identification and initial OFF happen outside a powered scan.
+            # Allow startup replies more time without weakening powered timeouts.
+            self.instrument.timeout = max(2000, self.timeout_ms)
             self.instrument.write_termination = '\n'
             self.instrument.read_termination = '\n'
-            self.identity = self.instrument.query('*IDN?').strip()
+            if self._needs_clear:self._clear_transport()
+            self.identity = self._query(self.instrument, '*IDN?').strip()
             if 'ITECH' not in self.identity.upper() or 'IT6524D' not in [part.strip() for part in self.identity.upper().split(',')]:
                 raise RuntimeError(f'设备型号不匹配：{self.identity}')
             self._model_confirmed = True
             self.instrument.write('SYST:REM')
             self.output_off()
+            self.instrument.timeout = self.timeout_ms
+            self.last_error = ''
             return self.identity
         except BaseException:
             # Never send model-specific commands to an unidentified instrument.
@@ -63,6 +71,35 @@ class IT6524DController:
                 except Exception: pass
             self.close_transport()
             raise
+
+    def _query(self, instrument, command):
+        try:
+            return instrument.query(command)
+        except Exception as exc:
+            self._needs_clear = True
+            self.last_error = f'{command} 查询失败（超时 {instrument.timeout} ms）：{exc}'
+            raise RuntimeError(self.last_error) from exc
+
+    def _clear_transport(self):
+        # A timed-out query can leave a delayed reply queued. Never mistake
+        # that old measurement for the reply to OUTP?. USBTMC clear resyncs I/O.
+        try:
+            self.instrument.clear()
+        except Exception as exc:
+            self.last_error = f'USB 通信失步，清理失败；需要重新连接：{exc}'
+            raise RuntimeError(self.last_error) from exc
+        self._needs_clear = False
+
+    @staticmethod
+    def _output_enabled(response):
+        text = str(response).strip().upper()
+        if text in {'ON', 'OFF'}:return text == 'ON'
+        try:value = float(text)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError(f'OUTP? 状态回读格式异常：{text!r}') from exc
+        if value not in {0, 1}:
+            raise RuntimeError(f'OUTP? 状态回读异常：{text!r}')
+        return bool(value)
 
     def _normal(self, action):
         if self._off_requested.is_set():
@@ -80,7 +117,7 @@ class IT6524DController:
         self._off_requested.clear()
         def commands(i):
             i.write(f'VOLT {voltage:.12g}'); i.write(f'CURR {current:.12g}')
-            actual_v, actual_i = float(i.query('VOLT?')), float(i.query('CURR?'))
+            actual_v, actual_i = float(self._query(i,'VOLT?')), float(self._query(i,'CURR?'))
             if not math.isfinite(actual_v) or not math.isfinite(actual_i) or abs(actual_v-voltage)>.02 or abs(actual_i-current)>.011:
                 raise RuntimeError('电源设置回读不一致')
         self._normal(commands)
@@ -93,9 +130,9 @@ class IT6524DController:
 
     def read_actual(self):
         def measure(i):
-            current=float(i.query('MEAS:CURR?'))
+            current=float(self._query(i,'MEAS:CURR?'))
             if self._off_requested.is_set():raise RuntimeError('电源关断优先')
-            voltage=float(i.query('MEAS:VOLT?'))
+            voltage=float(self._query(i,'MEAS:VOLT?'))
             if not math.isfinite(current) or not math.isfinite(voltage):
                 raise RuntimeError('电源遥测不是有限值')
             return {'current_a':current,'voltage_v':voltage,'monotonic_time':time.monotonic(),'wall_time':time.time()}
@@ -109,20 +146,30 @@ class IT6524DController:
         if not self._lock.acquire(timeout=max(.5,self.timeout_ms/1000*3)):
             raise RuntimeError('通信锁超时，输出状态未知')
         try:
-            self.instrument.write('OUTP OFF')
-            response = self.instrument.query('OUTP?').strip().upper()
-            if response != 'OFF' and float(response) != 0:
-                raise RuntimeError('输出关闭未被设备确认')
-            self.output_state = 'off'
+            # No automatic scan retry: only bounded, OFF-only confirmation.
+            for attempt in range(3):
+                try:
+                    self.instrument.write('OUTP OFF')
+                    if self._needs_clear:
+                        self._clear_transport()
+                        self.instrument.write('OUTP OFF')
+                    response = self._query(self.instrument,'OUTP?')
+                    if self._output_enabled(response):
+                        raise RuntimeError(f'OUTP? 仍返回输出开启：{str(response).strip()!r}')
+                    self.output_state = 'off'
+                    self.last_error = ''
+                    return
+                except Exception as exc:
+                    self.last_error = str(exc)
+                    if attempt == 2:
+                        raise RuntimeError('OUTP OFF / OUTP? 关闭确认失败：'+self.last_error) from exc
+                    time.sleep(.05)
         finally:
             self._lock.release()
 
     def read_status(self):
-        response=self._normal(lambda i:i.query('OUTP?')).strip().upper()
-        if response in {'ON','OFF'}:return response=='ON'
-        value=float(response)
-        if value not in {0,1}:raise RuntimeError('输出状态回读异常')
-        return bool(value)
+        response=self._normal(lambda i:self._query(i,'OUTP?'))
+        return self._output_enabled(response)
 
     def read_off_actual(self):
         if self.output_state != 'off':

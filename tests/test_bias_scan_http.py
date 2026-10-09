@@ -69,4 +69,48 @@ class BiasHttpTests(unittest.TestCase):
         self.assertTrue(adapter.started.wait(1));self.control.shutdown();self.assertEqual(job.power.output_state,'off');worker.join(2)
         self.assertFalse(worker.is_alive());self.assertEqual(job.result['status'],'stopped')
 
+    def test_manual_recovery_failure_then_success_and_restart(self):
+        from test_bias_scan import FakePico,FaultPower
+        from pico4824a.bias_scan import BiasScanController
+        power=FaultPower('off')
+        cfg=BiasScanConfig(start_a=.5,stop_a=.5,repeats=5,interval_s=0,stable_hold_s=.01,poll_s=.01,cooldown_s=0)
+        job=BiasScanController(cfg,AcquisitionConfig.from_dict(self.acq),power,FakePico(),self.tmp.name,simulate=True)
+        result=job.run()
+        self.assertEqual(result['output_state'],'unknown')
+        self.assertIn('OFF failed',result['reason'])
+        self.control.bias_power=power;self.control.bias_controller=job;self.control.bias_result=result
+        self.control.bias_unknown=True;self.control.status.state='error';self.control.status.task_kind='bias_scan'
+        with self.assertRaises(HTTPError):self.req('/api/bias-scan/recover',{})
+        self.assertTrue(self.control.bias_unknown)
+        power.fault=''
+        response=json.loads(self.req('/api/bias-scan/recover',{})[1])
+        self.assertTrue(response['recovered']);self.assertEqual(response['output_state'],'off')
+        status=json.loads(self.req('/api/status')[1])
+        self.assertFalse(status['bias_output_unknown']);self.assertEqual(status['state'],'idle')
+        self.assertEqual(status['progress']['output_state'],'off')
+        self.assertEqual(result['output_state'],'unknown') # Historical failure is not erased.
+        self.assertEqual(result['recovery']['output_state'],'off')
+        self.req('/api/bias-scan/start',{'simulate':True,'config':self.acq,'bias':{**self.config,'stop_a':0}})
+        worker=self.control._worker_thread
+        if worker:worker.join(3)
+        self.assertEqual(self.control.status.state,'complete')
+
+    def test_recovery_cannot_unlock_running_or_cleanup_threads(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        power=Mock();power.output_state='off'
+        self.control.bias_power=power
+        self.control.status.state='running'
+        with self.assertRaises(HTTPError):self.req('/api/bias-scan/recover',{})
+        power.output_off.assert_not_called()
+        self.control.status.state='error'
+        thread=Mock();thread.is_alive.return_value=True
+        self.control.bias_controller=SimpleNamespace(_threads=[thread])
+        with self.assertRaises(HTTPError):self.req('/api/bias-scan/recover',{})
+        power.output_off.assert_not_called()
+        self.control.bias_controller=None;self.control.bias_power=None
+
+    def test_recovery_without_connection_does_not_claim_off(self):
+        with self.assertRaises(HTTPError):self.req('/api/bias-scan/recover',{})
+
 if __name__=='__main__':unittest.main()

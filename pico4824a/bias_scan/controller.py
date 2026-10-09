@@ -45,6 +45,7 @@ class BiasScanController:
         self._point_done = threading.Event()
         self._threads = []
         self._unknown_latched = False
+        self._off_error = ''
         self.folder = None
         self._last_progress = {}
 
@@ -69,6 +70,7 @@ class BiasScanController:
                 self.result['output_state'] = 'off'
             except BaseException as exc:
                 self._unknown_latched = True
+                self._off_error = str(exc)
                 self.result['output_state'] = 'unknown'
                 self.event('off_failed', reason=str(exc))
                 try:self.protection.trip('输出状态未知')
@@ -297,7 +299,7 @@ class BiasScanController:
             self._point_done.set()
             try:self.off()
             except Exception as exc:self.result.update(status='error',reason=str(exc))
-            if self._unknown_latched:self.result.update(status='error',output_state='unknown',reason='输出状态未知；需要人工检查，禁止继续')
+            if self._unknown_latched:self.result.update(status='error',output_state='unknown',reason='输出状态未知：'+self._off_error+'；请确认断电并恢复',off_error=self._off_error)
             if self.folder:
                 try:self.persist()
                 except Exception as exc:self.result.update(status='error',reason='保存失败：'+str(exc))
