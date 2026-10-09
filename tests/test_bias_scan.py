@@ -174,13 +174,13 @@ class PowerDriverTests(unittest.TestCase):
             def __init__(self):self.commands=[];self.v=0;self.i=0;self.on=0
             def query(self,c):
                 self.commands.append(c)
-                return {'*IDN?':'ITECH, IT6524D, SN, FW','OUTP?':str(self.on),'VOLT?':str(self.v),'CURR?':str(self.i),'MEAS:CURR?':str(self.i),'MEAS:VOLT?':str(self.v)}[c]
+                return {'*IDN?':'ITECH, IT6524D, SN, FW',':OUTPut:STATe?':str(self.on),'VOLT?':str(self.v),'CURR?':str(self.i),'MEAS:CURR?':str(self.i),'MEAS:VOLT?':str(self.v)}[c]
             def write(self,c):
                 self.commands.append(c)
                 if c.startswith('VOLT '):self.v=float(c.split()[1])
                 if c.startswith('CURR '):self.i=float(c.split()[1])
-                if c=='OUTP ON':self.on=1
-                if c=='OUTP OFF':self.on=0
+                if c==':OUTPut:STATe 1':self.on=1
+                if c==':OUTPut:STATe 0':self.on=0
             def close(self):pass
         class Manager:
             def open_resource(self,r):return instrument
@@ -189,6 +189,6 @@ class PowerDriverTests(unittest.TestCase):
         power.connect();power.configure(40,.5);power.output_on();self.assertEqual(power.read_actual()['current_a'],.5)
         power.output_off();power.output_off();self.assertEqual(power.output_state,'off')
         with self.assertRaises(RuntimeError):power.read_actual()
-        self.assertEqual(instrument.commands[:4],['*IDN?','SYST:REM','OUTP OFF','OUTP?']);power.close()
+        self.assertEqual(instrument.commands[:4],['*IDN?','SYST:REM',':OUTPut:STATe 0',':OUTPut:STATe?']);power.close()
 
 if __name__=='__main__':unittest.main()

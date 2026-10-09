@@ -1,6 +1,7 @@
 import math
 import threading
 import time
+from collections import deque
 
 
 class IT6524DController:
@@ -18,6 +19,21 @@ class IT6524DController:
         self._off_requested = threading.Event()
         self._needs_clear = False
         self.last_error = ''
+        self.diagnostics = deque(maxlen=128)
+        self.exclusive_access = None
+
+    def _trace(self, command, reply=None, error=None):
+        self.diagnostics.append({'time':time.time(),'command':command,
+                                 'reply':str(reply)[:256] if reply is not None else None,
+                                 'error':str(error)[:256] if error is not None else None})
+
+    def _write(self, command):
+        try:
+            self.instrument.write(command)
+            self._trace(command)
+        except Exception as exc:
+            self._trace(command,error=exc)
+            raise
 
     @staticmethod
     def resources(backend='', manager=None):
@@ -54,6 +70,18 @@ class IT6524DController:
             self.instrument.timeout = max(2000, self.timeout_ms)
             self.instrument.write_termination = '\n'
             self.instrument.read_termination = '\n'
+            lock=getattr(self.instrument,'lock_excl',None)
+            if lock:
+                try:
+                    lock(timeout=2000)
+                    self.exclusive_access=True
+                except Exception as exc:
+                    # Some VISA backends cannot lock. Do not hide a real
+                    # resource-busy error or allow two owners of the device.
+                    if getattr(exc,'error_code',None)==-1073807257: # VI_ERROR_NSUP_OPER
+                        self.exclusive_access=False
+                        self._trace('VISA exclusive lock unsupported',error=exc)
+                    else:raise RuntimeError('无法独占 USB 电源，请退出其他电源控制程序或旧服务：'+str(exc)) from exc
             if self._needs_clear:self._clear_transport()
             self.identity = self._query(self.instrument, '*IDN?').strip()
             if 'ITECH' not in self.identity.upper() or 'IT6524D' not in [part.strip() for part in self.identity.upper().split(',')]:
@@ -74,8 +102,11 @@ class IT6524DController:
 
     def _query(self, instrument, command):
         try:
-            return instrument.query(command)
+            reply=instrument.query(command)
+            self._trace(command,reply=reply)
+            return reply
         except Exception as exc:
+            self._trace(command,error=exc)
             self._needs_clear = True
             self.last_error = f'{command} 查询失败（超时 {instrument.timeout} ms）：{exc}'
             raise RuntimeError(self.last_error) from exc
@@ -89,6 +120,36 @@ class IT6524DController:
             self.last_error = f'USB 通信失步，清理失败；需要重新连接：{exc}'
             raise RuntimeError(self.last_error) from exc
         self._needs_clear = False
+
+    def _resync_off(self, deadline):
+        """Drain to a recognizable identity reply before trusting booleans.
+
+        Send one IDN query, read its queued reply without issuing more queries.
+        Numeric stale replies are rejected, never used as an OFF acknowledgement.
+        """
+        self._clear_transport()
+        self._write(':OUTPut:STATe 0')
+        reply=self._query(self.instrument,'*IDN?')
+        for attempt in range(4):
+            text=str(reply).strip()
+            if text.upper()==self.identity.strip().upper():
+                self._needs_clear=False
+                return
+            if ',' in text:
+                raise RuntimeError('关闭同步时设备身份不匹配：'+text)
+            if time.monotonic()>=deadline:
+                self._needs_clear=True
+                raise RuntimeError('关闭状态同步超时：未收到当前设备身份回复')
+            if attempt==3:break
+            try:
+                reply=self.instrument.read()
+                self._trace('*IDN? continuation',reply=reply)
+            except Exception as exc:
+                self._needs_clear=True
+                self._trace('*IDN? continuation',error=exc)
+                raise RuntimeError('关闭状态同步失败：'+str(exc)) from exc
+        self._needs_clear=True
+        raise RuntimeError('关闭状态同步失败：未收到当前设备身份回复')
 
     @staticmethod
     def _output_enabled(response):
@@ -124,7 +185,7 @@ class IT6524DController:
 
     def output_on(self):
         def enable(i):
-            i.write('OUTP ON')
+            i.write(':OUTPut:STATe 1')
             self.output_state = 'on'
         self._normal(enable)
 
@@ -145,30 +206,53 @@ class IT6524DController:
             raise RuntimeError('电源未连接，无法确认输出关闭')
         if not self._lock.acquire(timeout=max(.5,self.timeout_ms/1000*3)):
             raise RuntimeError('通信锁超时，输出状态未知')
+        saved_timeout=self.instrument.timeout
         try:
-            # No automatic scan retry: only bounded, OFF-only confirmation.
-            for attempt in range(3):
+            self.instrument.timeout=min(saved_timeout,self.timeout_ms)
+            # First operation is always OFF. Do not repeatedly resend OFF while
+            # polling, which can restart a device's pending state transition.
+            self._write(':OUTPut:STATe 0')
+            deadline=time.monotonic()+1.0
+            synced=False;off_count=0;io_failures=0
+            if self._needs_clear:
+                self._resync_off(deadline);synced=True
+            while True:
                 try:
-                    self.instrument.write('OUTP OFF')
-                    if self._needs_clear:
-                        self._clear_transport()
-                        self.instrument.write('OUTP OFF')
-                    response = self._query(self.instrument,'OUTP?')
+                    response = self._query(self.instrument,':OUTPut:STATe?')
+                    last_response=str(response).strip()
                     if self._output_enabled(response):
-                        raise RuntimeError(f'OUTP? 仍返回输出开启：{str(response).strip()!r}')
-                    self.output_state = 'off'
-                    self.last_error = ''
-                    return
+                        off_count=0
+                        self.last_error=f'OUTPut:STATe? 仍返回输出开启：{last_response!r}'
+                        if not synced:
+                            self._resync_off(deadline);synced=True
+                    else:
+                        off_count+=1
+                        if off_count>=2:
+                            self.output_state = 'off'
+                            self.last_error = ''
+                            return
                 except Exception as exc:
                     self.last_error = str(exc)
-                    if attempt == 2:
-                        raise RuntimeError('OUTP OFF / OUTP? 关闭确认失败：'+self.last_error) from exc
-                    time.sleep(.05)
+                    io_failures+=1;off_count=0
+                    if io_failures>=3:break
+                    if (self._needs_clear or not synced) and time.monotonic()<deadline:
+                        try:self._resync_off(deadline);synced=True
+                        except Exception as resync_exc:self.last_error=str(resync_exc);break
+                if time.monotonic()>=deadline:break
+                time.sleep(min(.05,max(0,deadline-time.monotonic())))
+            # Never equate zero measured current or an extinguished panel lamp
+            # with an acknowledged output switch OFF. Query firmware errors.
+            diagnostic=''
+            if not self._needs_clear:
+                try:diagnostic='；SYST:ERR?='+str(self._query(self.instrument,'SYST:ERR?')).strip()
+                except Exception as exc:diagnostic='；设备错误查询失败：'+str(exc)
+            raise RuntimeError('OUTPut:STATe 0 关闭确认失败：'+self.last_error+diagnostic)
         finally:
-            self._lock.release()
+            try:self.instrument.timeout=saved_timeout
+            finally:self._lock.release()
 
     def read_status(self):
-        response=self._normal(lambda i:self._query(i,'OUTP?'))
+        response=self._normal(lambda i:self._query(i,':OUTPut:STATe?'))
         return self._output_enabled(response)
 
     def read_off_actual(self):

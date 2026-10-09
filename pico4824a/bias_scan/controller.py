@@ -299,6 +299,8 @@ class BiasScanController:
             self._point_done.set()
             try:self.off()
             except Exception as exc:self.result.update(status='error',reason=str(exc))
+            if hasattr(self.power,'diagnostics'):
+                self.result['power_diagnostics']=list(self.power.diagnostics)
             if self._unknown_latched:self.result.update(status='error',output_state='unknown',reason='输出状态未知：'+self._off_error+'；请确认断电并恢复',off_error=self._off_error)
             if self.folder:
                 try:self.persist()
