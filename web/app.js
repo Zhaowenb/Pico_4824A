@@ -1180,6 +1180,7 @@ function drawLinearityMeasurementWave() {
 async function pollStatus() {
   try {
     const status = await api("/api/status");
+    window.dispatchEvent(new CustomEvent("waveguard-status", {detail:status}));
     setEvent(status.message, status.state);
     updateTripAlarm(status);
     const running = ["running", "paused"].includes(status.state);
@@ -2620,7 +2621,7 @@ function setAnalysisLens(lens, refresh = true) {
 function currentPage() {
   const part = location.pathname.replace(/^\/+|\/+$/g, "");
   if (part === "analysis") return "file-analysis";
-  return ["measure", "sweep", "lcr", "lcr-linearity", "file-analysis", "sweep-analysis"].includes(part)
+  return ["measure", "sweep", "lcr", "lcr-linearity", "file-analysis", "sweep-analysis", "bias-scan"].includes(part)
     ? part
     : "measure";
 }
@@ -2747,6 +2748,7 @@ function updateSweepBaseSummary() {
 
 function showPage(page, push = false) {
   const workspaceCopy = {
+    "bias-scan": ["BIAS RESPONSE", "偏置电流扫描", "IT6524D → PicoScope 4824A · 0–6 A", "安全预检 · READY"],
     measure: ["LIVE ACQUISITION", "实时测量", "PicoScope 4824A · 8CH BLOCK CAPTURE", "系统就绪 · READY"],
     sweep: ["PARAMETER EXPLORATION", "参数扫描", "AWG → TRIGGER → 8CH CAPTURE → EVALUATION", "扫描待命 · READY"],
     lcr: ["IMPEDANCE WORKSPACE", "LCR 测量", "SMALL SIGNAL / HIGH DRIVE · CALIBRATED", "测量待命 · READY"],

@@ -4,7 +4,7 @@
   const routes = [
     ['measure','实时测量'], ['sweep','参数扫描'], ['lcr','LCR测量'],
     ['lcr-linearity','LCR数据分析'], ['file-analysis','单数据分析'],
-    ['sweep-analysis','参数数据分析'], ['interference','干扰实验']
+    ['sweep-analysis','参数数据分析'], ['bias-scan','偏置电流扫描'], ['interference','干扰实验']
   ];
   const channelColors = Object.freeze(['#2e73e8','#e34b4b','#39ae50','#e5ce29','#a060cb','#a3a3a3','#56b5df','#d44bb7']);
   const stages = new Map(), panels = new Set(), painters = new Map();

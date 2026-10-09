@@ -1,0 +1,98 @@
+# 偏置电流扫描 · 运行与安全接口
+
+开发与运行目录：`F:\Project\01guided_waves\software\Pico_4824A_btf`。
+`Pico_4824A` 仅作为只读参考。本功能没有修改采集、滤波或时频算法。
+
+## 网页
+
+```powershell
+Set-Location F:\Project\01guided_waves\software\Pico_4824A_btf
+.\.venv\Scripts\python.exe -B -m pico4824a web --host 127.0.0.1 --port 4824
+```
+
+打开 `http://127.0.0.1:4824/bias-scan`。请先退出旧服务，避免 Windows 的端口复用让旧服务继续接收请求。独立验收服务使用 `4876`，可访问 `http://127.0.0.1:4876/bias-scan`。
+
+1. 在实时测量页配置采样、通道、AWG 与触发；无需执行采集。
+2. 打开“偏置电流扫描”。默认勾选仿真；默认 0–6 A / 0.5 A / 10 次 / 2000 μs / 100 ms。
+3. 配置启用的 PZT 通道及完整位于记录内的直达波窗口。
+4. “参数设置”打开共享右侧 Inspector；不会增加页面高度。
+5. 启动时重新复制实时测量设置，服务器冻结快照，覆盖记录长度。进行中的输入不可编辑。
+6. 每档断电后保存、计算并更新曲线；选择档位与重复查看原始 PZT 波形。误差棒为样本标准差。
+7. “停止并断电”优先关闭偏置输出，再停止 Pico；导出逐档/逐次 CSV、JSON 和配置快照。
+
+通道沿用共享官方通道色；响应曲线沿用用户选择的工作站强调色。Light/Dark、设置、专注、Inspector、导航与 Reduced Motion 均使用现有底层。
+
+## CLI 仿真
+
+```powershell
+.\.venv\Scripts\python.exe -B -m pico4824a bias-scan --config configs/bias-scan.example.json --simulate
+```
+
+示例安全限值为 `null`。仅仿真采用有效限值 40 V / 最大通电 3 s / 稳定超时 1 s / 冷却 0.1 s，并在配置快照中标明。实机没有这些回退值。
+
+仿真直接复用现有 Pico 模拟采集，不额外编造“电流影响 Vpp”的物理模型。各档模拟波形相同、Vpp 均值并列时会选最低电流。这只检验闭环、保存与统计，**不能用于判断电磁铁的最佳偏置**。
+
+## 实机门槛与可选依赖
+
+```powershell
+# 只安装到 TARGET 的虚拟环境；不自动安装系统 VISA 驱动
+.\.venv\Scripts\python.exe -B -m pip install -e ".[bias]"
+```
+
+PyVISA 延迟导入；缺包或缺 VISA 后端时页面给出明确消息，不影响仿真和其他页面。用户必须明确选择 USB VISA 资源。连接核对 `*IDN?` 的 ITECH / IT6524D 型号，随后发送关闭命令并通过 `OUTP?` 确认。不提供网页直接开启电源的入口。
+
+驱动核对型号后发送 `SYST:REM` 进入远程控制，再立即关闭并确认输出；使用 `VOLT`、`CURR`、`VOLT?`、`CURR?`、`OUTP ON/OFF`、`OUTP?`、`MEAS:CURR?`、`MEAS:VOLT?`。厂家参考：[IT6500C/D 编程指南](https://oss.itechate.com/uploadfiles/2019/01/201901251035103510.pdf)，已核对厂家 V2.1 手册的[经销商镜像](https://www.calpower.it/gallery/cpit6500cd-programming-guide-en2020.pdf)（印刷页 17、26–29、33、44–45）。指令通过模拟 VISA 测试；实际 IT6524D USB 通信、固件响应与查询耗时尚未验证。
+
+实机启动须同时满足：
+
+- 明确填写电压合规上限、每档最大通电、稳定超时、固定冷却；稳定超时必须小于最大通电并大于稳定保持时间。
+- 目标、实际电流安全上限均不超过 6 A；采集次数为 5–10。
+- 确认并记录续流/钳位与独立超时断电机制。
+- **服务器接入实际独立保护适配器**。确认框不等于硬件接入。当前默认保护 `ready()` 返回 false，因此填写限值也不能绕过锁定。
+- 电源身份、关闭确认、PZT 通道、时间窗、内存与磁盘预算均通过预检。
+
+独立保护接口位于 `pico4824a/bias_scan/safety.py`：实现 `SafetyProtection.ready / arm / trip / disarm`，把实际适配器赋给 `WebControlState.bias_protection`；模块方式也可传给 `BiasScanController(protection=...)`。适配器应调用独立于当前 Python 进程的物理超时断电装置，回调应有明确短超时；不可用空实现把 `ready()` 改为 true。CLI 目前保留实机保护锁定，需要在完成保护集成后注入该适配器。
+
+温度输入实现 `TemperatureProvider.read()`，返回 `TemperatureReading(celsius, monotonic_time)`，赋给 `WebControlState.bias_temperature` 或传入控制器。温度缺失、非有限、过期、超限和不能恢复都会中止。没有传感器时使用固定冷却模式。
+
+软件的关闭确认仅表示电源返回输出关闭；不表示线圈储能已释放。进程强杀、主机断电、USB 断开等情况不能靠 `finally` 保证发送关闭命令，必须由物理续流/钳位和独立超时保护处理。本轮没有实机通电试验。
+
+## 时序与结果
+
+`断电预检 → 设置 → 通电 → 稳定 → 连续采集 → 优先断电 → 保存/分析/冷却 → 下一档`。
+
+- 0 A 始终断电采集。其他档的通电计时从发送 ON 前开始，包含稳定、配置、触发和传输。
+- 开始间隔为 start-to-start；超时不追赶，不加额外补睡眠。
+- 通电期间只留内存中的原始结果、遥测与事件；不压缩或写波形文件、不计算统计、不刷新大图。
+- 独立截止线程不等待采集返回；遥测线程检查过流、超电压和温度。VISA 查询有有限超时，OFF 请求锁定普通通信。
+- 最后一次 capture 返回后优先发送 OFF；异常同样先 OFF，再停止 Pico。每档、整个任务、停止与服务退出都有关断收尾。
+- OFF 失败或不能确认时保留“输出状态未知”，触发保护接口并锁住所有仪器任务。安全线程未返回时同样保持占用锁；不得自动重试、恢复或继续下一档。
+- 冷却从首次 OFF 确认开始，可与保存分析重叠。实际批次耗时单独记录；`capture_batch_target_met` 表示是否达到 ≤1.5 s，不能把 2000 μs 当成整档耗时。
+
+结果目录为 `data/bias_scans/<时间戳_任务ID>`：
+
+| 文件 | 内容 |
+|---|---|
+| `config.json` | 冻结的采集/扫描配置、身份、仿真标志、有效限值 |
+| `point_XXX_repeat_YY.npz` | 复用原 `save_npz()`，可直接在单数据分析页打开 |
+| `runs.csv` | 目标/实际电流、遥测 wall/monotonic 时间、采集开始/结束、Vpp、有效性、原始文件 |
+| `summary.csv` | 次数、实际电流统计、Vpp 均值/样本 SD、资格、实际批次与通电耗时 |
+| `result.json` | 完成/停止/错误、原因、最佳已测点与并列、关闭状态、安全事件及所有结果 |
+
+CSV 采集起止为单调时钟秒，可计算间隔；遥测同时含 UTC Unix wall time。Vpp 为原始 PZT 窗口 `max-min`；标准差 `ddof=1`。输入溢出、非有限 PZT、非法采样元数据、缺窗/样本不足或不完整档不能参与最佳评选。均值严格相等时选最低电流并保留所有并列值；不插值、不声称连续范围全局最优。保存失败会中止并记录原因；磁盘故障时不能承诺写出尚在内存中的数据。
+
+## 测试与回退
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+$env:TEMP=Join-Path (Get-Location) '.test-tmp'
+$env:TMP=$env:TEMP
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -p test_*.py
+# 浏览器测试需要环境已有 Playwright 与 Edge；不新增项目生产依赖
+# WAVEGUARD_PLAYWRIGHT_MODULE 指向已有 Playwright，WAVEGUARD_URL 指向测试服务
+node tests/bias-scan-browser.cjs
+```
+
+`tests/source-readonly-manifest.json` 的 SOURCE 文件 SHA256 校验纳入回归。所有输出、缓存与测试临时目录都位于 TARGET。改造前本地 Git 标签：`bias-scan-before`（`ddea1d0`）；本轮代码提交保存在当前本地分支，不自动推送。
+
+实机验收顺序仍为：断电通信预检 → 保护验证 → 低电流单档 → 完整 0–6 A。电压、通电、稳定与冷却限值未确认且保护未接入，所以这些实机项目均为 **未验证**。

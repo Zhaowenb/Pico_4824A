@@ -39,6 +39,10 @@ def _parser() -> argparse.ArgumentParser:
     generate = sub.add_parser("generate-config", help="write a fresh default JSON config")
     generate.add_argument("path", type=Path, nargs="?", default=PROJECT_DIR / "config.json")
 
+    bias = sub.add_parser("bias-scan", help="scan magnetostrictive bias current (0–6 A)")
+    bias.add_argument("--config", type=Path, default=PROJECT_DIR / "configs/bias-scan.example.json")
+    bias.add_argument("--simulate", action="store_true")
+    bias.add_argument("--resource", default="")
     return parser
 
 
@@ -71,6 +75,21 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.command == "capture":
             code = _capture(args)
+        elif args.command == "bias-scan":
+            import json
+            from .bias_scan import BiasScanConfig, BiasScanController, PicoCaptureAdapter, IT6524DController, SimulatedPowerSupply
+            raw = json.loads(args.config.read_text(encoding="utf-8-sig"))
+            bias = BiasScanConfig.from_dict(raw["bias"])
+            bias.validate(live=not args.simulate)
+            if not args.simulate:raise RuntimeError("CLI 未接入独立超时断电保护适配器，实机扫描锁定")
+            acquisition = AcquisitionConfig.from_dict(raw.get("acquisition", {}))
+            power = SimulatedPowerSupply() if args.simulate else IT6524DController(args.resource or raw.get("resource", ""))
+            with Pico4824A(simulate=args.simulate) as device:
+                job = BiasScanController(bias, acquisition, power, PicoCaptureAdapter(device), PROJECT_DIR / "data/bias_scans", simulate=args.simulate)
+                try: result = job.run()
+                finally: power.close()
+            print(json.dumps({k:result.get(k) for k in ["status","reason","output_state","best_current_a","output_dir"]}, ensure_ascii=False))
+            code = 130 if result.get("interrupted") else (0 if result["status"]=="complete" else 2)
         elif args.command == "generate-config":
             config = AcquisitionConfig()
             config.validate()
@@ -86,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
 
             serve(args.host, args.port)
             code = 0
-    except (PicoError, ValueError, OSError) as exc:
+    except (PicoError, ValueError, OSError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         code = 2
     raise SystemExit(code)

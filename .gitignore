@@ -19,3 +19,5 @@ data/lcr_linearity/
 data/calibrations/
 data/interference/
 data/launcher_logs/
+
+data/bias_scans/

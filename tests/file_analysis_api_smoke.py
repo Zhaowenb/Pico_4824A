@@ -6,12 +6,13 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import os
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_URL = "http://127.0.0.1:54824"
+BASE_URL = os.environ.get("WAVEGUARD_BASE_URL", "http://127.0.0.1:54824")
 DATA_FILE = (ROOT / "data" / "A1.npz").resolve()
 SIGNATURE_FILE = ROOT / "tests" / "file-analysis-baseline-signatures.json"
 

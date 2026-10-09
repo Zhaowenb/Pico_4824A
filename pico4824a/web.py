@@ -77,7 +77,10 @@ class WebStatus:
     progress: dict[str, Any] | None = None
 
 
-class WebControlState:
+from .bias_scan.web_extension import BiasScanWebMixin
+
+
+class WebControlState(BiasScanWebMixin):
     def __init__(
         self,
         sweep_output_root: Path | None = None,
@@ -87,6 +90,7 @@ class WebControlState:
         interference_output_root: Path | None = None,
     ) -> None:
         self._lock = threading.RLock()
+        self.init_bias_scan(PROJECT_DIR)
         self.status = WebStatus()
         self.result: CaptureResult | None = None
         self.sweep_result: SweepOutcome | None = None
@@ -117,6 +121,9 @@ class WebControlState:
                 "task_kind": self.status.task_kind,
                 "progress": self.status.progress,
                 "trip_alarm": dict(self._trip_alarm) if self._trip_alarm else None,
+                "has_bias_result": self.bias_controller is not None,
+                "bias_output_unknown": self.bias_unknown,
+                "bias_cleanup_pending": self.bias_cleanup_pending,
                 "has_result": self.result is not None,
                 "has_sweep_result": self.sweep_result is not None,
                 "has_lcr_result": self.lcr_result is not None,
@@ -129,7 +136,7 @@ class WebControlState:
         simulate = bool(values.pop("simulate", False))
         config = AcquisitionConfig.from_dict(values)
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有采集任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -167,7 +174,7 @@ class WebControlState:
         if len(points) * sweep.repeats > 10_000:
             raise ValueError("一次扫描最多允许 10,000 次采集")
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有采集或扫描任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -223,7 +230,7 @@ class WebControlState:
         config = AcquisitionConfig.from_dict(config_values)
         lcr = LcrConfig.from_dict(lcr_raw)
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -278,7 +285,7 @@ class WebControlState:
         total_points = len(big_lcr.parameter_points)
         total_runs = total_points * big_lcr.repeats
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -325,7 +332,7 @@ class WebControlState:
         config = AcquisitionConfig.from_dict(config_values)
         linearity = LinearityConfig.from_dict(linearity_raw)
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -811,6 +818,8 @@ class WebControlState:
                 "big_lcr": "正在停止大信号 LCR 测量",
                 "lcr_linearity": "正在停止大信号线性度测试",
             }.get(self.status.task_kind, "正在停止采集")
+        if self.status.task_kind == "bias_scan" and self.bias_controller is not None:
+            self.bias_controller.stop()
         if device is not None and not was_paused:
             device.stop()
 
@@ -823,6 +832,9 @@ class WebControlState:
             active = self.device
             worker = self._worker_thread
             hardware = self._hardware_device
+        bias_error = None
+        try:self.bias_shutdown()
+        except Exception as exc:bias_error = exc
         if active is not None:
             try:
                 active.stop()
@@ -843,6 +855,8 @@ class WebControlState:
                         self._hardware_device = None
                     if self.device is hardware:
                         self.device = None
+
+        if bias_error is not None:raise bias_error
 
     def result_payload(
         self,
@@ -1137,8 +1151,10 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {"/ui/workstation.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js"}:
+            if path in {"/ui/workstation.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
                 self._send_asset(path.lstrip("/"), "text/javascript; charset=utf-8")
+            elif path == "/views/bias-scan.css":
+                self._send_asset("views/bias-scan.css", "text/css; charset=utf-8")
             elif path == "/ui/workstation.css":
                 self._send_asset("ui/workstation.css", "text/css; charset=utf-8")
             elif path in {"/interference", "/interference/"}:
@@ -1174,6 +1190,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             elif path in {
                 "/",
                 "/measure",
+                "/bias-scan",
                 "/sweep",
                 "/analysis",
                 "/file-analysis",
@@ -1186,6 +1203,22 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_asset("app.js", "text/javascript; charset=utf-8")
             elif path == "/styles.css":
                 self._send_asset("styles.css", "text/css; charset=utf-8")
+            elif path == "/api/bias-scan/resources":
+                from .bias_scan import IT6524DController
+                self._send_json({"resources":IT6524DController.resources()})
+            elif path == "/api/bias-scan/result":
+                self._send_json(self.control.bias_result_payload())
+            elif path == "/api/bias-scan/preview":
+                query=parse_qs(parsed.query)
+                self._send_json(self.control.bias_preview(int(query.get("point",["0"])[0]),int(query.get("repeat",["1"])[0])))
+            elif path == "/api/bias-scan/export":
+                name=parse_qs(parsed.query).get("name",["summary.csv"])[0]
+                body=self.control.bias_export(name)
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type","application/octet-stream")
+                self.send_header("Content-Disposition",f'attachment; filename="bias_{name}"')
+                self.send_header("Content-Length",str(len(body)))
+                self.end_headers();self.wfile.write(body)
             elif path == "/api/config":
                 self._send_json(AcquisitionConfig().to_dict())
             elif path == "/api/status":
@@ -1248,7 +1281,13 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                     threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
             payload = self._read_json()
-            if path == "/api/interference/session":
+            if path == "/api/bias-scan/connect":
+                self._send_json(self.control.bias_connect(payload))
+            elif path == "/api/bias-scan/preflight":
+                self._send_json(self.control.bias_preflight(payload))
+            elif path == "/api/bias-scan/start":
+                self._send_json({"task_id":self.control.start_bias_scan(payload)}, HTTPStatus.ACCEPTED)
+            elif path == "/api/interference/session":
                 self._send_json({"session": interference.create_session(payload, self.control.interference_output_root)}, HTTPStatus.CREATED)
             elif path == "/api/interference/run":
                 capture_id = int(payload["capture_id"])

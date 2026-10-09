@@ -1,0 +1,33 @@
+{
+  "bias": {
+    "start_a": 0.0,
+    "stop_a": 6.0,
+    "step_a": 0.5,
+    "repeats": 10,
+    "interval_s": 0.1,
+    "record_duration_us": 2000.0,
+    "pzt_channel": "A",
+    "direct_start_us": 100.0,
+    "direct_end_us": 400.0,
+    "stable_abs_a": 0.05,
+    "stable_rel": 0.01,
+    "stable_hold_s": 0.2,
+    "poll_s": 0.05,
+    "voltage_limit_v": null,
+    "max_on_s": null,
+    "stable_timeout_s": null,
+    "cooldown_s": null,
+    "actual_current_limit_a": 6.0,
+    "cooling_mode": "fixed",
+    "temperature_limit_c": null,
+    "temperature_resume_c": null,
+    "temperature_max_age_s": 1.0,
+    "temperature_wait_timeout_s": 300.0,
+    "inductive_protection_confirmed": false,
+    "independent_cutoff_confirmed": false,
+    "protection_notes": "",
+    "memory_limit_mb": 256.0
+  },
+  "acquisition": {},
+  "resource": ""
+}
