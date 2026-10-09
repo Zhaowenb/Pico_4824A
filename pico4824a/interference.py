@@ -36,10 +36,17 @@ def _folder(session_id: str, root: Path = ROOT) -> Path:
                 return path.parent
         except (ValueError, OSError):
             continue
+    if root.resolve() == ROOT.resolve():
+        from .data_access import LEGACY_INTERFERENCE, import_directory
+        historical = LEGACY_INTERFERENCE / session_id
+        if historical.is_dir():
+            return import_directory(historical, root)
     return legacy
 
 
 def _write_json(path: Path, value: dict) -> None:
+    from .storage_naming import output_path
+    path = output_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")

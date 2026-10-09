@@ -6,7 +6,6 @@ from dataclasses import asdict, replace
 import numpy as np
 from ..config import AcquisitionConfig
 from ..storage import load_npz
-from zipfile import ZipFile, ZIP_DEFLATED
 from ..storage_naming import preferences
 from . import BiasScanConfig, BiasScanController, PicoCaptureAdapter, IT6524DController, SimulatedPowerSupply
 from .safety import SafetyProtection, TemperatureProvider
@@ -138,19 +137,8 @@ class BiasScanWebMixin:
             folder=controller.folder.resolve()
             # Starting another instrument job uses this same lock. It cannot
             # enter its powered phase while this archive is being written.
-            destination=folder.parent/'exports'
-            destination.mkdir(exist_ok=True)
-            archive=destination/(folder.name+'.zip')
-            temporary=archive.with_suffix('.zip.tmp')
-            try:
-                with ZipFile(temporary,'w',compression=ZIP_DEFLATED) as stream:
-                    for path in sorted(folder.rglob('*')):
-                        if path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(folder):
-                            stream.write(path, (Path(folder.name)/path.relative_to(folder)).as_posix())
-                temporary.replace(archive)
-            finally:
-                temporary.unlink(missing_ok=True)
-            return archive
+            from ..data_sessions import archive_session
+            return archive_session(folder)
 
     def bias_shutdown(self):
         if self.bias_controller:self.bias_controller.stop()

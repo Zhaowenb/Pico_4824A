@@ -964,8 +964,14 @@ class WebControlState(BiasScanWebMixin):
         if mode == "linearity":
             # Legacy Monitor-only analyses lived inside ordinary big_lcr_* folders.
             allowed_roots.append(self.big_lcr_output_root.resolve())
+        from .data_access import REFERENCE_DATA, import_directory
+        reference_modes = {"big_lcr": "lcr_big", "linearity": "lcr_linearity", "small_lcr": "lcr"}
+        reference_roots = [REFERENCE_DATA / reference_modes[mode]]
+        if mode == "linearity": reference_roots.append(REFERENCE_DATA / "lcr_big")
         if supplied.strip():
             directory = Path(supplied).resolve()
+            if any(directory.is_relative_to(p.resolve()) for p in reference_roots):
+                directory = import_directory(directory, roots[mode])
         else:
             marker = {"big_lcr": "big_lcr_config.json", "linearity": "linearity_config.json", "small_lcr": "lcr_config.json"}[mode]
             root = allowed_roots[0]
@@ -1022,8 +1028,11 @@ class WebControlState(BiasScanWebMixin):
 
     def _linearity_directory(self, supplied: str) -> Path:
         root = self.big_lcr_output_root.resolve()
+        from .data_access import REFERENCE_DATA, import_directory
         if supplied.strip():
             directory = Path(supplied).resolve()
+            if directory.is_relative_to((REFERENCE_DATA / 'lcr_big').resolve()):
+                directory = import_directory(directory, root)
         else:
             with self._lock:
                 latest = self.big_lcr_result.directory if self.big_lcr_result else None
@@ -1158,7 +1167,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {"/ui/workstation.js", "/ui/storage-naming.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
+            if path in {"/ui/workstation.js", "/ui/analysis-state.js", "/analysis/time-frequency.js", "/analysis/experimental.js", "/ui/storage-naming.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
                 self._send_asset(path.lstrip("/"), "text/javascript; charset=utf-8")
             elif path == "/views/bias-scan.css":
                 self._send_asset("views/bias-scan.css", "text/css; charset=utf-8")
@@ -1239,6 +1248,24 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                     self.send_header("Content-Disposition", "attachment; filename=bias-"+name+"; filename*=UTF-8''"+quote(job_name+'__'+labels[name]))
                     self.send_header("Content-Length",str(len(body)))
                     self.end_headers();self.wfile.write(body)
+            elif path == "/api/storage/archive":
+                from .data_sessions import archive_session
+                supplied = parse_qs(parsed.query).get('directory', [''])[0]
+                folder = Path(supplied).resolve()
+                data_root = (PROJECT_DIR / 'data').resolve()
+                if not supplied or folder == data_root or not folder.is_relative_to(data_root) or 'exports' in folder.relative_to(data_root).parts:
+                    raise ValueError('请选择本项目 data 下一个已保存任务的文件夹')
+                with self.control._lock:
+                    if self.control.status.state in {'running', 'paused'}:
+                        raise RuntimeError('请等待仪器任务完成后打包')
+                    archive = archive_session(folder)
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header('Content-Type', 'application/zip')
+                    self.send_header('Content-Disposition', "attachment; filename=waveguard-data.zip; filename*=UTF-8''"+quote(archive.name))
+                    self.send_header('Content-Length', str(archive.stat().st_size))
+                    self.end_headers()
+                    with archive.open('rb') as stream:
+                        while chunk := stream.read(1024*1024): self.wfile.write(chunk)
             elif path == "/api/storage/naming":
                 self._send_json({"names": preferences()})
             elif path == "/api/config":

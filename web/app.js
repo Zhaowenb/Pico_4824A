@@ -2427,6 +2427,8 @@ let analysisFullRangeUs = null;
 let archiveResult = null;
 let archiveRunPreview = null;
 let timeFrequencyResult = null;
+const timeFrequencyState = new WaveGuardAnalysisState();
+const experimentalState = new WaveGuardAnalysisState();
 let experimentalModeResult = null;
 let analysisSelectedChannels = [];
 let analysisLens = "raw";
@@ -2577,7 +2579,7 @@ function setAnalysisLens(lens, refresh = true) {
   requestAnimationFrame(() => {
     if (["raw", "filtered", "mix"].includes(lens)) drawAnalysisWaveform();
     if (lens === "fft") drawSpectrum();
-    if (["stft", "wpd", "cwt"].includes(lens) && timeFrequencyResult?.method === lens) drawTimeFrequency();
+    if (["stft", "wpd", "cwt"].includes(lens) && timeFrequencyState.matches(timeFrequencySnapshot())) drawTimeFrequency();
     if (lens === "experimental" && experimentalModeResult) drawExperimentalModes();
   });
 
@@ -2586,10 +2588,10 @@ function setAnalysisLens(lens, refresh = true) {
     const showFiltered = lens !== "raw";
     const changed = $("analysisShowRaw").checked !== showRaw
       || $("analysisShowFiltered").checked !== showFiltered
-      || (showFiltered && !$("analysisFilterEnabled").checked);
+      ;
     $("analysisShowRaw").checked = showRaw;
     $("analysisShowFiltered").checked = showFiltered;
-    if (showFiltered) $("analysisFilterEnabled").checked = true;
+    // Raw/Filtered/Mix select displayed series only; mathematical input is explicit.
     if (refresh && analysisSource && changed) scheduleAnalysisRefresh();
     return;
   }
@@ -2597,14 +2599,14 @@ function setAnalysisLens(lens, refresh = true) {
     $("timeFrequencyMethod").value = lens;
     updateTimeFrequencyControls();
     syncAnalysisLensContext();
-    if (timeFrequencyResult?.method !== lens) {
+    if (!timeFrequencyState.matches(timeFrequencySnapshot())) {
       timeFrequencyResult = null;
       const canvas = $("timeFrequencyCanvas");
       canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
       $("timeFrequencyEmpty").style.display = "grid";
-      $("timeFrequencyEmpty").textContent = analysisSource ? `${lens.toUpperCase()} 正在计算…` : "请先载入波形数据";
+      $("timeFrequencyEmpty").textContent = analysisSource ? (refresh ? `${lens.toUpperCase()} 正在计算…` : "参数待应用") : "请先载入波形数据";
       $("timeFrequencyTitle").textContent = `${lens === "wpd" ? "WPD频带分解" : `${lens.toUpperCase()}时频图`} · CH ${$("timeFrequencyChannel").value}`;
-      $("timeFrequencyMeta").textContent = analysisSource ? "正在使用当前参数计算…" : "等待数据";
+      $("timeFrequencyMeta").textContent = analysisSource ? (refresh ? "正在使用当前参数计算…" : "参数待应用") : "等待数据";
       if (refresh && analysisSource) void calculateTimeFrequency();
     } else {
       requestAnimationFrame(drawTimeFrequency);
@@ -2946,7 +2948,7 @@ function buildAnalysisPayload(initial = false) {
     path: analysisSource,
     channels: analysisSelectedChannels,
     filter: {
-      enabled: $("analysisFilterEnabled").checked,
+      enabled: $("analysisShowFiltered").checked || $("analysisFilterEnabled").checked || $("spectrumSource").value === "filtered",
       low_hz: number("analysisBandLow") * 1000,
       high_hz: number("analysisBandHigh") * 1000,
       transition_hz: number("analysisTransition") * 1000,
@@ -3040,7 +3042,9 @@ async function loadSelectedAnalysisFile() {
   experimentalModeResult = null;
   analysisSelectedChannels = [];
   analysisTimeFrequencyRequestId += 1;
+  timeFrequencyState.invalidate();
   analysisExperimentalRequestId += 1;
+  experimentalState.invalidate();
   clearAnalysisLensOutputs();
   setAnalysisViewState("loading");
   syncAnalysisLensContext(null);
@@ -4065,262 +4069,6 @@ function drawArchiveHeatmap() {
   canvas._archiveGeometry = { left, right, top, bottom, cellWidth, cellHeight };
 }
 
-function updateTimeFrequencyControls() {
-  const method = $("timeFrequencyMethod").value;
-  $("stftControls").hidden = method !== "stft";
-  $("wpdControls").hidden = method !== "wpd";
-  $("cwtControls").hidden = method !== "cwt";
-}
-
-function analysisFilterPayload() {
-  return {
-    enabled: $("analysisFilterEnabled").checked,
-    low_hz: number("analysisBandLow") * 1000,
-    high_hz: number("analysisBandHigh") * 1000,
-    transition_hz: number("analysisTransition") * 1000,
-  };
-}
-
-async function calculateTimeFrequency() {
-  if (!analysisSource) {
-    setEvent("请先加载一个波形文件。", "error");
-    return;
-  }
-  const requestId = ++analysisTimeFrequencyRequestId;
-  const sourcePath = analysisSource;
-  const method = $("timeFrequencyMethod").value;
-  const channel = $("timeFrequencyChannel").value;
-  try {
-    setAnalysisViewState("processing");
-    $("timeFrequencyEmpty").style.display = "grid";
-    $("timeFrequencyEmpty").textContent = `${method.toUpperCase()} 正在计算…`;
-    $("timeFrequencyMeta").textContent = "正在计算…";
-    const result = await api("/api/analysis/time-frequency", {
-      method: "POST",
-      body: JSON.stringify({
-        path: sourcePath,
-        channel,
-        filter: analysisFilterPayload(),
-        method,
-        start_us: number("timeFrequencyStart"),
-        end_us: number("timeFrequencyEnd"),
-        frequency_min_hz: number("timeFrequencyMin") * 1000,
-        frequency_max_hz: number("timeFrequencyMax") * 1000,
-        floor_db: number("timeFrequencyFloor"),
-        window_us: number("stftWindowUs"),
-        overlap_ratio: number("stftOverlap") / 100,
-        fft_samples: number("stftFftSamples"),
-        window_function: $("stftWindowFunction").value,
-        wpd_level: number("wpdLevel"),
-        wavelet: $("wpdWavelet").value,
-        cwt_bins: number("cwtBins"),
-        morlet_omega0: number("cwtOmega0"),
-        cwt_log_frequency: $("cwtLogFrequency").checked,
-      }),
-    });
-    if (requestId !== analysisTimeFrequencyRequestId || sourcePath !== analysisSource) return;
-    timeFrequencyResult = result;
-    $("timeFrequencyEmpty").style.display = "none";
-    $("timeFrequencyTitle").textContent = `${result.method === "wpd" ? "WPD频带分解" : `${result.method.toUpperCase()}时频图`} · CH ${channel}`;
-    $("tfFloorLabel").textContent = `${result.floor_db} dB`;
-    const details = result.details;
-    $("timeFrequencyMeta").textContent = result.method === "stft"
-      ? `窗长 ${details.window_us.toFixed(2)} μs · 频率分辨能力约 ${Number(details.window_resolution_hz / 1000).toFixed(3)} kHz · FFT间隔 ${Number(details.frequency_bin_hz / 1000).toFixed(3)} kHz · Δt ${Number(details.time_step_us).toFixed(3)} μs`
-      : result.method === "wpd"
-        ? `${details.wavelet} · ${details.bands} 频带 · 带宽 ${Number(details.band_width_hz / 1000).toFixed(3)} kHz`
-        : `${details.cwt_bins} 频率点 · Morlet ω0=${details.morlet_omega0}`;
-    drawTimeFrequency();
-    setAnalysisViewState("ready");
-    syncAnalysisLensContext();
-  } catch (error) {
-    if (requestId !== analysisTimeFrequencyRequestId || sourcePath !== analysisSource) return;
-    setAnalysisViewState("error");
-    $("timeFrequencyEmpty").style.display = "grid";
-    $("timeFrequencyEmpty").textContent = `计算失败 · ${error.message}`;
-    $("timeFrequencyMeta").textContent = error.message;
-    setEvent(error.message, "error");
-  }
-}
-
-function tfColor(value, floor) {
-  const ratio = Math.max(0, Math.min(1, (value - floor) / -floor));
-  const stops = workstationDataPalette.stops;
-  const scaled = ratio * (stops.length - 1);
-  const index = Math.min(stops.length - 2, Math.floor(scaled));
-  const fraction = scaled - index;
-  return stops[index].map((value0, component) => Math.round(value0 + (stops[index + 1][component] - value0) * fraction));
-}
-
-function drawTimeFrequency() {
-  if (!timeFrequencyResult || document.body.dataset.page !== "file-analysis") return;
-  const canvas = $("timeFrequencyCanvas");
-  const { ctx, width, height } = canvasSetup(canvas);
-  const result = timeFrequencyResult;
-  const columns = result.time_us.length, rows = result.frequency_hz.length;
-  if (!columns || !rows) return;
-  const image = document.createElement("canvas");
-  image.width = columns; image.height = rows;
-  const imageContext = image.getContext("2d");
-  const pixels = imageContext.createImageData(columns, rows);
-  for (let row = 0; row < rows; row += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const [red, green, blue] = tfColor(result.values_db[row][column], result.floor_db);
-      const targetRow = rows - 1 - row;
-      const offset = (targetRow * columns + column) * 4;
-      pixels.data[offset] = red; pixels.data[offset + 1] = green; pixels.data[offset + 2] = blue; pixels.data[offset + 3] = 255;
-    }
-  }
-  imageContext.putImageData(pixels, 0, 0);
-  const left = 72, right = width - 18, top = 17, bottom = height - 34;
-  ctx.clearRect(0, 0, width, height);
-  ctx.imageSmoothingEnabled = result.method !== "wpd";
-  ctx.drawImage(image, left, top, right - left, bottom - top);
-  ctx.strokeStyle = "#32454f"; ctx.strokeRect(left, top, right - left, bottom - top);
-  drawAxes(
-    ctx, width, height, left, top, right, bottom,
-    (ratio) => `${(result.time_us[0] + (result.time_us.at(-1) - result.time_us[0]) * ratio).toFixed(1)} μs`,
-    (ratio) => `${(result.frequency_hz[Math.round(ratio * (rows - 1))] / 1000).toFixed(1)}`,
-  );
-  ctx.fillStyle = "#a5b4c7"; ctx.font = "11px Consolas";
-  ctx.fillText(result.method === "cwt" ? "kHz/log" : "kHz", 8, top + 10);
-}
-
-async function calculateExperimentalModes() {
-  if (!analysisSource) {
-    setEvent("请先加载至少包含两个通道的波形文件。", "error");
-    return;
-  }
-  const referenceChannel = $("modeReferenceChannel").value;
-  const comparisonChannel = $("modeComparisonChannel").value;
-  if (!referenceChannel || !comparisonChannel || referenceChannel === comparisonChannel) {
-    setEvent("请选择两个不同的通道进行共模—差模实验。", "error");
-    return;
-  }
-  const requestId = ++analysisExperimentalRequestId;
-  const sourcePath = analysisSource;
-  try {
-    setAnalysisViewState("processing");
-    $("modeAnalysisMeta").textContent = "正在计算实验指标…";
-    const result = await api("/api/analysis/experimental-modes", {
-      method: "POST",
-      body: JSON.stringify({
-        path: sourcePath,
-        reference_channel: referenceChannel,
-        comparison_channel: comparisonChannel,
-        filter: analysisFilterPayload(),
-        direct_start_us: number("modeDirectStart"),
-        direct_end_us: number("modeDirectEnd"),
-        search_start_us: number("modeSearchStart"),
-        search_end_us: number("modeSearchEnd"),
-        end_start_us: number("modeEndStart"),
-        end_end_us: number("modeEndEnd"),
-        maximum_shift_us: number("modeMaxShift"),
-        temporal_window_us: number("modeTemporalWindow"),
-        minimum_separation_us: number("modeCandidateSeparation"),
-        candidate_count: number("modeCandidateCount"),
-      }),
-    });
-    if (requestId !== analysisExperimentalRequestId || sourcePath !== analysisSource) return;
-    experimentalModeResult = result;
-    $("modeWaveEmpty").style.display = "none";
-    $("modeAnalysisMeta").textContent = result.warning;
-    $("modeResultTitle").textContent = `${result.reference_channel}/${result.comparison_channel} 空间—时间对称性与端面匹配`;
-    const calibration = result.calibration, metrics = result.metrics;
-    const windows = result.window_metrics;
-    $("modeMetricCards").innerHTML = [
-      [`${result.reference_channel}/${result.comparison_channel}直达相关`, calibration.direct_window_correlation.toFixed(4), "校准窗"],
-      [`${result.comparison_channel}→${result.reference_channel}增益`, calibration.comparison_to_reference_gain.toFixed(5), `时移 ${calibration.comparison_shift_us.toFixed(4)} μs`],
-      ["直达窗差/共", `${windows.direct.differential_to_common_db.toFixed(2)} dB`, "空间对称性"],
-      ["中间窗差/共", `${windows.search.differential_to_common_db.toFixed(2)} dB`, "时间演化"],
-      ["端面窗差/共", `${windows.end_reflection.differential_to_common_db.toFixed(2)} dB`, "端面反射"],
-      ["全分析窗差/共", `${metrics.differential_to_common_db.toFixed(2)} dB`, "总体"],
-      ["匹配候选", `${result.candidates.length} 个`, "不等于缺陷数量"],
-    ].map(([label, value, detail]) => `<article><span>${label}</span><strong>${value}</strong><small>${detail}</small></article>`).join("");
-    $("modeCandidatesBody").innerHTML = result.candidates.map((candidate) => `<tr><td>${candidate.time_us.toFixed(3)}</td><td>${candidate.absolute_correlation.toFixed(4)}</td><td>${candidate.correlation.toFixed(4)}</td><td>${candidate.polarity > 0 ? "同相" : "反相"}</td></tr>`).join("");
-    drawExperimentalModes();
-    setAnalysisViewState("ready");
-    syncAnalysisLensContext();
-  } catch (error) {
-    if (requestId !== analysisExperimentalRequestId || sourcePath !== analysisSource) return;
-    setAnalysisViewState("error");
-    $("modeAnalysisMeta").textContent = error.message;
-    setEvent(error.message, "error");
-  }
-}
-
-function drawExperimentalModes() {
-  if (!experimentalModeResult || document.body.dataset.page !== "file-analysis") return;
-  const result = experimentalModeResult;
-  const canvas = $("modeWaveCanvas");
-  let setup = canvasSetup(canvas);
-  let { ctx, width, height } = setup;
-  const left = 70, right = width - 15, top = 16, bottom = height - 31;
-  const times = result.time_us;
-  const all = [...result.common_v, ...result.differential_v];
-  const maximum = Math.max(...all.map(Math.abs), 1e-12);
-  ctx.clearRect(0, 0, width, height);
-  drawAxes(ctx, width, height, left, top, right, bottom,
-    (ratio) => `${(times[0] + (times.at(-1) - times[0]) * ratio).toFixed(0)} μs`,
-    (ratio) => `${((-maximum + 2 * maximum * ratio) * 1000).toFixed(2)}`);
-  [["common_v", workstationDataColor(), []], ["differential_v", "#c98435", [5, 3]]].forEach(([key, color, dash]) => {
-    ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.beginPath();
-    result[key].forEach((value, index) => {
-      const x = left + index / Math.max(result[key].length - 1, 1) * (right - left);
-      const y = bottom - (value + maximum) / (2 * maximum) * (bottom - top);
-      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-  });
-  ctx.setLineDash([]); ctx.fillStyle = workstationDataColor(); ctx.fillText("共模", left + 6, top + 13);
-  ctx.fillStyle = "#c98435"; ctx.fillText("差模", left + 48, top + 13);
-  ctx.fillStyle = "#a5b4c7"; ctx.fillText("mV", 8, top + 10);
-
-  const symmetryCanvas = $("modeSymmetryCanvas");
-  setup = canvasSetup(symmetryCanvas);
-  ({ ctx, width, height } = setup);
-  const symmetryTimes = result.symmetry_time_us;
-  const symmetryValues = result.temporal_symmetry_db;
-  const sLeft = 70, sRight = width - 15, sTop = 15, sBottom = height - 31;
-  const finiteSymmetry = symmetryValues.filter(Number.isFinite);
-  const symmetryMin = Math.min(...finiteSymmetry, -60);
-  const symmetryMax = Math.max(...finiteSymmetry, 0);
-  ctx.clearRect(0, 0, width, height);
-  drawAxes(ctx, width, height, sLeft, sTop, sRight, sBottom,
-    (ratio) => `${(symmetryTimes[0] + (symmetryTimes.at(-1) - symmetryTimes[0]) * ratio).toFixed(0)} μs`,
-    (ratio) => (symmetryMin + (symmetryMax - symmetryMin) * ratio).toFixed(1));
-  ctx.strokeStyle = workstationDataColor("high"); ctx.lineWidth = 1.25; ctx.beginPath();
-  symmetryValues.forEach((value, index) => {
-    const x = sLeft + index / Math.max(symmetryValues.length - 1, 1) * (sRight - sLeft);
-    const y = sBottom - (value - symmetryMin) / Math.max(symmetryMax - symmetryMin, 1e-12) * (sBottom - sTop);
-    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-  ctx.fillStyle = "#a5b4c7";
-  ctx.fillText(`局部差模/共模 dB · ${result.windows.temporal_window_us.toFixed(2)} μs窗`, 7, sTop + 10);
-
-  const matchCanvas = $("modeMatchCanvas");
-  setup = canvasSetup(matchCanvas);
-  ({ ctx, width, height } = setup);
-  const matchTimes = result.match_time_us, correlation = result.match_correlation;
-  const mLeft = 70, mRight = width - 15, mTop = 15, mBottom = height - 31;
-  ctx.clearRect(0, 0, width, height);
-  drawAxes(ctx, width, height, mLeft, mTop, mRight, mBottom,
-    (ratio) => `${(matchTimes[0] + (matchTimes.at(-1) - matchTimes[0]) * ratio).toFixed(0)} μs`,
-    (ratio) => (-1 + 2 * ratio).toFixed(1));
-  ctx.strokeStyle = workstationDataColor(); ctx.lineWidth = 1.25; ctx.beginPath();
-  correlation.forEach((value, index) => {
-    const x = mLeft + index / Math.max(correlation.length - 1, 1) * (mRight - mLeft);
-    const y = mBottom - (value + 1) / 2 * (mBottom - mTop);
-    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-  result.candidates.forEach((candidate) => {
-    const x = mLeft + (candidate.time_us - matchTimes[0]) / Math.max(matchTimes.at(-1) - matchTimes[0], 1e-12) * (mRight - mLeft);
-    ctx.strokeStyle = "rgba(201,132,53,.72)"; ctx.beginPath(); ctx.moveTo(x, mTop); ctx.lineTo(x, mBottom); ctx.stroke();
-  });
-  ctx.fillStyle = "#718892"; ctx.fillText("相关系数", 7, mTop + 10);
-}
-
 function mountAnalysisLensControls() {
   const target = $("analysisLensSettingsPopover");
   if (!target) return;
@@ -4390,10 +4138,7 @@ $("analysisAmplitudeMode").addEventListener("change", () => {
 $("analysisLayout").addEventListener("change", drawAnalysisWaveform);
 $("analysisAmpMin").addEventListener("input", drawAnalysisWaveform);
 $("analysisAmpMax").addEventListener("input", drawAnalysisWaveform);
-$("analysisFilterEnabled").addEventListener("change", () => {
-  if ($("analysisFilterEnabled").checked) $("analysisShowFiltered").checked = true;
-  scheduleAnalysisRefresh();
-});
+// Mathematical input selection is coordinated by the shared analysis view.
 [
   "analysisShowRaw", "analysisShowFiltered", "spectrumSource", "spectrumMode",
   "spectrumWindowFunction", "spectrumFreqMin", "spectrumFreqMax",
@@ -4437,10 +4182,37 @@ $("timeFrequencyMethod").addEventListener("change", updateTimeFrequencyControls)
 $("timeFrequencyMethod").addEventListener("change", () => {
   const method = $("timeFrequencyMethod").value;
   if (["stft", "wpd", "cwt"].includes(document.body.dataset.analysisLens)) {
-    setAnalysisLens(method, false);
+    setAnalysisLens(method);
   }
 });
+
+["modeReferenceChannel","modeComparisonChannel","modeDirectStart","modeDirectEnd",
+ "modeSearchStart","modeSearchEnd","modeEndStart","modeEndEnd","modeMaxShift",
+ "modeTemporalWindow","modeCandidateSeparation","modeCandidateCount"].forEach(id=>$(id).addEventListener('change',()=>{
+  experimentalState.invalidate();experimentalModeResult=null;
+  if(analysisLens==='experimental'&&analysisSource){setAnalysisViewState('pending');$('modeAnalysisMeta').textContent='参数待应用';$('modeWaveEmpty').style.display='grid';$('modeWaveEmpty').textContent='参数已修改 · 运行后更新结果';}
+}));
+
 $("timeFrequencyChannel").addEventListener("change", syncAnalysisLensContext);
+// Parameter edits invalidate the visible result immediately, before another Lens
+// or a delayed response can label it READY. Apply remains an explicit operation.
+[
+  "timeFrequencyChannel", "timeFrequencyStart", "timeFrequencyEnd", "timeFrequencyMin",
+  "timeFrequencyMax", "timeFrequencyFloor", "stftWindowUs", "stftOverlap",
+  "stftFftSamples", "stftWindowFunction", "wpdLevel", "wpdWavelet", "cwtBins",
+  "cwtOmega0", "cwtLogFrequency",
+].forEach(id => $(id).addEventListener("change", () => {
+  timeFrequencyState.invalidate();
+  timeFrequencyResult = null;
+  if (["stft", "wpd", "cwt"].includes(analysisLens) && analysisSource) {
+    setAnalysisViewState("pending");
+    $("timeFrequencyEmpty").style.display = "grid";
+    $("timeFrequencyEmpty").textContent = "参数已修改 · 应用后更新结果";
+    $("timeFrequencyMeta").textContent = "参数待应用";
+    const canvas = $("timeFrequencyCanvas");
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+  }
+}));
 ["modeReferenceChannel", "modeComparisonChannel", "modeSearchStart", "modeSearchEnd"].forEach((id) => {
   $(id).addEventListener(id.includes("Channel") ? "change" : "input", syncAnalysisLensContext);
 });

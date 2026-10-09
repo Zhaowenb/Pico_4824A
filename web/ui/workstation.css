@@ -117,3 +117,8 @@ button,a,input,select {transition:background-color 160ms,border-color 160ms,colo
 .wg-appearance .wg-inspector-heading {position:sticky;top:-18px;margin:-18px -18px 14px;padding:18px;background:var(--wg-surface);z-index:1;border-bottom:1px solid var(--wg-line);}
 @media(max-width:760px){.wg-file-body {grid-template-columns:minmax(0,1fr);padding:0 16px 16px;}.wg-file-body nav {flex-direction:row;overflow:auto;flex:none;border:0;padding:0;}.wg-file-body nav button {white-space:nowrap;}.wg-file-heading,.wg-file-location,.wg-file-browser footer {padding:16px;}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after {animation:none!important;transition:none!important;}.wg-stage::before,.wg-brand-mark::before {opacity:.06;}}
+
+/* AWG is an Inspector preview, not a flexible data-stage canvas. */
+.wg-inspector #awgPreviewCanvas {width:100%;height:150px;min-height:150px;display:block;}
+.analysis-input-filter {display:flex;align-items:center;gap:8px;font-size:12px;}
+.analysis-input-filter input {width:auto;accent-color:var(--wg-signal);}

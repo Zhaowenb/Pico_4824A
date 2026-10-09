@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="zh-CN" data-hero="C">
+<html lang="zh-CN" data-hero="B">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#F2F3F5" />
-    <title>WaveGuard Studio — Data Metamorphosis</title>
+    <title>WaveGuard Studio — Guided Wave Cinema</title>
     <style>
       :root {
         --paper: #F2F3F5;
@@ -558,8 +558,6 @@
         background-image: linear-gradient(rgba(126,182,232,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(126,182,232,.035) 1px,transparent 1px);
         background-size: 40px 40px;
       }
-      html[data-hero="C"] .desktop-scene,html[data-hero="C"] .mobile-scene { display: none !important; }
-      html[data-hero="C"] .variant-scene.hero-c { display: block; }
       .variant-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
       .variant-mobile { display: none; }
       .hero-label { fill: #DDE8F3; font: 600 20px var(--sans); letter-spacing: .01em; }
@@ -620,23 +618,7 @@
         .hero-note { font-size: 10px; }
         .hero-micro { font-size: 9px; }
       }
-      .hero-c .c-divider { stroke: rgba(159,183,208,.18); stroke-width: 1; stroke-dasharray: 2 7; vector-effect: non-scaling-stroke; }
-      .hero-c .c-bar { fill: var(--signal); opacity: .72; }
-      .hero-c .c-bar-peak { fill: var(--signal-hi); opacity: .96; }
-      .hero-c .c-cell { opacity: .2; }
-      .hero-c .c-cell-1 { opacity: .34; }
-      .hero-c .c-cell-2 { opacity: .52; }
-      .hero-c .c-cell-3 { opacity: .73; }
-      .hero-c .c-domain.c-hann { opacity: 1; }
-      .hero-c .c-domain.c-wave { opacity: .94; }
-      .hero-c .c-domain.c-fft { opacity: .87; }
-      .hero-c .c-domain.c-stft { opacity: .82; }
-      .hero-c .c-domain.c-hann,.hero-c .c-domain.c-wave,.hero-c .c-domain.c-fft,.hero-c .c-domain.c-stft { transform: translateY(0); }
-      body.cinematic-active[data-phase="burst"] .hero-c .c-hann { transform: translateY(-4px); }
-      body.cinematic-active[data-phase="propagation"] .hero-c .c-wave { transform: translateY(-4px); }
-      body.cinematic-active[data-phase="impact"] .hero-c .c-fft { transform: translateY(-4px); }
-      body.cinematic-active[data-phase="acquisition"] .hero-c .c-stft,
-      body.cinematic-active[data-phase="analysis"] .hero-c .c-stft { transform: translateY(-4px); }
+
     </style>
   </head>
   <body>
@@ -671,9 +653,9 @@
         </div>
       </section>
 
-      <section class="scene-stage" id="sceneStage" aria-label="同一 Hann 信号从八通道波形连续映射至 FFT 与时频分析">
+      <section class="scene-stage" id="sceneStage" aria-label="导波传播与示波器测量主场景">
         <div class="scene-meta">
-          <span id="sceneMode"><strong>信号表征</strong>&nbsp;&nbsp; / &nbsp;&nbsp;Hann → 8CH → FFT → STFT</span>
+          <span id="sceneMode"><strong>导波传播</strong>&nbsp;&nbsp; / &nbsp;&nbsp;脉冲回波</span>
           <span class="scene-meta-right">参考试件&nbsp;&nbsp;·&nbsp;&nbsp;模拟数据</span>
         </div>
         <div class="scene-canvas">
@@ -841,102 +823,7 @@
             </svg>
           </div>
 
-          <div class="variant-scene hero-c" aria-hidden="true">
-            <svg class="variant-svg variant-desktop" viewBox="0 0 1600 500" preserveAspectRatio="xMidYMid meet">
-              <path class="hero-rule" d="M112 92H1488M112 410H1488"/>
-              <path class="c-divider" d="M430 119V382M830 119V382M1170 119V382"/>
-              <g class="c-domain c-hann">
-                <text x="132" y="140" class="hero-kicker">01 / INPUT SIGNAL</text>
-                <text x="132" y="178" class="hero-label">HANN BURST</text>
-                <text x="132" y="198" class="hero-micro">100 kHz · 5 CYCLES</text>
-                <path class="hero-axis" d="M132 276H412"/>
-                <path class="hero-signal" d="M132 276H175q9 0 14-8t15 16t15-30t17 38t17-18t19 2q9 0 14-8t15 16t15-30t17 38t17-18t19 2q9 0 14-8t15 16t15-30t17 38t17-18t19 2H412"/>
-                <path class="hero-rule-dash" d="M132 320H412"/>
-                <text x="132" y="346" class="c-axis-label">TIME / 0—50 μs</text>
-              </g>
-              <path class="c-wave-guide" d="M408 276H456m-8-6 8 6-8 6"/>
-              <g class="c-domain c-wave">
-                <text x="466" y="140" class="hero-kicker">02 / SYNCHRONOUS CAPTURE</text>
-                <text x="466" y="178" class="hero-label">8CH WAVEFORM</text>
-                <text x="466" y="198" class="hero-micro">20 MS/s · SHARED TIME BASE</text>
-                <path class="hero-axis" d="M466 235H800M466 259H800M466 283H800M466 307H800M466 331H800"/>
-                <path class="hero-signal" d="M466 235H538q8 0 13-7t13 14t13-26t15 33t15-15t17 1H800"/>
-                <path class="hero-signal-mid" d="M466 259H558q8 0 13-6t13 12t13-21t15 27t15-12t17 1H800"/>
-                <path class="hero-signal-soft" d="M466 283H580q8 0 13-5t13 10t13-17t15 22t15-10t17 1H800"/>
-                <path class="hero-signal" d="M466 307H602q8 0 13-4t13 8t13-14t15 18t15-8t17 1H800"/>
-                <path class="hero-signal-soft" d="M466 331H624q8 0 13-3t13 6t13-11t15 14t15-6t17 1H800"/>
-                <text x="466" y="356" class="c-axis-label">A · B · C · D · E · F · G · H</text>
-              </g>
-              <path class="c-wave-guide" d="M804 276H854m-8-6 8 6-8 6"/>
-              <g class="c-domain c-fft">
-                <text x="866" y="140" class="hero-kicker">03 / FREQUENCY DOMAIN</text>
-                <text x="866" y="178" class="hero-label">FFT</text>
-                <text x="866" y="198" class="hero-micro">ENERGY DISTRIBUTION</text>
-                <path class="hero-axis" d="M866 334H1144M866 229V334"/>
-                <path class="hero-rule" d="M866 300H1144M866 266H1144"/>
-                <rect class="c-bar" x="891" y="324" width="13" height="10"/><rect class="c-bar" x="912" y="317" width="13" height="17"/>
-                <rect class="c-bar" x="933" y="306" width="13" height="28"/><rect class="c-bar" x="954" y="286" width="13" height="48"/>
-                <rect class="c-bar-peak" x="975" y="225" width="13" height="109"/><rect class="c-bar" x="996" y="279" width="13" height="55"/>
-                <rect class="c-bar" x="1017" y="306" width="13" height="28"/><rect class="c-bar" x="1038" y="316" width="13" height="18"/>
-                <rect class="c-bar" x="1059" y="322" width="13" height="12"/><rect class="c-bar" x="1080" y="325" width="13" height="9"/>
-                <rect class="c-bar" x="1101" y="327" width="13" height="7"/><rect class="c-bar" x="1122" y="329" width="13" height="5"/>
-                <text x="866" y="356" class="c-axis-label">0</text><text x="975" y="356" class="c-axis-label">100 kHz</text><text x="1144" y="356" text-anchor="end" class="c-axis-label">FREQUENCY</text>
-              </g>
-              <path class="c-wave-guide" d="M1144 276H1192m-8-6 8 6-8 6"/>
-              <g class="c-domain c-stft">
-                <text x="1203" y="140" class="hero-kicker">04 / TIME × FREQUENCY</text>
-                <text x="1203" y="178" class="hero-label">STFT</text>
-                <text x="1203" y="198" class="hero-micro">LOCALIZED ENERGY</text>
-                <path class="hero-axis" d="M1203 334H1470M1203 229V334"/>
-                <path class="hero-rule" d="M1203 299H1470M1203 264H1470M1256 229V334M1309 229V334M1362 229V334M1415 229V334M1470 229V334"/>
-                <rect class="c-energy c-cell" x="1220" y="240" width="13" height="15"/><rect class="c-energy c-cell-1" x="1235" y="240" width="13" height="15"/><rect class="c-energy c-cell" x="1250" y="240" width="13" height="15"/>
-                <rect class="c-energy c-cell-1" x="1235" y="257" width="13" height="15"/><rect class="c-energy c-cell-2" x="1250" y="257" width="13" height="15"/><rect class="c-energy c-cell-1" x="1265" y="257" width="13" height="15"/>
-                <rect class="c-energy c-cell" x="1250" y="274" width="13" height="15"/><rect class="c-energy c-cell-3" x="1265" y="274" width="13" height="15"/><rect class="c-energy c-cell-2" x="1280" y="274" width="13" height="15"/><rect class="c-energy c-cell-1" x="1295" y="274" width="13" height="15"/>
-                <rect class="c-energy c-cell-1" x="1308" y="257" width="13" height="15"/><rect class="c-energy c-cell-3" x="1323" y="257" width="13" height="15"/><rect class="c-energy c-cell-2" x="1338" y="257" width="13" height="15"/>
-                <rect class="c-energy c-cell" x="1323" y="240" width="13" height="15"/><rect class="c-energy c-cell-2" x="1338" y="240" width="13" height="15"/><rect class="c-energy c-cell-1" x="1353" y="240" width="13" height="15"/>
-                <rect class="c-energy c-cell-1" x="1370" y="274" width="13" height="15"/><rect class="c-energy c-cell-3" x="1385" y="274" width="13" height="15"/><rect class="c-energy c-cell-2" x="1400" y="274" width="13" height="15"/>
-                <rect class="c-energy c-cell" x="1385" y="291" width="13" height="15"/><rect class="c-energy c-cell-2" x="1400" y="291" width="13" height="15"/><rect class="c-energy c-cell-1" x="1415" y="291" width="13" height="15"/>
-                <text x="1203" y="356" class="c-axis-label">TIME →</text><text x="1203" y="220" class="c-axis-label">F ↑</text>
-              </g>
-              <path class="c-cursor" d="M1263 224V344"/>
-              <text x="112" y="444" class="hero-micro">ONE SIGNAL / FOUR REPRESENTATIONS / STATIC SAMPLE · NOT MEASURED</text>
-              <text x="1488" y="444" text-anchor="end" class="hero-micro">SHARED GEOMETRY</text>
-            </svg>
-            <svg class="variant-svg variant-mobile" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet">
-              <path class="hero-rule" d="M50 42H550M50 560H550"/>
-              <g class="c-domain c-hann">
-                <text x="62" y="75" class="hero-kicker">01 / HANN BURST</text><text x="510" y="75" text-anchor="end" class="hero-note">100 kHz</text>
-                <path class="hero-axis" d="M66 136H536"/>
-                <path class="hero-signal" d="M66 136H142q8 0 13-7t13 14t13-24t15 31t15-15t16 1q8 0 13-7t13 14t13-24t15 31t15-15t16 1q8 0 13-7t13 14t13-24t15 31t15-15t16 1H536"/>
-                <text x="66" y="158" class="c-axis-label">TIME DOMAIN / WINDOWED EXCITATION</text>
-              </g>
-              <path class="hero-rule" d="M62 177H538"/>
-              <g class="c-domain c-wave">
-                <text x="62" y="207" class="hero-kicker">02 / 8CH WAVEFORM</text><text x="538" y="207" text-anchor="end" class="hero-note">20 MS/s</text>
-                <path class="hero-axis" d="M66 238H536M66 258H536M66 278H536M66 298H536M66 318H536"/>
-                <path class="hero-signal" d="M66 238H168q8 0 13-7t13 14t13-24t15 31t15-15t16 1H536"/>
-                <path class="hero-signal-mid" d="M66 258H194q8 0 13-6t13 12t13-20t15 26t15-12t16 1H536"/>
-                <path class="hero-signal-soft" d="M66 278H220q8 0 13-5t13 10t13-17t15 22t15-10t16 1H536"/>
-                <path class="hero-signal" d="M66 298H246q8 0 13-4t13 8t13-14t15 18t15-8t16 1H536"/>
-                <path class="hero-signal-soft" d="M66 318H272q8 0 13-3t13 6t13-11t15 14t15-6t16 1H536"/>
-              </g>
-              <path class="hero-rule" d="M62 338H538"/>
-              <g class="c-domain c-fft">
-                <text x="62" y="369" class="hero-kicker">03 / FFT</text><text x="538" y="369" text-anchor="end" class="hero-note">FREQUENCY</text>
-                <path class="hero-axis" d="M66 433H536"/>
-                <rect class="c-bar" x="110" y="419" width="17" height="14"/><rect class="c-bar" x="137" y="405" width="17" height="28"/><rect class="c-bar" x="164" y="390" width="17" height="43"/><rect class="c-bar-peak" x="191" y="376" width="17" height="57"/><rect class="c-bar" x="218" y="398" width="17" height="35"/><rect class="c-bar" x="245" y="414" width="17" height="19"/><rect class="c-bar" x="272" y="422" width="17" height="11"/>
-              </g>
-              <path class="hero-rule" d="M62 451H538"/>
-              <g class="c-domain c-stft">
-                <text x="62" y="482" class="hero-kicker">04 / STFT</text><text x="538" y="482" text-anchor="end" class="hero-note">TIME × FREQUENCY</text>
-                <path class="hero-axis" d="M66 548H536M66 499V548"/>
-                <path class="hero-rule" d="M66 515H536M66 532H536M160 499V548M254 499V548M348 499V548M442 499V548M536 499V548"/>
-                <rect class="c-energy c-cell" x="112" y="502" width="24" height="12"/><rect class="c-energy c-cell-2" x="136" y="516" width="24" height="16"/><rect class="c-energy c-cell-3" x="160" y="516" width="24" height="16"/><rect class="c-energy c-cell-2" x="184" y="516" width="24" height="16"/><rect class="c-energy c-cell" x="208" y="502" width="24" height="12"/>
-                <rect class="c-energy c-cell" x="278" y="532" width="24" height="14"/><rect class="c-energy c-cell-2" x="302" y="516" width="24" height="16"/><rect class="c-energy c-cell-3" x="326" y="516" width="24" height="16"/><rect class="c-energy c-cell-2" x="350" y="516" width="24" height="16"/><rect class="c-energy c-cell" x="374" y="532" width="24" height="14"/>
-              </g>
-            </svg>
-          </div>
-          <div class="stage-caption" id="stageCaption"><span class="stage-caption-kicker">ONE SIGNAL / FOUR DOMAINS</span><span class="stage-caption-title">同一信号 · 连续形变</span><span class="stage-caption-detail">HANN BURST → 8CH WAVEFORM → FFT → TIME–FREQUENCY</span></div>
+          <div class="stage-caption" id="stageCaption"><span class="stage-caption-kicker">A₀ 导波模式 / 参考试件</span><span class="stage-caption-title">传播路径 · 800 mm</span><span class="stage-caption-detail">发射 → 接收 → 模拟缺陷</span></div>
         </div>
 
         <div class="scene-readouts" id="sceneReadouts" aria-label="演示参数与测量摘要">

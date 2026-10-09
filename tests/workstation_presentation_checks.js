@@ -3,8 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-const js = fs.readFileSync(path.join(__dirname, '../web/app.js'), 'utf8');
-const css = fs.readFileSync(path.join(__dirname, '../web/styles.css'), 'utf8');
+const js = fs.readFileSync(path.join(__dirname, '../web/views/signal-analysis.js'), 'utf8');
+const css = fs.readFileSync(path.join(__dirname, '../web/ui/workstation.css'), 'utf8');
 const axis = js.match(/function signalTimeAtPixel[\s\S]*?\n}/)[0];
 const pulse = js.match(/const pulse=\(node,className\)=>\{[\s\S]*?\n  };/)[0];
 const make = (reduced) => vm.runInNewContext(`${axis}\n${pulse}\n({signalTimeAtPixel,pulse})`, {
@@ -26,6 +26,6 @@ make(false).pulse({ offsetWidth: 100, classList: {
   remove: () => operations.push('remove'), add: () => operations.push('add'),
 }}, 'test');
 assert.deepEqual(operations, ['remove', 'add']);
-assert(css.includes('@media (prefers-reduced-motion:reduce)'));
+assert(css.includes('@media(prefers-reduced-motion:reduce)'));
 assert(css.includes('animation:none!important'));
 console.log('PASS: time-axis selection geometry (bounds, center, zero width); Reduced Motion skips result/Lens animations; normal motion remains available.');

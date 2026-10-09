@@ -2,6 +2,24 @@
 
 本目录是一套独立的 PicoScope 4824A 控制程序。所有程序、配置、测试及默认采集数据均位于本目录内，不依赖工程中其他硬件控制代码。
 
+## 工程目录与验证
+
+- `pico4824a/`：设备、采集、分析与安全状态机；算法与硬件时序保持原实现。
+- `web/ui/`：共享布局、主题、Inspector、计算身份、文件选择与保存设置。
+- `web/analysis/`：时频与 EX 控制器；`web/views/`：各工作页的组合与展示。
+- `configs/`：配置示例；`data/`：原始数据、任务结果与派生导出。
+- `tests/`：功能、故障注入、算法兼容及 UI 回归；`tools/run_validation.ps1`：统一验证入口。
+- `archive/`：历史独立试稿与阶段记录，不参与应用运行。
+
+启动仍使用 `./start_web.ps1`；修复记录与验证边界参见 [工程修复与整理](PROJECT_REPAIR_REPORT.md)。
+在 TARGET 运行 `./tools/run_validation.ps1` 执行 Python 回归。UI 验证需要已经启动的仿真服务，以及 Node/Playwright：
+
+```powershell
+./tools/run_validation.ps1 -Browser -BaseUrl http://127.0.0.1:4824 -Node "node.exe" -PlaywrightModule "Playwright模块路径"
+```
+
+设置 →“导出已保存任务 · ZIP”可打包已保存任务。参考目录只读；LCR 与历史干扰会话先导入 TARGET 副本再分析。安全限值与保护未确认时，实机偏置扫描保持锁定。
+
 第一次安装和日常操作请先看[《配置与使用说明》](配置与使用说明.md)；本文档保留功能概览、测量原理和详细分析说明。
 
 ## 已实现功能

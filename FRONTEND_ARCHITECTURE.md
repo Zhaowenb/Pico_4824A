@@ -52,3 +52,6 @@ pico4824a/web.py 仅增加共享 JS/CSS 的静态资源白名单，API 和采集
 - Breathing 限于品牌材质和数据舞台边缘，不动画曲线、坐标或测量读数。动态切换 Reduced Motion 会取消已在运行的展示动画。
 - 顶部导航采用对称布局居中；LCR 文件夹页加载/重算按钮统一 36px，并修复选择器和无历史 LCR 目录时的初始浏览位置。
 - V2 测试：90 项 Python 测试；84 项 Light/Dark 布局；48 项真实文件加载态；文件/文件夹选择、导航居中、按钮对齐、Lens 转场与 Reduced Motion 专项；11 组算法和导出签名一致。没有验证实机硬件。
+
+## 2026-10-09 审计修复
+计算身份统一到 ui/analysis-state.js；时频及 EX 控制器拆入 web/analysis；持久化身份、历史导入与 ZIP 分别由 data_sessions.py、data_access.py 负责。详见 PROJECT_REPAIR_REPORT.md。

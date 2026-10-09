@@ -536,7 +536,8 @@ def write_resistor_calibration(
             "corrected_real_ohm": float(corrected.real),
             "corrected_imag_ohm": float(corrected.imag),
         })
-    target = Path(path)
+    from .storage_naming import output_path
+    target = output_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema": "pico4824a-lcr-resistor-calibration-v1",

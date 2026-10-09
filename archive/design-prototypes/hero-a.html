@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="zh-CN" data-hero="B">
+<html lang="zh-CN" data-hero="A">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#F2F3F5" />
-    <title>WaveGuard Studio — Guided Wave Cinema</title>
+    <title>WaveGuard Studio — Signal Instrument</title>
     <style>
       :root {
         --paper: #F2F3F5;
@@ -558,6 +558,8 @@
         background-image: linear-gradient(rgba(126,182,232,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(126,182,232,.035) 1px,transparent 1px);
         background-size: 40px 40px;
       }
+      html[data-hero="A"] .desktop-scene,html[data-hero="A"] .mobile-scene { display: none !important; }
+      html[data-hero="A"] .variant-scene.hero-a { display: block; }
       .variant-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
       .variant-mobile { display: none; }
       .hero-label { fill: #DDE8F3; font: 600 20px var(--sans); letter-spacing: .01em; }
@@ -618,7 +620,8 @@
         .hero-note { font-size: 10px; }
         .hero-micro { font-size: 9px; }
       }
-
+      .hero-a .a-zero-line { stroke: var(--signal-hi); stroke-width: 1.5; }
+      .hero-a .a-channel-wave:nth-of-type(odd) { stroke: var(--signal-hi); }
     </style>
   </head>
   <body>
@@ -653,9 +656,9 @@
         </div>
       </section>
 
-      <section class="scene-stage" id="sceneStage" aria-label="导波传播与示波器测量主场景">
+      <section class="scene-stage" id="sceneStage" aria-label="信号仪器场景：AWG、ADC 武装、硬件触发 t=0 与八通道同步采集">
         <div class="scene-meta">
-          <span id="sceneMode"><strong>导波传播</strong>&nbsp;&nbsp; / &nbsp;&nbsp;脉冲回波</span>
+          <span id="sceneMode"><strong>信号链路</strong>&nbsp;&nbsp; / &nbsp;&nbsp;硬件触发 · 8CH</span>
           <span class="scene-meta-right">参考试件&nbsp;&nbsp;·&nbsp;&nbsp;模拟数据</span>
         </div>
         <div class="scene-canvas">
@@ -823,7 +826,96 @@
             </svg>
           </div>
 
-          <div class="stage-caption" id="stageCaption"><span class="stage-caption-kicker">A₀ 导波模式 / 参考试件</span><span class="stage-caption-title">传播路径 · 800 mm</span><span class="stage-caption-detail">发射 → 接收 → 模拟缺陷</span></div>
+          <div class="variant-scene hero-a" aria-hidden="true">
+            <svg class="variant-svg variant-desktop" viewBox="0 0 1600 500" preserveAspectRatio="xMidYMid meet">
+              <path class="hero-rule" d="M112 92H1488M112 410H1488"/>
+              <path class="hero-rule-dash" d="M455 112V386M815 112V386M1060 112V386"/>
+              <path class="hero-flow" d="M342 250H491m-8-6 8 6-8 6M710 250H841m-8-6 8 6-8 6M950 250H1081m-8-6 8 6-8 6"/>
+              <g class="a-awg">
+                <text x="150" y="134" class="hero-kicker">01 / EXCITATION SOURCE</text>
+                <text x="150" y="181" class="hero-label-large">AWG</text>
+                <text x="150" y="203" class="hero-note">HANN BURST · 100 kHz · 5 CYCLES</text>
+                <path class="hero-rule" d="M150 250H340"/>
+                <path class="hero-signal" d="M164 250H208q7 0 12-7t12 14t12-25t14 32t15-17t17 3q7 0 12-7t12 14t12-25t14 32t15-17t17 3q7 0 12-7t12 14t12-25t14 32t15-17t17 3H340"/>
+                <circle class="a-awg-ring hero-node" cx="174" cy="250" r="16"/>
+                <circle class="hero-node-core" cx="174" cy="250" r="3"/>
+                <text x="150" y="294" class="hero-micro">2 Vpp · SOFTWARE FIRE AFTER ARM</text>
+                <text x="150" y="350" class="hero-kicker">SIGNAL GENERATION</text>
+                <path class="hero-signal-dim" d="M155 365h185"/>
+              </g>
+              <g class="a-adc">
+                <text x="510" y="134" class="hero-kicker">02 / ACQUISITION READY</text>
+                <text x="510" y="181" class="hero-label">ADC ARMED</text>
+                <text x="510" y="203" class="hero-note">RUNBLOCK · 8 INPUTS SYNCHRONIZED</text>
+                <path class="hero-rule" d="M510 232H702M510 270H702M510 308H702"/>
+                <path class="hero-signal-soft" d="M526 232h157M526 242h157M526 252h157M526 262h157M526 270h157M526 280h157M526 290h157M526 300h157"/>
+                <path class="hero-rule" d="M510 222v94M702 222v94"/>
+                <circle class="a-arm-indicator hero-node" cx="686" cy="154" r="6"/>
+                <circle class="hero-node-core" cx="686" cy="154" r="2"/>
+                <text x="510" y="350" class="hero-kicker">ARM BEFORE EXCITATION</text>
+                <text x="510" y="369" class="hero-micro">采集卡先武装 · 触发边沿定义零时刻</text>
+              </g>
+              <g class="a-zero">
+                <text x="848" y="134" class="hero-kicker">03 / HARDWARE REFERENCE</text>
+                <text x="848" y="181" class="hero-label">TRIGGER</text>
+                <text x="848" y="203" class="hero-note">HARDWARE EDGE</text>
+                <path class="hero-zero-line hero-axis" d="M932 224V328"/>
+                <path class="a-zero-indicator hero-node" d="M932 238l12 12-12 12-12-12z"/>
+                <circle class="hero-node-core" cx="932" cy="250" r="3.2"/>
+                <text x="951" y="260" class="hero-label-large">t=0</text>
+                <text x="848" y="350" class="hero-kicker">SHARED TIME ORIGIN</text>
+                <text x="848" y="369" class="hero-micro">采样时基由硬件触发建立</text>
+              </g>
+              <g class="a-capture">
+                <text x="1090" y="134" class="hero-kicker">04 / SYNCHRONOUS RECORD</text>
+                <text x="1090" y="181" class="hero-label">8CH CAPTURE</text>
+                <text x="1090" y="203" class="hero-note">20 MS/s · 200 k POINTS / CHANNEL</text>
+                <path class="hero-rule" d="M1090 220H1472M1090 340H1472"/>
+                <path class="hero-rule-dash" d="M1090 220V340M1185 220V340M1280 220V340M1375 220V340M1472 220V340"/>
+                <path class="hero-signal-dim" d="M1090 235H1472M1090 249H1472M1090 263H1472M1090 277H1472M1090 291H1472M1090 305H1472M1090 319H1472M1090 333H1472"/>
+                <path class="hero-signal a-channel-wave" d="M1090 235H1198q9 0 14-8t13 16t13-29t15 37t16-17t19 1H1472"/>
+                <path class="hero-signal-mid a-channel-wave" d="M1090 249H1224q9 0 14-7t13 14t13-25t15 32t16-14t19 1H1472"/>
+                <path class="hero-signal-soft a-channel-wave" d="M1090 263H1247q9 0 14-6t13 12t13-21t15 27t16-12t19 1H1472"/>
+                <path class="hero-signal a-channel-wave" d="M1090 277H1270q9 0 14-5t13 10t13-18t15 23t16-10t19 1H1472"/>
+                <path class="hero-signal-soft a-channel-wave" d="M1090 291H1293q9 0 14-5t13 9t13-16t15 20t16-9t19 1H1472"/>
+                <path class="hero-signal-mid a-channel-wave" d="M1090 305H1316q9 0 14-4t13 8t13-14t15 18t16-8t19 1H1472"/>
+                <path class="hero-signal-soft a-channel-wave" d="M1090 319H1339q9 0 14-4t13 7t13-12t15 16t16-7t19 1H1472"/>
+                <path class="hero-signal a-channel-wave" d="M1090 333H1362q9 0 14-3t13 6t13-10t15 13t16-6t19 1H1472"/>
+                <text x="1090" y="369" class="hero-micro">A  B  C  D  E  F  G  H</text>
+                <text x="1472" y="369" text-anchor="end" class="hero-micro">0 ─────────── TIME</text>
+              </g>
+              <path class="a-transfer-pulse hero-signal" d="M348 250H842" opacity=".25"/>
+              <text x="112" y="444" class="hero-micro">PICOSCOPE 4824A / EIGHT CHANNELS / STATIC SAMPLE · NOT MEASURED</text>
+              <text x="1488" y="444" text-anchor="end" class="hero-micro">HARDWARE FIRST</text>
+            </svg>
+            <svg class="variant-svg variant-mobile" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet">
+              <path class="hero-rule" d="M50 46H550M50 560H550"/>
+              <text x="62" y="74" class="hero-kicker">01 / AWG · HANN BURST</text>
+              <text x="62" y="112" class="hero-label-large">AWG</text>
+              <text x="198" y="108" class="hero-note">100 kHz · 5 CYCLES · 2 Vpp</text>
+              <path class="hero-rule" d="M64 145H536"/>
+              <path class="hero-signal" d="M66 145H128q7 0 12-7t12 14t12-24t14 31t14-16t17 2q7 0 12-7t12 14t12-24t14 31t14-16t17 2q7 0 12-7t12 14t12-24t14 31t14-16t17 2H536"/>
+              <path class="hero-flow" d="M300 165V202m-6-8 6 8 6-8"/>
+              <text x="62" y="233" class="hero-kicker">02 / ADC ARMED</text>
+              <text x="62" y="270" class="hero-label">8 INPUTS · RUNBLOCK</text>
+              <circle class="a-arm-indicator hero-node" cx="519" cy="225" r="7"/><circle class="hero-node-core" cx="519" cy="225" r="2.5"/>
+              <path class="hero-signal-soft" d="M80 292H520M80 302H520M80 312H520M80 322H520M80 332H520M80 342H520M80 352H520M80 362H520"/>
+              <path class="hero-flow" d="M300 376V405m-6-8 6 8 6-8"/>
+              <path class="hero-axis" d="M66 421H536"/>
+              <path class="a-zero-indicator hero-node" d="M300 410l11 11-11 11-11-11z"/><circle class="hero-node-core" cx="300" cy="421" r="3"/>
+              <text x="72" y="410" class="hero-kicker">03 / HARDWARE TRIGGER</text><text x="323" y="430" class="hero-label-large">t=0</text>
+              <text x="62" y="465" class="hero-kicker">04 / 8CH SYNCHRONOUS CAPTURE</text>
+              <path class="hero-rule-dash" d="M66 481H536M66 493H536M66 505H536M66 517H536M66 529H536M66 541H536"/>
+              <path class="hero-signal a-channel-wave" d="M66 481H170q8 0 13-7t13 14t13-24t15 31t15-15t16 1H536"/>
+              <path class="hero-signal-mid a-channel-wave" d="M66 493H206q8 0 13-6t13 12t13-20t15 26t15-12t16 1H536"/>
+              <path class="hero-signal-soft a-channel-wave" d="M66 505H242q8 0 13-5t13 10t13-17t15 22t15-10t16 1H536"/>
+              <path class="hero-signal a-channel-wave" d="M66 517H278q8 0 13-4t13 8t13-14t15 18t15-8t16 1H536"/>
+              <path class="hero-signal-soft a-channel-wave" d="M66 529H314q8 0 13-3t13 6t13-11t15 14t15-6t16 1H536"/>
+              <path class="hero-signal-mid a-channel-wave" d="M66 541H350q8 0 13-3t13 5t13-9t15 12t15-5t16 1H536"/>
+              <text x="540" y="552" text-anchor="end" class="hero-micro">20 MS/s · SAMPLE MODEL</text>
+            </svg>
+          </div>
+          <div class="stage-caption" id="stageCaption"><span class="stage-caption-kicker">SIGNAL INSTRUMENT / 8 CHANNELS</span><span class="stage-caption-title">真实采集链 · 从武装到采样</span><span class="stage-caption-detail">AWG → ADC ARMED → HARDWARE t=0 → 8CH CAPTURE</span></div>
         </div>
 
         <div class="scene-readouts" id="sceneReadouts" aria-label="演示参数与测量摘要">

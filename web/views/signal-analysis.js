@@ -45,8 +45,11 @@ function signalTimeAtPixel(pixelX, width, startUs, endUs) {
   filterPanel.innerHTML='<div class="panel-heading"><h2>带通参数</h2></div>';
   const bandHeading = document.querySelector('.analysis-band-heading');
   filterPanel.append(bandHeading, bandHeading.nextElementSibling);
+  popover.append(filterPanel);
+  filterPanel.prepend($('analysisFilterEnabled').closest('label'));
+  $('analysisFilterEnabled').addEventListener('change',()=>{timeFrequencyState.invalidate(); experimentalState.invalidate();experimentalModeResult=null; if(analysisSource){if(['stft','wpd','cwt'].includes(analysisLens))void calculateTimeFrequency();else scheduleAnalysisRefresh();}});
   const applyFilter=create('button','signal-apply-filter','应用带通参数');applyFilter.type='button';applyFilter.id='analysisApplyBandBtn';
-  applyFilter.addEventListener('click',()=>{if(analysisSource)void refreshAnalysis();});
+  applyFilter.addEventListener('click',()=>{if(analysisSource){timeFrequencyState.invalidate();if(['stft','wpd','cwt'].includes(analysisLens))void calculateTimeFrequency();else void refreshAnalysis();}});
   filterPanel.append(applyFilter);
   popover.append(filterPanel);
   ['analysisBandLow','analysisBandHigh','analysisTransition'].forEach(id=>$(id).addEventListener('change',()=>{if(analysisSource)scheduleAnalysisRefresh();}));
@@ -70,7 +73,7 @@ function signalTimeAtPixel(pixelX, width, startUs, endUs) {
   let dragSelection=null;
   let timeCursor=null;
   const paint=()=>{
-      if(body.dataset.page==='measure') drawScope();
+      if(body.dataset.page==='measure') { drawScope(); if($('awgPreviewCanvas').getBoundingClientRect().height>0) scheduleAwgPreview(); }
       if(body.dataset.page==='file-analysis') {
         if(['raw','filtered','mix'].includes(analysisLens)) drawAnalysisWaveform();
         else if(analysisLens==='fft') drawSpectrum();
@@ -122,7 +125,7 @@ function signalTimeAtPixel(pixelX, width, startUs, endUs) {
     focus.textContent=matchMedia('(max-width:760px)').matches?'采集 / 文件设置':body.classList.contains('signal-focus')?'退出专注':'专注';
     focus.setAttribute('aria-pressed',String(body.classList.contains('signal-focus')));
     document.querySelector('.control-stack').inert=body.classList.contains('signal-focus');
-    filterPanel.hidden=!['filtered','mix','fft'].includes(analysisLens);
+    filterPanel.hidden=!['filtered','mix','fft','stft','cwt','wpd','experimental'].includes(analysisLens);
     redraw();
   };
   window.addEventListener('signal-layout',layout);
@@ -130,10 +133,10 @@ function signalTimeAtPixel(pixelX, width, startUs, endUs) {
   WaveGuardUI.observe(analysisStage);
   WaveGuardUI.observe(measureStage);
   // Dock transitions resize chart parents without resizing the outer stage.
-  ['scopeCanvas','analysisWaveCanvas','spectrumCanvas','timeFrequencyCanvas','modeWaveCanvas'].forEach(id=>WaveGuardUI.observe($(id).parentElement));
+  ['scopeCanvas','analysisWaveCanvas','spectrumCanvas','timeFrequencyCanvas','modeWaveCanvas','awgPreviewCanvas'].forEach(id=>WaveGuardUI.observe($(id).parentElement));
   window.addEventListener('signal-lens-change',()=>requestAnimationFrame(()=>{
     syncLensPanels();
-    filterPanel.hidden=!['filtered','mix','fft'].includes(analysisLens);
+    filterPanel.hidden=!['filtered','mix','fft','stft','cwt','wpd','experimental'].includes(analysisLens);
     drawContext(); pulse(analysisStage,'signal-lens-settle');
     const enabled=['filtered','mix','fft','stft','cwt','wpd'].includes(analysisLens);
     $('analysisLensSettings').style.setProperty('display',enabled?'flex':'none','important');

@@ -425,7 +425,7 @@
         <section class="panel analysis-time-controls page-only" data-pages="file-analysis">
           <div class="panel-heading compact">
             <div><span class="analysis-panel-kicker">CONTEXT</span><h2>分析上下文</h2></div>
-            <input id="analysisFilterEnabled" type="checkbox" hidden />
+            <label class="analysis-input-filter"><input id="analysisFilterEnabled" type="checkbox" />数学分析使用带通输入</label>
           </div>
           <div class="subhead analysis-band-heading"><span>带通参数</span><small>Filtered / Mix 共用</small></div>
           <div class="form-grid three">
@@ -1028,6 +1028,9 @@
     </div>
     <script src="/ui/workstation.js?v=shared-ui-v2"></script>
     <script src="/ui/storage-naming.js"></script>
+    <script src="/ui/analysis-state.js"></script>
+    <script src="/analysis/time-frequency.js"></script>
+    <script src="/analysis/experimental.js"></script>
     <script src="/app.js?v=shared-ui-v2"></script>
     <script src="/views/signal-analysis.js?v=shared-ui-v2"></script>
     <script src="/views/instruments.js?v=shared-ui-v2"></script>
