@@ -9,7 +9,7 @@
     <label>USB VISA 资源<select id="biasResource"><option value="">选择资源</option></select></label>
     <div class="bias-row"><button id="biasDiscover">查找 USB</button><button id="biasConnect">连接并断电</button></div>
     <p id="biasPowerState" class="bias-note">实机限值待定 · 实机启动锁定</p><button id="biasRecoverBtn" type="button">确认断电并恢复</button>
-    <label>本次扫描名称<input id="biasScanName" type="text" maxlength="64" placeholder="留空使用全局命名设置"></label><p class="bias-save-location" id="biasSaveLocation">自动保存：data/bias_scans / 扫描任务 / 每档电流 / 每次波形</p><div class="subhead"><span>扫描范围</span><small>首轮上限 6 A</small></div>
+    <label>本次扫描名称<input id="biasScanName" type="text" maxlength="64" placeholder="留空使用全局命名设置"></label><p class="bias-save-location" id="biasSaveLocation">自动保存：data/bias_scans / 扫描任务 / 每档电流 / 每次波形</p><div class="subhead"><span>扫描范围</span><small id="biasRangeLimit">默认上限 6 A</small></div>
     <div class="form-grid"><label>起始 A<input id="biasStart" type="number" value="0" min="0" max="6" step="0.5"></label><label>终止 A<input id="biasEnd" type="number" value="6" min="0" max="6" step="0.5"></label><label>步长 A<input id="biasStep" type="number" value="0.5" min="0.01" max="6" step="0.1"></label><label>每档次数<select id="biasRepeats">${[5,6,7,8,9,10].map(n=>`<option ${n===10?'selected':''}>${n}</option>`).join('')}</select></label><label>记录窗口 μs<input id="biasDuration" type="number" value="2000" min="1"></label><label>开始间隔 ms<input id="biasInterval" type="number" value="100" min="0"></label></div>
     <div class="subhead"><span>直达波评价</span><small>先滤波 · 再取时间窗</small></div>
     <label class="bias-check"><input id="biasFilterEnabled" type="checkbox" checked>带通滤波后 Vpp</label>
@@ -59,5 +59,6 @@
   window.addEventListener('signal-layout',()=>{if(document.body.dataset.page==='bias-scan'){if(!['running','paused'].includes(window.__biasTaskState))snapshotNow();WaveGuardUI.requestPaint();}});
   fields.forEach(id=>node(id).addEventListener('change',()=>{try{localStorage.setItem('waveguard-bias-settings',JSON.stringify(Object.fromEntries(fields.map(key=>[key,node(key).type==='checkbox'?node(key).checked:node(key).value]))));}catch{}}));
   try{const saved=JSON.parse(localStorage.getItem('waveguard-bias-settings')||'{}');fields.forEach(id=>{if(saved[id]!=null&& !['biasInductive','biasIndependent'].includes(id)){if(node(id).type==='checkbox')node(id).checked=saved[id];else node(id).value=saved[id];}});}catch{}
+  api('/api/bias-scan/limits').then(data=>{const maximum=Number(data.max_current_a);if(!Number.isFinite(maximum)||maximum<=0)return;['biasStart','biasEnd','biasStep','biasCurrentLimit'].forEach(id=>node(id).max=String(maximum));node('biasRangeLimit').textContent='允许上限 '+maximum+' A · 默认 6 A';}).catch(()=>{node('biasRangeLimit').textContent='范围读取失败 · 暂按 6 A';});
   updateCooling();updateMode();snapshotNow();WaveGuardUI.activate(document.body.dataset.page);paint();
 })();

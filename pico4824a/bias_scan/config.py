@@ -2,6 +2,7 @@ from dataclasses import dataclass, asdict
 from decimal import Decimal
 import math
 from ..config import AcquisitionConfig
+from .limits import MAX_CURRENT_A
 
 
 @dataclass(frozen=True)
@@ -59,8 +60,8 @@ class BiasScanConfig:
         if self.scan_name:
             from ..storage_naming import component
             component(self.scan_name)
-        if not 0 <= self.start_a <= self.stop_a <= 6 or not 0.01 <= self.step_a <= 6:
-            raise ValueError('第一阶段仅允许 0–6 A，步长至少 0.01 A')
+        if not 0 <= self.start_a <= self.stop_a <= MAX_CURRENT_A or not 0.01 <= self.step_a <= MAX_CURRENT_A:
+            raise ValueError(f'扫描范围必须位于 0–{MAX_CURRENT_A:g} A，步长至少 0.01 A')
         if isinstance(self.repeats, bool) or not isinstance(self.repeats, int) or not 5 <= self.repeats <= 10:
             raise ValueError('每档采集次数必须是 5–10 的整数')
         if self.interval_s < 0 or self.interval_s > 10 or not 0 < self.record_duration_us <= 20000:
@@ -77,8 +78,8 @@ class BiasScanConfig:
             raise ValueError('稳定误差范围无效')
         if not 0.01 <= self.poll_s <= .2 or self.stable_hold_s < self.poll_s:
             raise ValueError('稳定保持时间必须至少覆盖一次查询周期')
-        if not self.stop_a <= self.actual_current_limit_a <= 6:
-            raise ValueError('实际电流安全上限必须覆盖目标且不超过 6 A')
+        if not self.stop_a <= self.actual_current_limit_a <= MAX_CURRENT_A or self.actual_current_limit_a <= 0:
+            raise ValueError(f'请设置实际电流上限以覆盖扫描终点；上限须大于 0 且不超过 {MAX_CURRENT_A:g} A')
         for name in ['voltage_limit_v', 'max_on_s', 'stable_timeout_s', 'cooldown_s', 'cooldown_min_s']:
             value = getattr(self, name)
             if value is not None and (value < 0 or (name not in {'cooldown_s', 'cooldown_min_s'} and value == 0)):

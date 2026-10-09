@@ -105,6 +105,17 @@ class PowerRecoveryTests(unittest.TestCase):
         self.assertEqual(sum(d['command']=='*IDN? continuation' for d in p.diagnostics),2)
         self.assertNotIn(':OUTPut:STATe 1',i.commands)
 
+    def test_driver_accepts_twenty_but_rejects_above_envelope(self):
+        p,i=self.power()
+        def configured(instrument):
+            self.assertIn('CURR 20',instrument.commands)
+        from unittest.mock import patch
+        with patch.object(p,'_query',side_effect=lambda instrument,command:'140' if command=='VOLT?' else '20'):
+            p.configure(140,20)
+        configured(i)
+        for current in [20.1,float('nan'),-1]:
+            with self.assertRaises(ValueError):p.configure(140,current)
+
     def test_status_transition_longer_than_old_100ms_budget(self):
         import time
         p,i=self.power();original_query=i.query;original_write=i.write

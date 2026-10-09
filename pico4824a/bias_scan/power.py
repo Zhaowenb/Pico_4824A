@@ -2,6 +2,7 @@ import math
 import threading
 import time
 from collections import deque
+from .limits import MAX_CURRENT_A
 
 
 class IT6524DController:
@@ -171,7 +172,7 @@ class IT6524DController:
             return action(self.instrument)
 
     def configure(self, voltage, current):
-        if not 0 <= current <= 6 or not math.isfinite(voltage) or not 0 < voltage <= 360:
+        if not math.isfinite(current) or not 0 <= current <= MAX_CURRENT_A or not math.isfinite(voltage) or not 0 < voltage <= 360:
             raise ValueError('电压或电流限值无效')
         if self.output_state != 'off':
             raise RuntimeError('必须先确认电源关闭')

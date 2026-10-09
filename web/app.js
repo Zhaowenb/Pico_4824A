@@ -2750,7 +2750,7 @@ function updateSweepBaseSummary() {
 
 function showPage(page, push = false) {
   const workspaceCopy = {
-    "bias-scan": ["BIAS RESPONSE", "偏置电流扫描", "IT6524D → PicoScope 4824A · 0–6 A", "安全预检 · READY"],
+    "bias-scan": ["BIAS RESPONSE", "偏置电流扫描", "IT6524D → PicoScope 4824A · 电流偏置扫描", "安全预检 · READY"],
     measure: ["LIVE ACQUISITION", "实时测量", "PicoScope 4824A · 8CH BLOCK CAPTURE", "系统就绪 · READY"],
     sweep: ["PARAMETER EXPLORATION", "参数扫描", "AWG → TRIGGER → 8CH CAPTURE → EVALUATION", "扫描待命 · READY"],
     lcr: ["IMPEDANCE WORKSPACE", "LCR 测量", "SMALL SIGNAL / HIGH DRIVE · CALIBRATED", "测量待命 · READY"],

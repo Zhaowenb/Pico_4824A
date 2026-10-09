@@ -113,4 +113,13 @@ class BiasHttpTests(unittest.TestCase):
     def test_recovery_without_connection_does_not_claim_off(self):
         with self.assertRaises(HTTPError):self.req('/api/bias-scan/recover',{})
 
+    def test_twenty_amp_limits_and_preflight(self):
+        limits=json.loads(self.req('/api/bias-scan/limits')[1])
+        self.assertEqual(limits['max_current_a'],20)
+        payload={'simulate':True,'config':self.acq,'bias':{**self.config,'stop_a':20,'actual_current_limit_a':20}}
+        response=json.loads(self.req('/api/bias-scan/preflight',payload)[1])
+        self.assertEqual(response['points'][-1],20)
+        payload['bias']['stop_a']=20.1
+        with self.assertRaises(HTTPError):self.req('/api/bias-scan/preflight',payload)
+
 if __name__=='__main__':unittest.main()
