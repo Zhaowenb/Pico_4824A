@@ -1,5 +1,4 @@
 from dataclasses import asdict
-from datetime import datetime
 from pathlib import Path
 import csv
 import json
@@ -7,11 +6,11 @@ import math
 import shutil
 import threading
 import time
-import uuid
 
 from .analyzer import BiasScanAnalyzer
 from .safety import SafetyProtection, SimulationProtection, TemperatureProvider
 from ..storage import save_npz
+from ..storage_naming import session_directory, preferences
 
 
 class BiasScanController:
@@ -19,6 +18,7 @@ class BiasScanController:
     def __init__(self, config, acquisition, power, adapter, output_root, simulate=False,
                  stop_event=None, progress=None, protection=None, temperature=None):
         self.config, self.simulate = config, simulate
+        self.scan_name = config.scan_name or preferences()["bias"]
         config.validate(live=not simulate)
         self.acquisition = config.acquisition(acquisition)
         self.power, self.adapter = power, adapter
@@ -177,13 +177,23 @@ class BiasScanController:
             self.check()
             if self.config.cooling_mode=='temperature' and self.temperature_reading()>=self.config.temperature_limit_c:
                 raise RuntimeError('预检温度超过阈值')
-            self.folder=self.output_root/(datetime.now().strftime('%Y%m%d_%H%M%S_')+uuid.uuid4().hex[:8])
-            self.folder.mkdir(parents=True)
+            self.folder=session_directory(self.output_root, 'bias',
+                details=f'{self.config.start_a:g}-{self.config.stop_a:g}A_步进{self.config.step_a:g}A_{self.config.repeats}次',
+                name=self.scan_name, simulated=self.simulate)
             required=self.acquisition.total_samples*(len(self.acquisition.enabled_channels)+1)*8*self.config.repeats*len(self.config.points())
             if shutil.disk_usage(self.folder).free < required+16*1024**2:raise RuntimeError('输出磁盘空间不足')
             self.result.update(output_dir=str(self.folder),device_identity=identity,
                                configuration=asdict(self.config),acquisition=self.acquisition.to_dict(),effective_limits=self.limits)
             (self.folder/'config.json').write_text(json.dumps({k:self.result[k] for k in ['configuration','acquisition','device_identity','simulated','effective_limits']},ensure_ascii=False,indent=2),encoding='utf-8')
+            (self.folder/'文件说明.md').write_text(
+                '# 偏置电流扫描数据\n\n'
+                'config.json：扫描参数、采集快照、电源身份与安全限值。\n\n'
+                'summary.csv：逐档 Vpp 均值、样本标准差、有效性和通电时长。\n\n'
+                'runs.csv：逐次采集、实际电流、时间与原始文件相对路径。\n\n'
+                'result.json：任务状态、最佳已测电流、安全事件与完整统计。\n\n'
+                '每个“电流…A”文件夹：本档逐次 NPZ 原始波形、runs.csv 和 summary.json。\n\n'
+                '0 A 是断电基线。仿真文件不是实机测量。正常流程先确认关闭输出，再写入波形、分析和保存；异常输出状态详见 result.json。\n',
+                encoding='utf-8')
             self.event('preflight_complete')
             for index,target in enumerate(self.config.points()):
                 self.check();self._fault=None;self._telemetry=None;self._point_done=threading.Event();self._threads=[]
@@ -245,13 +255,15 @@ class BiasScanController:
                 try:
                     self.event('analyze',point=index)
                     rows=[]
+                    point_folder = self.folder / (f'{index:02d}_电流{target:.3f}A' + ('_断电基线' if target == 0 else ''))
+                    point_folder.mkdir(exist_ok=True)
                     for repeat,(result,telemetry,started,ended) in enumerate(captured):
                         value,reason=BiasScanAnalyzer.vpp(result,self.config)
                         row={'point':index,'repeat':repeat+1,'target_a':target,
                              'actual_current_a':telemetry['current_a'],'telemetry_monotonic_time':telemetry['monotonic_time'],
                              'capture_start':started,'capture_end':ended,'capture_duration_s':ended-started,'telemetry_wall_time':telemetry.get('wall_time'),
                              'vpp_v':value,'valid':value is not None,'invalid_reason':reason,
-                             'file':f'point_{index:03d}_repeat_{repeat+1:02d}.npz'}
+                             'file':(point_folder / f'重复{repeat+1:02d}__PZT-{self.config.pzt_channel}__原始波形.npz').relative_to(self.folder).as_posix()}
                         self.event('save_waveform',point=index,repeat=repeat+1)
                         save_npz(result,self.folder/row['file']);rows.append(row);self.rows.append(row)
                     summary=BiasScanAnalyzer.summary(target,rows,self.config.repeats,eligible=error is None)
@@ -259,6 +271,8 @@ class BiasScanController:
                                    capture_batch_duration_s=captured[-1][3]-batch_start if captured else 0,
                                    on_duration_s=self._off_at-on_start if on_start and self._off_at else 0)
                     summary['capture_batch_target_met']=bool(captured and summary['capture_batch_duration_s']<=1.5 and len(captured)==self.config.repeats)
+                    self._csv(point_folder / 'runs.csv', rows)
+                    (point_folder / 'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
                     self.summaries.append(summary);self.result['revision']+=1;self.persist()
                 except BaseException as exc:error=error or exc
                 if error:raise error

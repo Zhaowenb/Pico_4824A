@@ -79,8 +79,8 @@ class InterferenceTests(unittest.TestCase):
         restored = load_session(self.session["id"], self.root)
         self.assertEqual(len(restored["runs"]), capture_id)
         self.assertEqual(len(summarize(restored)["rows"]), sum(map(len, cases.values())))
-        self.assertTrue(Path(self.root, self.session["id"], restored["runs"][0]["raw_file"]).is_file())
-        self.assertTrue(Path(self.root, self.session["id"], restored["runs"][0]["fft_file"]).is_file())
+        self.assertTrue(Path(restored['output_dir'], restored["runs"][0]["raw_file"]).is_file())
+        self.assertTrue(Path(restored['output_dir'], restored["runs"][0]["fft_file"]).is_file())
         self.assertIn("spectra", preview(self.session["id"], restored["runs"][0]["id"], self.root))
         self.assertTrue(export_csv(self.session["id"], self.root).is_file())
         with self.assertRaises(ValueError):

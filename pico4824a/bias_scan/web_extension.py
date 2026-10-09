@@ -2,10 +2,12 @@
 import threading
 import time
 from pathlib import Path
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import numpy as np
 from ..config import AcquisitionConfig
 from ..storage import load_npz
+from zipfile import ZipFile, ZIP_DEFLATED
+from ..storage_naming import preferences
 from . import BiasScanConfig, BiasScanController, PicoCaptureAdapter, IT6524DController, SimulatedPowerSupply
 from .safety import SafetyProtection, TemperatureProvider
 
@@ -48,6 +50,7 @@ class BiasScanWebMixin:
             self.bias_preflight(raw)
             simulate=raw.get('simulate',True)
             config=BiasScanConfig.from_dict(raw.get('bias',{}))
+            config=replace(config,scan_name=config.scan_name or preferences()['bias'])
             source=AcquisitionConfig.from_dict(raw.get('config',{}))
             self._stop_event.clear();self._resume_event.set();self._trip_alarm=None
             self.status.capture_id+=1;task_id=self.status.capture_id
@@ -124,6 +127,30 @@ class BiasScanWebMixin:
             if controller is None or controller.folder is None:raise RuntimeError('尚无偏置扫描结果')
             if self.status.state in {'running','paused'}:raise RuntimeError('请等待扫描结束后导出')
             return (controller.folder/name).read_bytes()
+
+    def bias_archive(self):
+        # Compression runs only after the instrument task releases its ownership.
+        with self._lock:
+            controller=self.bias_controller
+            if controller is None or controller.folder is None:raise RuntimeError('尚无偏置扫描结果')
+            if self.status.state in {'running','paused'}:raise RuntimeError('请等待扫描结束后导出')
+            if self.bias_unknown or self.bias_cleanup_pending:raise RuntimeError('请先确认断电和仪器收尾完成')
+            folder=controller.folder.resolve()
+            # Starting another instrument job uses this same lock. It cannot
+            # enter its powered phase while this archive is being written.
+            destination=folder.parent/'exports'
+            destination.mkdir(exist_ok=True)
+            archive=destination/(folder.name+'.zip')
+            temporary=archive.with_suffix('.zip.tmp')
+            try:
+                with ZipFile(temporary,'w',compression=ZIP_DEFLATED) as stream:
+                    for path in sorted(folder.rglob('*')):
+                        if path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(folder):
+                            stream.write(path, (Path(folder.name)/path.relative_to(folder)).as_posix())
+                temporary.replace(archive)
+            finally:
+                temporary.unlink(missing_ok=True)
+            return archive
 
     def bias_shutdown(self):
         if self.bias_controller:self.bias_controller.stop()

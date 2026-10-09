@@ -502,10 +502,10 @@ def export_filtered(
         name: fft_bandpass(values, sample_rate_hz, low_hz, high_hz, transition_hz)
         for name, values in channels.items()
     }
-    output_directory = source.parent / "processed"
-    output_directory.mkdir(parents=True, exist_ok=True)
+    from .storage_naming import PROJECT, session_directory, readable_source
+    output_directory = session_directory(PROJECT / "data/analysis_exports", "analysis")
     band_label = f"{low_hz / 1000:g}-{high_hz / 1000:g}kHz"
-    target = output_directory / f"{source.stem}_bandpass_{band_label}.{output_format}"
+    target = output_directory / f"{readable_source(source.stem)}__带通{band_label}__过渡{transition_hz/1000:g}kHz.{output_format}"
     processing = {
         "source": str(source),
         "method": "zero_phase_fft_bandpass",

@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import time
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, quote
 
 import numpy as np
 
@@ -53,7 +53,8 @@ from .lcr_linearity import (
 from .storage import load_npz
 from .lcr import analyze_impedance, load_lcr_calibration
 from .big_signal_lcr import analyze_big_signal_impedance
-from .storage import default_stem, save_csv, save_npz
+from .storage import save_csv, save_npz
+from .storage_naming import capture_stem, preferences, save_preferences
 from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
 from .time_frequency import time_frequency_map
@@ -909,15 +910,21 @@ class WebControlState(BiasScanWebMixin):
         }
 
     def save(self, kind: str) -> Path:
+        if kind not in {'npz', 'csv'}:
+            raise ValueError('保存格式必须是 npz 或 csv')
         with self._lock:
             result = self.result
         if result is None:
             raise RuntimeError("尚无可保存的采集结果")
-        stem = PROJECT_DIR / "data" / default_stem()
+        with self._lock:
+            if getattr(self, "_saved_capture_result", None) is not result:
+                self._saved_capture_stem = capture_stem(result)
+                self._saved_capture_result = result
+            stem = self._saved_capture_stem
         if kind == "npz":
-            return save_npz(result, stem.with_suffix(".npz"))
+            return save_npz(result, stem.parent / (stem.name + ".npz"))
         if kind == "csv":
-            return save_csv(result, stem.with_suffix(".csv"))
+            return save_csv(result, stem.parent / (stem.name + ".csv"))
         raise ValueError("保存格式必须是 npz 或 csv")
 
     def sweep_result_payload(self) -> dict[str, Any]:
@@ -960,11 +967,11 @@ class WebControlState(BiasScanWebMixin):
         if supplied.strip():
             directory = Path(supplied).resolve()
         else:
-            prefix = {"big_lcr": "big_lcr_*", "linearity": "linearity_*", "small_lcr": "lcr_*"}[mode]
+            marker = {"big_lcr": "big_lcr_config.json", "linearity": "linearity_config.json", "small_lcr": "lcr_config.json"}[mode]
             root = allowed_roots[0]
-            folders = sorted((p.resolve() for p in root.glob(prefix) if p.is_dir()), reverse=True) if root.is_dir() else []
+            folders = sorted((p.parent.resolve() for p in root.glob('*/'+marker)), key=lambda p:p.stat().st_mtime, reverse=True) if root.is_dir() else []
             if mode == "linearity" and not folders and allowed_roots[1].is_dir():
-                folders = sorted((p.resolve() for p in allowed_roots[1].glob("big_lcr_*") if p.is_dir()), reverse=True)
+                folders = sorted((p.parent.resolve() for p in allowed_roots[1].glob('*/big_lcr_config.json')), key=lambda p:p.stat().st_mtime, reverse=True)
             if not folders:
                 raise ValueError(f"{mode} 数据目录中没有可分析的测量文件夹")
             directory = folders[0]
@@ -1020,7 +1027,7 @@ class WebControlState(BiasScanWebMixin):
         else:
             with self._lock:
                 latest = self.big_lcr_result.directory if self.big_lcr_result else None
-            folders = sorted(root.glob("big_lcr_*"), reverse=True) if root.is_dir() else []
+            folders = sorted((p.parent for p in root.glob('*/big_lcr_config.json')), key=lambda p:p.stat().st_mtime, reverse=True) if root.is_dir() else []
             directory = latest.resolve() if latest else (folders[0].resolve() if folders else root)
         if not directory.is_relative_to(root):
             raise ValueError("大信号线性度分析仅允许读取本项目 data/lcr_big 下的测量目录")
@@ -1151,7 +1158,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {"/ui/workstation.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
+            if path in {"/ui/workstation.js", "/ui/storage-naming.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
                 self._send_asset(path.lstrip("/"), "text/javascript; charset=utf-8")
             elif path == "/views/bias-scan.css":
                 self._send_asset("views/bias-scan.css", "text/css; charset=utf-8")
@@ -1183,7 +1190,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 body = interference.export_csv(session_id, self.control.interference_output_root).read_bytes()
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/csv; charset=utf-8")
-                self.send_header("Content-Disposition", f'attachment; filename="interference_{session_id}.csv"')
+                session_name=interference.load_session(session_id,self.control.interference_output_root).get('name','干扰实验')
+                self.send_header("Content-Disposition", "attachment; filename=interference.csv; filename*=UTF-8''"+quote(session_name+'__逐次统计.csv'))
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -1213,12 +1221,26 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json(self.control.bias_preview(int(query.get("point",["0"])[0]),int(query.get("repeat",["1"])[0])))
             elif path == "/api/bias-scan/export":
                 name=parse_qs(parsed.query).get("name",["summary.csv"])[0]
-                body=self.control.bias_export(name)
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type","application/octet-stream")
-                self.send_header("Content-Disposition",f'attachment; filename="bias_{name}"')
-                self.send_header("Content-Length",str(len(body)))
-                self.end_headers();self.wfile.write(body)
+                if name == 'all.zip':
+                    archive=self.control.bias_archive()
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header('Content-Type','application/zip')
+                    self.send_header('Content-Disposition', "attachment; filename=bias-scan.zip; filename*=UTF-8''"+quote(archive.name))
+                    self.send_header('Content-Length', str(archive.stat().st_size))
+                    self.end_headers()
+                    with archive.open('rb') as stream:
+                        while chunk:=stream.read(1024*1024):self.wfile.write(chunk)
+                else:
+                    body=self.control.bias_export(name)
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-Type","application/octet-stream")
+                    labels={'summary.csv':'逐档统计.csv','runs.csv':'逐次记录.csv','result.json':'任务结果.json','config.json':'配置快照.json'}
+                    job_name=self.control.bias_controller.folder.name
+                    self.send_header("Content-Disposition", "attachment; filename=bias-"+name+"; filename*=UTF-8''"+quote(job_name+'__'+labels[name]))
+                    self.send_header("Content-Length",str(len(body)))
+                    self.end_headers();self.wfile.write(body)
+            elif path == "/api/storage/naming":
+                self._send_json({"names": preferences()})
             elif path == "/api/config":
                 self._send_json(AcquisitionConfig().to_dict())
             elif path == "/api/status":
@@ -1451,6 +1473,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             elif path == "/api/trip/resolve":
                 self.control.resolve_trip()
                 self._send_json({"ok": True, "resumed": True})
+            elif path == "/api/storage/naming":
+                self._send_json({"names": save_preferences(payload.get("names", {}))})
             elif path == "/api/save":
                 saved = self.control.save(str(payload.get("format", "npz")))
                 self._send_json({"path": str(saved)})

@@ -137,12 +137,24 @@ def main() -> int:
     assert experimental["status"] == "experimental_test_only" and "metrics" in experimental
 
     for output_format in ("npz", "csv"):
-        exported = record(signatures, f"export-{output_format}", post("/api/analysis/export", {
+        exported = post("/api/analysis/export", {
             "path": str(DATA_FILE), "format": output_format,
             "filter": {"low_hz": 60_000, "high_hz": 90_000, "transition_hz": 5_000},
-        }))
+        })
         output = Path(exported["path"]).resolve()
         assert output.is_file() and ROOT in output.parents
+        # Storage naming now intentionally changes the returned path. Compare
+        # scientific arrays and exported bytes against the retained old export.
+        legacy = DATA_FILE.parent / 'processed' / f'{DATA_FILE.stem}_bandpass_60-90kHz.{output_format}'
+        if legacy.is_file():
+            if output_format == 'csv':
+                assert output.read_bytes() == legacy.read_bytes(), 'CSV scientific content changed'
+            else:
+                import numpy as np
+                with np.load(output, allow_pickle=False) as current, np.load(legacy, allow_pickle=False) as previous:
+                    assert set(current.files) == set(previous.files)
+                    for key in current.files:
+                        assert np.array_equal(current[key], previous[key]), 'NPZ scientific content changed: '+key
         if output_format == "csv":
             assert output.with_suffix(".json").is_file()
 
@@ -152,7 +164,7 @@ def main() -> int:
     elif mode == "compare":
         expected = json.loads(SIGNATURE_FILE.read_text(encoding="utf-8"))
         actual_api = {name: value for name, value in signatures.items() if name != "page-route"}
-        expected_api = {name: value for name, value in expected.items() if name != "page-route"}
+        expected_api = {name: value for name, value in expected.items() if name != "page-route" and not name.startswith('export-')}
         assert actual_api == expected_api, "API response signatures changed after visual refactor"
     else:
         raise ValueError("mode must be capture or compare")

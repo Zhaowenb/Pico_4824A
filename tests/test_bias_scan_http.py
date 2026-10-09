@@ -42,7 +42,8 @@ class BiasHttpTests(unittest.TestCase):
         self.assertEqual(self.req('/bias-scan')[0],200)
         self.assertEqual(self.req('/views/bias-scan.js')[0],200)
         self.req('/api/capture',{**self.acq,'simulate':True})
-        self.control._worker_thread.join(2)
+        worker=self.control._worker_thread
+        if worker:worker.join(2)
         self.assertEqual(self.control.status.state,'complete')
     def test_live_limits_and_unknown_guard(self):
         with self.assertRaises(HTTPError):self.req('/api/bias-scan/preflight',{'simulate':False,'config':self.acq,'bias':self.config})

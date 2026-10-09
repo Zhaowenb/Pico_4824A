@@ -108,5 +108,12 @@ button,a,input,select {transition:background-color 160ms,border-color 160ms,colo
 .wg-brand-mark {position:relative;isolation:isolate;}.wg-brand-mark::before {content:"";position:absolute;inset:0;border-radius:inherit;background:var(--wg-signal);opacity:.035;animation:wg-breathe 6.8s ease-in-out infinite;z-index:-1;}
 .wg-stage::before {content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;border:1px solid var(--wg-signal-hi);opacity:.07;animation:wg-breathe 8.6s ease-in-out -2.4s infinite;z-index:30;}
 @keyframes wg-breathe {0%,100% {opacity:.035;}50% {opacity:.17;}}
+.wg-appearance {max-height:calc(100dvh - 100px);overflow-y:auto;}
+.wg-storage-settings {margin-top:16px;border-top:1px solid var(--wg-line);padding-top:14px;}
+.wg-storage-settings summary {font-size:13px;cursor:pointer;font-weight:600;}
+.wg-storage-settings label {display:block;font-size:12px;margin:10px 0;}
+.wg-storage-settings input {width:100%;margin-top:5px;}
+.wg-storage-settings [role=status] {line-height:1.7;}
+.wg-appearance .wg-inspector-heading {position:sticky;top:-18px;margin:-18px -18px 14px;padding:18px;background:var(--wg-surface);z-index:1;border-bottom:1px solid var(--wg-line);}
 @media(max-width:760px){.wg-file-body {grid-template-columns:minmax(0,1fr);padding:0 16px 16px;}.wg-file-body nav {flex-direction:row;overflow:auto;flex:none;border:0;padding:0;}.wg-file-body nav button {white-space:nowrap;}.wg-file-heading,.wg-file-location,.wg-file-browser footer {padding:16px;}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after {animation:none!important;transition:none!important;}.wg-stage::before,.wg-brand-mark::before {opacity:.06;}}

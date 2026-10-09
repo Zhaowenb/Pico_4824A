@@ -55,7 +55,7 @@ class BiasScanTests(unittest.TestCase):
         job=self.job(config=BiasScanConfig());r=job.run()
         self.assertEqual(r['status'],'complete',r['reason']);self.assertEqual(len(r['summary']),13);self.assertEqual(len(r['runs']),130)
         self.assertEqual(r['best_current_a'],0);self.assertEqual(r['ties_a'],[x*.5 for x in range(13)])
-        self.assertEqual(len(list(job.folder.glob('*.npz'))),130)
+        self.assertEqual(len(list(job.folder.rglob('*.npz'))),130)
         self.assertEqual(r['summary'][0]['actual_current_mean_a'],0)
         self.assertFalse(any(e['event']=='on' and e.get('target_a')==0 for e in r['events']))
         self.assertGreaterEqual(r['summary'][1]['capture_batch_duration_s'],.9)
@@ -66,7 +66,7 @@ class BiasScanTests(unittest.TestCase):
         self.assertEqual(vpp,r['runs'][0]['vpp_v']);self.assertEqual(reason,'')
         self.assertEqual(loaded.config.total_samples,1000)
         self.assertEqual(self.acq.total_samples,500)
-        self.assertEqual(json.loads((job.folder/'result.json').read_text())['status'],'complete')
+        self.assertEqual(json.loads((job.folder/'result.json').read_text(encoding='utf-8'))['status'],'complete')
     def test_five_repeats_and_off_before_every_analysis_save(self):
         job=self.job();r=job.run();self.assertEqual(r['status'],'complete');self.assertEqual(len(r['runs']),5)
         powered=False
@@ -117,7 +117,7 @@ class BiasScanTests(unittest.TestCase):
                 return super().capture(config,remaining)
         job=self.job(adapter=Partial());r=job.run()
         self.assertEqual(r['status'],'error');self.assertEqual(len(r['runs']),2)
-        self.assertEqual(len(list(job.folder.glob('*.npz'))),2)
+        self.assertEqual(len(list(job.folder.rglob('*.npz'))),2)
         self.assertFalse(r['summary'][0]['eligible']);self.assertIsNone(r['best_current_a'])
 
     def test_late_monitor_never_enters_next_point(self):

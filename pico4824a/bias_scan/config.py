@@ -33,6 +33,7 @@ class BiasScanConfig:
     independent_cutoff_confirmed: bool = False
     protection_notes: str = ''
     memory_limit_mb: float = 256.0
+    scan_name: str = ''
 
     @classmethod
     def from_dict(cls, raw):
@@ -42,13 +43,16 @@ class BiasScanConfig:
 
     def validate(self, live=False):
         flags = {"inductive_protection_confirmed", "independent_cutoff_confirmed"}
-        text = {"pzt_channel", "cooling_mode", "protection_notes"}
+        text = {"pzt_channel", "cooling_mode", "protection_notes", "scan_name"}
         for name, value in asdict(self).items():
             if name in flags and not isinstance(value, bool):raise ValueError(f"{name} 必须为布尔值")
             if name in text and not isinstance(value, str):raise ValueError(f"{name} 必须为字符串")
             if name not in flags | text and value is not None and (isinstance(value,bool) or not isinstance(value,(int,float))):raise ValueError(f"{name} 必须为数值")
             if isinstance(value, (int, float)) and not isinstance(value, bool) and not math.isfinite(value):
                 raise ValueError(f'{name} 必须是有限值')
+        if self.scan_name:
+            from ..storage_naming import component
+            component(self.scan_name)
         if not 0 <= self.start_a <= self.stop_a <= 6 or not 0.01 <= self.step_a <= 6:
             raise ValueError('第一阶段仅允许 0–6 A，步长至少 0.01 A')
         if isinstance(self.repeats, bool) or not isinstance(self.repeats, int) or not 5 <= self.repeats <= 10:

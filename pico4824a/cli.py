@@ -8,7 +8,8 @@ import sys
 
 from .config import AcquisitionConfig
 from .device import Pico4824A, PicoError
-from .storage import default_stem, save_csv, save_npz
+from .storage import save_csv, save_npz
+from .storage_naming import capture_stem
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -48,8 +49,8 @@ def _parser() -> argparse.ArgumentParser:
 
 def _capture(args: argparse.Namespace) -> int:
     config = AcquisitionConfig.load(args.config)
-    stem = args.output or (PROJECT_DIR / "data" / default_stem())
-    if stem.suffix:
+    stem = args.output
+    if stem and stem.suffix in {".npz", ".csv"}:
         stem = stem.with_suffix("")
     print(
         f"Opening {'simulator' if args.simulate else 'PicoScope 4824A'}; "
@@ -57,6 +58,7 @@ def _capture(args: argparse.Namespace) -> int:
     )
     with Pico4824A(simulate=args.simulate, serial=args.serial) as scope:
         result = scope.capture(config)
+    stem = stem or capture_stem(result)
     print(
         f"Capture complete: {result.samples} samples/channel, "
         f"actual rate={result.actual_sample_rate_hz / 1e6:.6g} MS/s"
@@ -64,9 +66,9 @@ def _capture(args: argparse.Namespace) -> int:
     if result.overflow_channels:
         print("WARNING: input overflow on channel(s): " + ", ".join(result.overflow_channels))
     if args.format in {"npz", "both"}:
-        print(f"Saved {save_npz(result, stem.with_suffix('.npz'))}")
+        print(f"Saved {save_npz(result, stem.parent / (stem.name + '.npz'))}")
     if args.format in {"csv", "both"}:
-        print(f"Saved {save_csv(result, stem.with_suffix('.csv'))}")
+        print(f"Saved {save_csv(result, stem.parent / (stem.name + '.csv'))}")
     return 0
 
 
