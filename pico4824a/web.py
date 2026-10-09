@@ -1222,7 +1222,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_asset("styles.css", "text/css; charset=utf-8")
             elif path == "/api/bias-scan/resources":
                 from .bias_scan import IT6524DController
-                self._send_json({"resources":IT6524DController.resources()})
+                self._send_json({"resources":self.control.bias_resources()})
             elif path == "/api/bias-scan/result":
                 self._send_json(self.control.bias_result_payload())
             elif path == "/api/bias-scan/preview":

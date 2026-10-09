@@ -18,11 +18,19 @@ class IT6524DController:
         self._off_requested = threading.Event()
 
     @staticmethod
-    def resources(backend=''):
+    def resources(backend='', manager=None):
         try:
-            import pyvisa
-            with pyvisa.ResourceManager(backend) as manager:
+            owned = manager is None
+            if owned:
+                import pyvisa
+                manager = pyvisa.ResourceManager(backend)
+            try:
                 return [r for r in manager.list_resources() if r.upper().startswith('USB')]
+            finally:
+                # ResourceManager does not implement the context manager protocol.
+                # Do not close a manager owned by an already connected controller.
+                if owned:
+                    manager.close()
         except ImportError as exc:
             raise RuntimeError('未安装 PyVISA；在 TARGET 虚拟环境安装可选 bias 依赖') from exc
         except Exception as exc:

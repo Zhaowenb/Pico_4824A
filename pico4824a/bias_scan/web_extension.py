@@ -18,6 +18,13 @@ class BiasScanWebMixin:
         self.bias_protection=SafetyProtection();self.bias_temperature=TemperatureProvider()
         self.bias_unknown=False;self.bias_cleanup_pending=False
 
+    def bias_resources(self):
+        with self._lock:
+            if self.status.state in {'running','paused'} or self.bias_cleanup_pending:
+                raise RuntimeError('已有仪器任务正在运行，不能刷新电源资源')
+            manager = getattr(self.bias_power, 'manager', None)
+            return IT6524DController.resources(manager=manager)
+
     def bias_connect(self, raw):
         with self._lock:
             if self.status.state in {'running','paused'} or self.bias_cleanup_pending:raise RuntimeError('已有仪器任务正在运行')
