@@ -1,8 +1,17 @@
 import math
 import numpy as np
+from ..analysis import fft_bandpass
 
 
 class BiasScanAnalyzer:
+    @staticmethod
+    def evaluation_signal(result, config):
+        values = result.volts[config.pzt_channel]
+        if config.filter_enabled:
+            return fft_bandpass(values, result.actual_sample_rate_hz, config.filter_low_hz,
+                                config.filter_high_hz, config.filter_transition_hz)
+        return values
+
     @staticmethod
     def vpp(result, config):
         if result.overflow_channels:
@@ -19,7 +28,11 @@ class BiasScanAnalyzer:
             return None,'时间轴无效'
         if config.direct_start_us < time_us[0]-1e-8 or config.direct_end_us > time_us[-1]+1e-8:
             return None,'直达波窗口不完整'
-        window=values[(time_us>=config.direct_start_us)&(time_us<=config.direct_end_us)]
+        try:
+            evaluated = BiasScanAnalyzer.evaluation_signal(result, config)
+        except ValueError as exc:
+            return None, '滤波评价失败：'+str(exc)
+        window=evaluated[(time_us>=config.direct_start_us)&(time_us<=config.direct_end_us)]
         if len(window)<2 or not np.all(np.isfinite(window)):
             return None,'窗口样本不足或包含非有限值'
         return float(np.ptp(window)),''

@@ -9,6 +9,7 @@ from ..storage import load_npz
 from ..storage_naming import preferences
 from . import BiasScanConfig, BiasScanController, PicoCaptureAdapter, IT6524DController, SimulatedPowerSupply
 from .safety import SafetyProtection, TemperatureProvider
+from .analyzer import BiasScanAnalyzer
 
 
 class BiasScanWebMixin:
@@ -46,9 +47,10 @@ class BiasScanWebMixin:
         config.validate(live=not simulate)
         acquisition=config.acquisition(AcquisitionConfig.from_dict(raw.get('config',{})))
         if not simulate:
-            if not self.bias_protection.ready():raise RuntimeError('未接入独立超时断电保护适配器，实机启动被锁定')
+            if config.protection_mode == 'independent' and not self.bias_protection.ready():raise RuntimeError('未接入独立超时断电保护适配器；可改选仅软件保护模式')
             if not self.bias_power or self.bias_power.output_state!='off':raise RuntimeError('请连接并确认 IT6524D 输出关闭')
-        return {'points':config.points(),'acquisition':acquisition.to_dict(),'limits':config.effective_limits(simulate),'simulated':simulate}
+        return {'points':config.points(),'acquisition':acquisition.to_dict(),'limits':config.effective_limits(simulate),'simulated':simulate,
+                'protection_mode':config.protection_mode,'warnings':['仅软件保护：程序强杀、USB断开或电脑断电时，无法保证自动断电。输出关闭不等于线圈储能已释放。'] if config.protection_mode == 'software' else []}
 
     def start_bias_scan(self, raw):
         with self._lock:
@@ -87,7 +89,7 @@ class BiasScanWebMixin:
                         self.bias_unknown=result['output_state']!='off'
                         self.bias_cleanup_pending=result.get('instrument_cleanup_pending',False)
                         final_state='error' if self.bias_unknown else result['status']
-                        final_message=result['reason'] or ('扫描完成 · SIMULATED' if simulate else '扫描完成')
+                        final_message=result['reason'] or ('扫描完成 · SIMULATED' if simulate else '扫描完成 · '+('仅软件保护' if config.protection_mode=='software' else '独立保护'))
                 except BaseException as exc:
                     if power:
                         try:power.output_off()
@@ -112,7 +114,7 @@ class BiasScanWebMixin:
             if result is None:raise RuntimeError('尚无偏置扫描结果')
             # Publish only summaries saved after OFF, never stream raw powered captures.
             return {k:list(result.get(k,[])) if k in {'summary','runs'} else result.get(k) for k in ['status','simulated','reason','output_state','summary','runs','revision',
-                'best_current_a','best_vpp_mean_v','ties_a','output_dir','device_identity','acquisition','configuration']}
+                'best_current_a','best_vpp_mean_v','ties_a','output_dir','device_identity','acquisition','configuration','protection_mode','evaluation']}
 
     def bias_preview(self, point, repeat):
         with self._lock:
@@ -122,8 +124,11 @@ class BiasScanWebMixin:
         row=next((r for r in rows if r['point']==point and r['repeat']==repeat),None)
         if row is None:raise ValueError('记录不存在或尚未保存')
         result=load_npz(folder/row['file']);step=max(1,int(np.ceil(len(result.time_s)/4000)))
+        evaluated = BiasScanAnalyzer.evaluation_signal(result, controller.config)
         return {'time_us':(result.time_s[::step]*1e6).tolist(),
-                'volts':result.volts[controller.config.pzt_channel][::step].tolist(),
+                'volts':evaluated[::step].tolist(),
+                'raw_volts':result.volts[controller.config.pzt_channel][::step].tolist(),
+                'vpp_basis':'filtered' if controller.config.filter_enabled else 'raw',
                 'channel':controller.config.pzt_channel,'row':row,'simulated':result.simulated}
 
     def bias_export(self, name):

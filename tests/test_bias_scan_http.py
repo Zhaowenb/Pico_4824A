@@ -38,6 +38,14 @@ class BiasHttpTests(unittest.TestCase):
         r=json.loads(self.req('/api/bias-scan/result')[1])
         self.assertEqual(r['status'],'complete',r['reason']);self.assertEqual(len(r['summary']),13);self.assertEqual(len(r['runs']),65)
         p=json.loads(self.req('/api/bias-scan/preview?point=12&repeat=5')[1]);self.assertEqual(p['row']['target_a'],6);self.assertEqual(len(p['time_us']),1000)
+        self.assertEqual(p['vpp_basis'],'filtered');self.assertEqual(p['row']['vpp_basis'],'filtered')
+        self.assertEqual(len(p['raw_volts']),len(p['volts']))
+        from pico4824a.storage import load_npz
+        from pico4824a.bias_scan import BiasScanAnalyzer
+        import numpy as np
+        loaded=load_npz(Path(r['output_dir'])/p['row']['file'])
+        np.testing.assert_allclose(p['volts'],BiasScanAnalyzer.evaluation_signal(loaded,self.control.bias_controller.config))
+        np.testing.assert_array_equal(p['raw_volts'],loaded.volts['A'])
         self.assertIn(b'vpp_sd_v',self.req('/api/bias-scan/export?name=summary.csv')[1])
         self.assertEqual(self.req('/bias-scan')[0],200)
         self.assertEqual(self.req('/views/bias-scan.js')[0],200)

@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> None:
             raw = json.loads(args.config.read_text(encoding="utf-8-sig"))
             bias = BiasScanConfig.from_dict(raw["bias"])
             bias.validate(live=not args.simulate)
-            if not args.simulate:raise RuntimeError("CLI 未接入独立超时断电保护适配器，实机扫描锁定")
+            if not args.simulate and bias.protection_mode == 'independent':raise RuntimeError("CLI 未接入独立保护适配器；可在配置中选择 protection_mode=software 并明确实机限值")
             acquisition = AcquisitionConfig.from_dict(raw.get("acquisition", {}))
             power = SimulatedPowerSupply() if args.simulate else IT6524DController(args.resource or raw.get("resource", ""))
             with Pico4824A(simulate=args.simulate) as device:

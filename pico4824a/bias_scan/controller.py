@@ -8,7 +8,7 @@ import threading
 import time
 
 from .analyzer import BiasScanAnalyzer
-from .safety import SafetyProtection, SimulationProtection, TemperatureProvider
+from .safety import SafetyProtection, SimulationProtection, SoftwareProtection, TemperatureProvider
 from ..storage import save_npz
 from ..storage_naming import session_directory, preferences
 
@@ -28,11 +28,11 @@ class BiasScanController:
             raise ValueError('偏置扫描输出必须位于 TARGET_ROOT')
         self.stop_event = stop_event or threading.Event()
         self.progress = progress or (lambda state: None)
-        self.protection = protection or (SimulationProtection() if simulate else SafetyProtection())
+        self.protection = SoftwareProtection() if not simulate and config.protection_mode == 'software' else (protection or (SimulationProtection() if simulate else SafetyProtection()))
         self.temperature = temperature or TemperatureProvider()
         self.limits = config.effective_limits(simulate)
         self.events, self.rows, self.summaries = [], [], []
-        self.result = {'status':'running','simulated':simulate,'summary':self.summaries,'runs':self.rows,
+        self.result = {'status':'running','simulated':simulate,'protection_mode':config.protection_mode,'evaluation':{'basis':'filtered' if config.filter_enabled else 'raw','low_hz':config.filter_low_hz,'high_hz':config.filter_high_hz,'transition_hz':config.filter_transition_hz},'summary':self.summaries,'runs':self.rows,
                        'events':self.events,'output_state':'unknown','reason':'','revision':0}
         self._off_lock = threading.Lock()
         self._fault_lock = threading.Lock()
@@ -41,6 +41,7 @@ class BiasScanController:
         self._on_at = None
         self._off_at = None
         self._telemetry = None
+        self._point_peak_a = 0.0
         self._point_done = threading.Event()
         self._threads = []
         self._unknown_latched = False
@@ -122,7 +123,8 @@ class BiasScanController:
                     raise RuntimeError('实际电流超过安全上限或出现负值')
                 if telemetry['voltage_v'] < 0 or telemetry['voltage_v'] > self.limits['voltage_limit_v']+.02:
                     raise RuntimeError('实际电压超过合规限值')
-                if self.config.cooling_mode=='temperature' and self.temperature_reading() >= self.config.temperature_limit_c:
+                self._point_peak_a = max(self._point_peak_a, telemetry['current_a'])
+                if self.config.cooling_mode in {'temperature','current_temperature'} and self.temperature_reading() >= self.config.temperature_limit_c:
                     raise RuntimeError('温度超过安全阈值')
             except Exception as exc:
                 if not done.is_set() and not self._fault:self.trip(str(exc))
@@ -143,12 +145,12 @@ class BiasScanController:
             if now>=deadline:raise RuntimeError('实际电流无法在稳定超时内稳定')
             self.stop_event.wait(.01)
 
-    def _cool(self):
-        self.publish('cooling')
-        deadline=self._off_at+self.limits['cooldown_s']
+    def _cool(self, cooldown):
+        self.publish('cooling', cooldown_s=cooldown)
+        deadline=self._off_at+cooldown
         while time.monotonic()<deadline:
             self.check();self.stop_event.wait(min(.05,max(0,deadline-time.monotonic())))
-        if self.config.cooling_mode=='temperature':
+        if self.config.cooling_mode in {'temperature','current_temperature'}:
             deadline=time.monotonic()+self.config.temperature_wait_timeout_s
             while self.temperature_reading()>self.config.temperature_resume_c:
                 self.check()
@@ -175,7 +177,7 @@ class BiasScanController:
             identity=self.power.connect();self.off()
             self.adapter.prepare()
             self.check()
-            if self.config.cooling_mode=='temperature' and self.temperature_reading()>=self.config.temperature_limit_c:
+            if self.config.cooling_mode in {'temperature','current_temperature'} and self.temperature_reading()>=self.config.temperature_limit_c:
                 raise RuntimeError('预检温度超过阈值')
             self.folder=session_directory(self.output_root, 'bias',
                 details=f'{self.config.start_a:g}-{self.config.stop_a:g}A_步进{self.config.step_a:g}A_{self.config.repeats}次',
@@ -197,6 +199,7 @@ class BiasScanController:
             self.event('preflight_complete')
             for index,target in enumerate(self.config.points()):
                 self.check();self._fault=None;self._telemetry=None;self._point_done=threading.Event();self._threads=[]
+                self._point_peak_a = target
                 captured=[];error=None;batch_start=None;on_start=None;self._last_on_duration=0
                 self.publish('setting',point=index,target_a=target,repeat=0)
                 try:
@@ -262,7 +265,9 @@ class BiasScanController:
                         row={'point':index,'repeat':repeat+1,'target_a':target,
                              'actual_current_a':telemetry['current_a'],'telemetry_monotonic_time':telemetry['monotonic_time'],
                              'capture_start':started,'capture_end':ended,'capture_duration_s':ended-started,'telemetry_wall_time':telemetry.get('wall_time'),
-                             'vpp_v':value,'valid':value is not None,'invalid_reason':reason,
+                             'vpp_v':value,'vpp_basis':'filtered' if self.config.filter_enabled else 'raw',
+                             'filter_low_hz':self.config.filter_low_hz,'filter_high_hz':self.config.filter_high_hz,
+                             'filter_transition_hz':self.config.filter_transition_hz,'valid':value is not None,'invalid_reason':reason,
                              'file':(point_folder / f'重复{repeat+1:02d}__PZT-{self.config.pzt_channel}__原始波形.npz').relative_to(self.folder).as_posix()}
                         self.event('save_waveform',point=index,repeat=repeat+1)
                         save_npz(result,self.folder/row['file']);rows.append(row);self.rows.append(row)
@@ -271,13 +276,17 @@ class BiasScanController:
                                    capture_batch_duration_s=captured[-1][3]-batch_start if captured else 0,
                                    on_duration_s=self._off_at-on_start if on_start and self._off_at else 0)
                     summary['capture_batch_target_met']=bool(captured and summary['capture_batch_duration_s']<=1.5 and len(captured)==self.config.repeats)
+                    current_for_cooling = max(target, self._point_peak_a) if target else 0.0
+                    summary['cooldown_current_a'] = current_for_cooling
+                    summary['cooldown_s'] = self.config.cooldown_for(current_for_cooling, self.simulate)
+                    summary['cooling_mode'] = self.config.cooling_mode
                     self._csv(point_folder / 'runs.csv', rows)
                     (point_folder / 'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
                     self.summaries.append(summary);self.result['revision']+=1;self.persist()
                 except BaseException as exc:error=error or exc
                 if error:raise error
                 self.publish('saved',point=index,target_a=target,repeat=len(captured))
-                self._cool()
+                self._cool(summary['cooldown_s'])
             self.result['status']='complete'
         except BaseException as exc:
             self.result['status']='stopped' if self.stop_event.is_set() or isinstance(exc,KeyboardInterrupt) else 'error'

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import math
 import time
 
 
@@ -25,6 +26,20 @@ class SimulationProtection(SafetyProtection):
         return True
     def arm(self, maximum_on_s):
         pass
+
+
+class SoftwareProtection(SafetyProtection):
+    """Controller's deadline/telemetry threads only; no independent cutoff exists.
+
+    The controller creates the deadline thread before enabling output. This
+    adapter deliberately does not claim protection from process or host failure.
+    """
+    def ready(self):
+        return True
+
+    def arm(self, maximum_on_s):
+        if not math.isfinite(maximum_on_s) or maximum_on_s <= 0:
+            raise ValueError('仅软件保护仍需明确最大通电时间')
 
 
 class TemperatureProvider:
