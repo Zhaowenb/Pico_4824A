@@ -4094,7 +4094,7 @@ installAnalysisCanvasInteraction();
 document.querySelectorAll("[data-nav], [data-route-link]").forEach((link) => {
   link.addEventListener("click", (event) => {
     // Interference is a standalone application with its own assets and router.
-    if (link.dataset.nav === "interference") return;
+    if (["interference", "magnetic-diagnosis"].includes(link.dataset.nav)) return;
     event.preventDefault();
     showPage(link.dataset.nav || link.dataset.routeLink, true);
   });

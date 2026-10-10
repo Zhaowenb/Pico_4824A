@@ -1173,8 +1173,12 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {"/ui/workstation.js", "/ui/analysis-state.js", "/analysis/time-frequency.js", "/analysis/experimental.js", "/ui/storage-naming.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
+            if path in {"/views/magnetic-diagnosis.js", "/ui/workstation.js", "/ui/analysis-state.js", "/analysis/time-frequency.js", "/analysis/experimental.js", "/ui/storage-naming.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
                 self._send_asset(path.lstrip("/"), "text/javascript; charset=utf-8")
+            elif path in {"/magnetic-diagnosis", "/magnetic-diagnosis/"}:
+                self._send_asset("magnetic-diagnosis.html", "text/html; charset=utf-8")
+            elif path == "/views/magnetic-diagnosis.css":
+                self._send_asset("views/magnetic-diagnosis.css", "text/css; charset=utf-8")
             elif path == "/views/bias-scan.css":
                 self._send_asset("views/bias-scan.css", "text/css; charset=utf-8")
             elif path == "/ui/workstation.css":
