@@ -104,10 +104,36 @@ class GuardTests(unittest.TestCase):
             power=SimulatedPowerSupply();job=BiasScanController(c,a,power,Blocked(power),tmp,simulate=True);r=job.run()
             self.assertEqual(r['status'],'error');self.assertEqual(power.output_state,'off')
             self.assertTrue(any(e['event']=='safety_trip' for e in r['events']))
+    def test_opt_out_allows_amplitude_scan_without_diagnostics(self):
+        a,c=setup()
+        original=a.to_dict()
+        c=replace(c,waveform_guard_enabled=False,amplitude_mode='sweep',
+                  amplitude_start_vpp=.5,amplitude_stop_vpp=1,amplitude_step_vpp=.5,
+                  excitation_voltage_channel='',excitation_current_channel='',
+                  shape_residual_limit=0,range_max_retries=-1)
+        with tempfile.TemporaryDirectory(dir=ROOT/'.test-tmp') as tmp:
+            power=SimulatedPowerSupply()
+            job=BiasScanController(c,a,power,Adapter(power,'break'),tmp,simulate=True)
+            r=job.run()
+            self.assertEqual(r['status'],'complete',r['reason'])
+            self.assertFalse(r['guarded'])
+            self.assertEqual(len(r['runs']),10)
+            self.assertEqual([row['awg_vpp'] for row in r['summary']],[.5,1])
+            self.assertFalse(any(e['event']=='quality_check' for e in r['events']))
+            self.assertEqual(power.output_state,'off')
+            self.assertEqual(a.to_dict(),original)
+            self.assertEqual(len(list(job.folder.rglob('*.npz'))),10)
+
+    def test_opt_out_ignores_stale_h2_preference(self):
+        c=BiasScanConfig.from_dict({'waveform_guard_enabled':False,'h2_enabled':True,
+                                   'shape_residual_limit':0,'h2_limit_pct':0})
+        self.assertFalse(c.h2_enabled)
+        c.validate()
+
     def test_preflight(self):
         a,c=setup()
         with self.assertRaises(ValueError):replace(c,excitation_ipp_limit_a=13).validate()
         with self.assertRaises(ValueError):replace(c,excitation_end_us=30).acquisition(a)
-        with self.assertRaises(ValueError):replace(c,amplitude_mode='fixed',waveform_guard_enabled=False).validate()
+        replace(c,amplitude_mode='fixed',waveform_guard_enabled=False).validate()
 
 if __name__=='__main__':unittest.main()

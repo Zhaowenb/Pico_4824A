@@ -15,4 +15,4 @@ CSV 逐行标记 SIMULATED，包含配置、磁历史、原始电压、处理电
 新文件：web/magnetic-diagnosis.html、web/views/magnetic-diagnosis.js、web/views/magnetic-diagnosis.css、本说明。
 最小修改：web/ui/workstation.js 导航；web/app.js 新页面普通导航；pico4824a/web.py 静态路由。
 
-Pico_4824A 参考源未修改。未更改现有计算、硬件控制或安全规则。未更新 R76S / GitHub；本版先供本地评审。
+Pico_4824A 参考源未修改。未更改现有计算、硬件控制或安全规则。本页为预览功能，随 btf 分支部署；实机启动保持锁定。

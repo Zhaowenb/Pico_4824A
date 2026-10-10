@@ -68,7 +68,11 @@ class BiasScanConfig:
 
     @classmethod
     def from_dict(cls, raw):
-        config = cls(**dict(raw))
+        values = dict(raw)
+        # Opt-out is authoritative; stale harmonic preferences cannot enable diagnostics.
+        if not values.get("waveform_guard_enabled", False):
+            values["h2_enabled"] = False
+        config = cls(**values)
         config.validate()
         return config
 
@@ -108,16 +112,15 @@ class BiasScanConfig:
             raise ValueError('激励幅值模式或扫描顺序无效')
         if not 0 < self.amplitude_fixed_vpp <= 4 or not 0 < self.amplitude_start_vpp <= self.amplitude_stop_vpp <= 4 or not .01 <= self.amplitude_step_vpp <= 4:
             raise ValueError('AWG 幅值必须位于 0–4 Vpp，步进至少 0.01 V')
-        if isinstance(self.range_max_retries,bool) or not isinstance(self.range_max_retries,int) or not 0 <= self.range_max_retries <= 5:
-            raise ValueError('量程重采次数必须为 0–5 的整数')
-        if not 0 < self.excitation_ipp_limit_a <= 12 or not .05 <= self.shape_residual_limit <= .8 or not .05 <= self.repeat_change_fraction <= .8 or not .02 <= self.trip_drop_ratio <= .8 or not 0 < self.monitor_min_rms_v <= 1:
-            raise ValueError('激励波形保护阈值无效，Ipp 硬上限为 12 A')
-        if not 0 < self.h2_limit_pct <= 100 or not .02 <= self.harmonic_band_fraction <= .25:
-            raise ValueError('二次谐波阈值或带宽无效')
-        if self.waveform_guard_enabled and (not self.excitation_voltage_channel or not self.excitation_current_channel):
-            raise ValueError('波形保护需要配置激励电压、电流通道及探头系数')
-        if (self.amplitude_mode != 'snapshot' or self.h2_enabled) and not self.waveform_guard_enabled:
-            raise ValueError('幅值调节/扫描和 H2 质量检测必须开启波形保护')
+        if self.waveform_guard_enabled:
+            if isinstance(self.range_max_retries,bool) or not isinstance(self.range_max_retries,int) or not 0 <= self.range_max_retries <= 5:
+                raise ValueError('量程重采次数必须为 0–5 的整数')
+            if not 0 < self.excitation_ipp_limit_a <= 12 or not .05 <= self.shape_residual_limit <= .8 or not .05 <= self.repeat_change_fraction <= .8 or not .02 <= self.trip_drop_ratio <= .8 or not 0 < self.monitor_min_rms_v <= 1:
+                raise ValueError('激励波形保护阈值无效，Ipp 硬上限为 12 A')
+            if not 0 < self.h2_limit_pct <= 100 or not .02 <= self.harmonic_band_fraction <= .25:
+                raise ValueError('二次谐波阈值或带宽无效')
+            if self.waveform_guard_enabled and (not self.excitation_voltage_channel or not self.excitation_current_channel):
+                raise ValueError('波形保护需要配置激励电压、电流通道及探头系数')
         if self.direct_end_us <= self.direct_start_us:
             raise ValueError('直达波窗口终点必须大于起点')
         if not 0 <= self.filter_low_hz < self.filter_high_hz or self.filter_transition_hz < 0:
@@ -186,12 +189,12 @@ class BiasScanConfig:
                 raise ValueError('当前波形保护支持 Hann burst / ramp hold / LCR tone；其他波形不能自动判定')
             if config.sample_rate_hz < 16*config.awg.frequency_hz:
                 raise ValueError('波形形变检测需要每个基波周期至少 16 个采样点')
-            for _, amplitude in self.scan_plan(config):
-                trial = AcquisitionConfig.from_dict(config.to_dict())
-                trial.awg.pk_to_pk_v = amplitude
-                trial.validate()
             if self.h2_enabled and (2*config.awg.frequency_hz*(1+self.harmonic_band_fraction) >= config.sample_rate_hz/2):
                 raise ValueError('二次谐波滤波带超过奈奎斯特频率')
+        for _, amplitude in self.scan_plan(config):
+            trial = AcquisitionConfig.from_dict(config.to_dict())
+            trial.awg.pk_to_pk_v = amplitude
+            trial.validate()
         if self.filter_enabled and self.filter_high_hz >= config.sample_rate_hz / 2:
             raise ValueError('带通上限必须低于采样率的一半')
         if self.pzt_channel not in config.enabled_channels:

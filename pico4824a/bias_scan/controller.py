@@ -7,6 +7,7 @@ import shutil
 import threading
 import time
 
+from ..config import AcquisitionConfig
 from .analyzer import BiasScanAnalyzer
 from .limits import SUPPLY_MAX_POWER_W
 from .safety import SafetyProtection, SimulationProtection, SoftwareProtection, TemperatureProvider
@@ -242,11 +243,15 @@ class BiasScanController:
             return run_guarded(self)
         try:
             self._prepare_run()
-            for index,target in enumerate(self.config.points()):
+            self.result.update(guarded=False, scan_plan=[{'target_a':i,'awg_vpp':v} for i,v in self.plan])
+            for index,(target,amplitude) in enumerate(self.plan):
+                acquisition = AcquisitionConfig.from_dict(self.acquisition.to_dict())
+                acquisition.awg.pk_to_pk_v = amplitude
+                acquisition.validate()
                 self.check();self._fault=None;self._telemetry=None;self._point_done=threading.Event();self._threads=[]
                 self._point_peak_a = target
                 captured=[];error=None;batch_start=None;on_start=None;self._last_on_duration=0
-                self.publish('setting',point=index,target_a=target,repeat=0)
+                self.publish('setting',point=index,target_a=target,repeat=0,awg_vpp=amplitude)
                 try:
                     if target==0:
                         self.off();self._telemetry=self.power.read_off_actual()
@@ -273,7 +278,7 @@ class BiasScanController:
                         self.publish('capturing',point=index,target_a=target,repeat=repeat+1)
                         started=previous=time.monotonic();telemetry=dict(self._telemetry)
                         self.event('capture_start',point=index,repeat=repeat+1)
-                        result=self.adapter.capture(self.acquisition,remaining)
+                        result=self.adapter.capture(acquisition,remaining)
                         ended=time.monotonic()
                         # No reads, callbacks, analysis, compression or disk access here.
                         if repeat==self.config.repeats-1:
@@ -305,10 +310,12 @@ class BiasScanController:
                     self.event('analyze',point=index)
                     rows=[]
                     point_folder = self.folder / (f'{index:02d}_电流{target:.3f}A' + ('_断电基线' if target == 0 else ''))
-                    point_folder.mkdir(exist_ok=True)
+                    if self.config.amplitude_mode != 'snapshot':
+                        point_folder = self.folder / f'电流{target:.3f}A' / f'{index:03d}_AWG{amplitude:.3f}Vpp'
+                    point_folder.mkdir(parents=True,exist_ok=True)
                     for repeat,(result,telemetry,started,ended) in enumerate(captured):
                         value,reason=BiasScanAnalyzer.vpp(result,self.config)
-                        row={'point':index,'repeat':repeat+1,'target_a':target,
+                        row={'point':index,'repeat':repeat+1,'target_a':target,'awg_vpp':amplitude,
                              'actual_current_a':telemetry['current_a'],'telemetry_monotonic_time':telemetry['monotonic_time'],
                              'capture_start':started,'capture_end':ended,'capture_duration_s':ended-started,'telemetry_wall_time':telemetry.get('wall_time'),
                              'vpp_v':value,'vpp_basis':'filtered' if self.config.filter_enabled else 'raw',
@@ -319,7 +326,7 @@ class BiasScanController:
                         self.event('save_waveform',point=index,repeat=repeat+1)
                         save_npz(result,self.folder/row['file']);rows.append(row);self.rows.append(row)
                     summary=BiasScanAnalyzer.summary(target,rows,self.config.repeats,eligible=error is None,method=self.config.aggregation)
-                    summary.update(batch_duration_s=max(0,time.monotonic()-batch_start) if batch_start else 0,
+                    summary.update(awg_vpp=amplitude,batch_duration_s=max(0,time.monotonic()-batch_start) if batch_start else 0,
                                    capture_batch_duration_s=captured[-1][3]-batch_start if captured else 0,
                                    on_duration_s=self._off_at-on_start if on_start and self._off_at else 0)
                     summary['capture_batch_target_met']=bool(captured and summary['capture_batch_duration_s']<=1.5 and len(captured)==self.config.repeats)
