@@ -34,3 +34,25 @@ sudo docker exec waveguard-r76s python -c "from picosdk.ps4000a import ps4000a; 
 连接两台设备请使用有独立供电的 USB 3.0 Hub，Pico 使用原装 USB 3.0 数据线。设备未接入时，网页及仿真可用；不能将仿真当成实机验收。
 
 更新代码前先停止扫描、确认偏置输出关闭；`git pull origin btf` 后重启服务即可加载前后端。依赖或驱动版本变更还需重新构建镜像。
+
+
+## 主机出网失败时离线更新
+
+开发电脑在项目目录创建 bundle 并复制到 R76S：
+
+```powershell
+git bundle create .test-tmp/waveguard-update.bundle btf
+scp .test-tmp/waveguard-update.bundle pi@192.168.10.26:/home/pi/Pico_4824A_btf/deployment/
+```
+
+R76S 上先停止正在运行的扫描并确认输出关闭，然后执行：
+
+```bash
+sudo systemctl stop waveguard-r76s
+cd /home/pi/Pico_4824A_btf/app
+git fetch ../deployment/waveguard-update.bundle btf
+git merge --ff-only FETCH_HEAD
+sudo systemctl start waveguard-r76s
+```
+
+更新失败时先保留原始文件和 Git 状态，不执行 hard reset 或 clean。服务读取 bind mount 的代码，因此纯代码更新无需重新构建镜像。
