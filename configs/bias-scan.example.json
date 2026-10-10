@@ -39,7 +39,20 @@
     "excitation_voltage_scale": 1,
     "excitation_current_scale": 1,
     "excitation_start_us": 0,
-    "excitation_end_us": 100
+    "excitation_end_us": 100,
+    "amplitude_mode": "snapshot",
+    "amplitude_order": "bias_outer",
+    "amplitude_fixed_vpp": 1,
+    "amplitude_start_vpp": 0.2,
+    "amplitude_stop_vpp": 1,
+    "amplitude_step_vpp": 0.2,
+    "waveform_guard_enabled": false,
+    "auto_range_enabled": true,
+    "range_max_retries": 3,
+    "excitation_ipp_limit_a": 12,
+    "h2_enabled": false,
+    "h2_limit_pct": 5,
+    "harmonic_band_fraction": 0.1
   },
   "acquisition": {},
   "resource": ""

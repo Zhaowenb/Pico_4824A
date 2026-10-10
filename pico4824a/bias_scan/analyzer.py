@@ -106,5 +106,6 @@ class BiasScanAnalyzer:
         valid=[row for row in rows if row['eligible'] and row['vpp_mean_v'] is not None]
         if not valid:return {'best_current_a':None,'ties_a':[]}
         maximum=max(row['vpp_mean_v'] for row in valid)
-        ties=sorted(row['target_a'] for row in valid if row['vpp_mean_v']==maximum)
-        return {'best_current_a':ties[0],'best_vpp_mean_v':maximum,'ties_a':ties}
+        winners=sorted((row for row in valid if row['vpp_mean_v']==maximum),key=lambda row:(row['target_a'],row.get('awg_vpp',0)))
+        ties=sorted(set(row['target_a'] for row in winners))
+        return {'best_current_a':ties[0],'best_vpp_mean_v':maximum,'ties_a':ties,'best_awg_vpp':winners[0].get('awg_vpp')}

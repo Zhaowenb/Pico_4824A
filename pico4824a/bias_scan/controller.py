@@ -22,6 +22,7 @@ class BiasScanController:
         self.scan_name = config.scan_name or preferences()["bias"]
         config.validate(live=not simulate)
         self.acquisition = config.acquisition(acquisition)
+        self.plan = config.scan_plan(self.acquisition)
         self.power, self.adapter = power, adapter
         self.output_root = Path(output_root).resolve()
         target = Path(__file__).resolve().parents[2]
@@ -58,14 +59,16 @@ class BiasScanController:
 
     def publish(self, phase, **values):
         self._last_progress.update(values)
-        points = self.config.points()
+        points = [target for target, _ in self.plan]
         total = len(points)*self.config.repeats
         durations = [r['capture_duration_s'] for r in self.rows]
         capture_s = max(self.config.interval_s, sum(durations)/len(durations) if durations else .1)
         cooling = sum(self.config.cooldown_for(p, self.simulate) for p in points[self._cooled_count:])
+        if self.config.waveform_guard_enabled:
+            cooling = sum(self.config.cooldown_for(p,self.simulate)*max(0,self.config.repeats-sum(1 for r in self.rows if r.get('point')==i and r.get('valid'))) for i,p in enumerate(points))
         if phase == 'cooling' and self._off_at is not None:
             cooling = max(0, cooling-min(self.config.cooldown_for(points[self._cooled_count], self.simulate), time.monotonic()-self._off_at))
-        remaining = (total-self._captured_count)*capture_s + max(0,len(points)-len(self.summaries))*self.config.stable_hold_s + cooling
+        remaining = (total-self._captured_count)*(capture_s+(self.config.stable_hold_s if self.config.waveform_guard_enabled else 0)) + (0 if self.config.waveform_guard_enabled else max(0,len(points)-len(self.summaries))*self.config.stable_hold_s) + cooling
         fraction = (self._captured_count+self._cooled_count)/(total+len(points))
         self.progress({'phase':phase,'output_state':self.power.output_state,
                        'elapsed_s':max(0,time.monotonic()-self._started_at),
@@ -75,7 +78,7 @@ class BiasScanController:
                        'captured_count':self._captured_count,'total_captures':total,
                        'on_elapsed_s':max(0,time.monotonic()-self._on_at) if self._on_at else self._last_on_duration,
                        'actual_current_a':self._telemetry.get('current_a') if self._telemetry else None,
-                       'completed_points':len(self.summaries),'total_points':len(self.config.points()),**self._last_progress})
+                       'completed_points':len(self.summaries),'total_points':len(self.plan),**self._last_progress})
 
     def off(self):
         with self._off_lock:
@@ -193,32 +196,52 @@ class BiasScanController:
         self.result.update(BiasScanAnalyzer.best(self.summaries))
         (self.folder/'result.json').write_text(json.dumps(self.result,ensure_ascii=False,indent=2,allow_nan=False),encoding='utf-8')
 
+    def _prepare_run(self):
+        if not self.protection.ready():raise RuntimeError('尚未接入独立超时断电保护适配器；实机启动被锁定')
+        identity=self.power.connect();self.off()
+        self.adapter.prepare()
+        self.check()
+        if self.config.cooling_mode in {'temperature','current_temperature'} and self.temperature_reading()>=self.config.temperature_limit_c:
+            raise RuntimeError('预检温度超过阈值')
+        self.folder=session_directory(self.output_root, 'bias',
+            details=f'{self.config.start_a:g}-{self.config.stop_a:g}A_步进{self.config.step_a:g}A_{self.config.repeats}次',
+            name=self.scan_name, simulated=self.simulate)
+        required=self.acquisition.total_samples*(len(self.acquisition.enabled_channels)+1)*8*self.config.repeats*len(self.plan)
+        if shutil.disk_usage(self.folder).free < required+16*1024**2:raise RuntimeError('输出磁盘空间不足')
+        self.result.update(output_dir=str(self.folder),device_identity=identity,
+                           configuration=asdict(self.config),acquisition=self.acquisition.to_dict(),effective_limits=self.limits)
+        (self.folder/'config.json').write_text(json.dumps({k:self.result[k] for k in ['configuration','acquisition','device_identity','simulated','effective_limits']},ensure_ascii=False,indent=2),encoding='utf-8')
+        (self.folder/'文件说明.md').write_text(
+            '# 偏置电流扫描数据\n\n'
+            'config.json：扫描参数、采集快照、电源身份与安全限值。\n\n'
+            'summary.csv：逐档 Vpp 均值、样本标准差、有效性和通电时长。\n\n'
+            'runs.csv：逐次采集、实际电流、时间与原始文件相对路径。\n\n'
+            'result.json：任务状态、最佳已测电流、安全事件与完整统计。\n\n'
+            '每个“电流…A”文件夹：本档逐次 NPZ 原始波形、runs.csv 和 summary.json。\n\n'
+            '0 A 是断电基线。仿真文件不是实机测量。正常流程先确认关闭输出，再写入波形、分析和保存；异常输出状态详见 result.json。\n',
+            encoding='utf-8')
+        self.event('preflight_complete')
+
+    def _finalize_run(self):
+        self._point_done.set()
+        try:self.off()
+        except Exception as exc:self.result.update(status='error',reason=str(exc))
+        if hasattr(self.power,'diagnostics'):
+            self.result['power_diagnostics']=list(self.power.diagnostics)
+        if self._unknown_latched:self.result.update(status='error',output_state='unknown',reason='输出状态未知：'+self._off_error+'；请确认断电并恢复',off_error=self._off_error)
+        if self.folder:
+            try:
+                self.result['elapsed_s'] = max(0,time.monotonic()-self._started_at)
+                self.persist()
+            except Exception as exc:self.result.update(status='error',reason='保存失败：'+str(exc))
+        self.publish(self.result['status'])
+
     def run(self):
+        if self.config.waveform_guard_enabled:
+            from .guarded import run_guarded
+            return run_guarded(self)
         try:
-            if not self.protection.ready():raise RuntimeError('尚未接入独立超时断电保护适配器；实机启动被锁定')
-            identity=self.power.connect();self.off()
-            self.adapter.prepare()
-            self.check()
-            if self.config.cooling_mode in {'temperature','current_temperature'} and self.temperature_reading()>=self.config.temperature_limit_c:
-                raise RuntimeError('预检温度超过阈值')
-            self.folder=session_directory(self.output_root, 'bias',
-                details=f'{self.config.start_a:g}-{self.config.stop_a:g}A_步进{self.config.step_a:g}A_{self.config.repeats}次',
-                name=self.scan_name, simulated=self.simulate)
-            required=self.acquisition.total_samples*(len(self.acquisition.enabled_channels)+1)*8*self.config.repeats*len(self.config.points())
-            if shutil.disk_usage(self.folder).free < required+16*1024**2:raise RuntimeError('输出磁盘空间不足')
-            self.result.update(output_dir=str(self.folder),device_identity=identity,
-                               configuration=asdict(self.config),acquisition=self.acquisition.to_dict(),effective_limits=self.limits)
-            (self.folder/'config.json').write_text(json.dumps({k:self.result[k] for k in ['configuration','acquisition','device_identity','simulated','effective_limits']},ensure_ascii=False,indent=2),encoding='utf-8')
-            (self.folder/'文件说明.md').write_text(
-                '# 偏置电流扫描数据\n\n'
-                'config.json：扫描参数、采集快照、电源身份与安全限值。\n\n'
-                'summary.csv：逐档 Vpp 均值、样本标准差、有效性和通电时长。\n\n'
-                'runs.csv：逐次采集、实际电流、时间与原始文件相对路径。\n\n'
-                'result.json：任务状态、最佳已测电流、安全事件与完整统计。\n\n'
-                '每个“电流…A”文件夹：本档逐次 NPZ 原始波形、runs.csv 和 summary.json。\n\n'
-                '0 A 是断电基线。仿真文件不是实机测量。正常流程先确认关闭输出，再写入波形、分析和保存；异常输出状态详见 result.json。\n',
-                encoding='utf-8')
-            self.event('preflight_complete')
+            self._prepare_run()
             for index,target in enumerate(self.config.points()):
                 self.check();self._fault=None;self._telemetry=None;self._point_done=threading.Event();self._threads=[]
                 self._point_peak_a = target
@@ -319,16 +342,5 @@ class BiasScanController:
             self.result['interrupted']=isinstance(exc,KeyboardInterrupt)
             self.event('aborted',reason=self.result['reason'])
         finally:
-            self._point_done.set()
-            try:self.off()
-            except Exception as exc:self.result.update(status='error',reason=str(exc))
-            if hasattr(self.power,'diagnostics'):
-                self.result['power_diagnostics']=list(self.power.diagnostics)
-            if self._unknown_latched:self.result.update(status='error',output_state='unknown',reason='输出状态未知：'+self._off_error+'；请确认断电并恢复',off_error=self._off_error)
-            if self.folder:
-                try:
-                    self.result['elapsed_s'] = max(0,time.monotonic()-self._started_at)
-                    self.persist()
-                except Exception as exc:self.result.update(status='error',reason='保存失败：'+str(exc))
-            self.publish(self.result['status'])
+            self._finalize_run()
         return self.result

@@ -98,7 +98,7 @@ class BiasScanWebMixin:
         if not simulate:
             if config.protection_mode == 'independent' and not self.bias_protection.ready():raise RuntimeError('未接入独立超时断电保护适配器；可改选仅软件保护模式')
             if not self.bias_power or self.bias_power.output_state!='off':raise RuntimeError('请连接并确认 IT6524D 输出关闭')
-        return {'points':config.points(),'acquisition':acquisition.to_dict(),'limits':config.effective_limits(simulate),'simulated':simulate,
+        return {'scan_plan':[{'target_a':i,'awg_vpp':v} for i,v in config.scan_plan(acquisition)],'points':config.points(),'acquisition':acquisition.to_dict(),'limits':config.effective_limits(simulate),'simulated':simulate,
                 'protection_mode':config.protection_mode,'warnings':['仅软件保护：程序强杀、USB断开或电脑断电时，无法保证自动断电。输出关闭不等于线圈储能已释放。'] if config.protection_mode == 'software' else []}
 
     def start_bias_scan(self, raw):
@@ -163,14 +163,14 @@ class BiasScanWebMixin:
             if result is None:raise RuntimeError('尚无偏置扫描结果')
             # Publish only summaries saved after OFF, never stream raw powered captures.
             return {k:list(result.get(k,[])) if k in {'summary','runs'} else result.get(k) for k in ['status','simulated','reason','output_state','summary','runs','revision',
-                'best_current_a','best_vpp_mean_v','ties_a','output_dir','device_identity','acquisition','configuration','protection_mode','evaluation','off_error','recovery']}
+                'best_current_a','best_awg_vpp','best_vpp_mean_v','ties_a','output_dir','device_identity','acquisition','configuration','protection_mode','evaluation','off_error','recovery','safety_alarm','scan_plan','guarded','elapsed_s']}
 
     def bias_preview(self, point, repeat):
         with self._lock:
             controller=self.bias_controller
             if controller is None or controller.folder is None:raise RuntimeError('尚无偏置扫描结果')
             rows=list(controller.rows);folder=controller.folder
-        row=next((r for r in rows if r['point']==point and r['repeat']==repeat),None)
+        row=next((r for r in reversed(rows) if r['point']==point and r['repeat']==repeat),None)
         if row is None:raise ValueError('记录不存在或尚未保存')
         result=load_npz(folder/row['file']);step=max(1,int(np.ceil(len(result.time_s)/4000)))
         evaluated = BiasScanAnalyzer.evaluation_signal(result, controller.config)

@@ -10,3 +10,4 @@ class PicoCaptureAdapter:
         local.capture_timeout_s=min(local.capture_timeout_s,max(.001,remaining_s))
         return self.device.capture(local)
     def stop(self):self.device.stop()
+    def disable_excitation(self):self.device.disable_awg_output()

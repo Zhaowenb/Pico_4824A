@@ -21,6 +21,23 @@ class BiasScanConfig:
     excitation_start_us: float = 0.0
     excitation_end_us: float = 100.0
     aggregation: str = 'trimmed_mean'
+    amplitude_mode: str = 'snapshot'
+    amplitude_order: str = 'bias_outer'
+    amplitude_fixed_vpp: float = 2.0
+    amplitude_start_vpp: float = 0.2
+    amplitude_stop_vpp: float = 2.0
+    amplitude_step_vpp: float = 0.2
+    waveform_guard_enabled: bool = False
+    auto_range_enabled: bool = True
+    range_max_retries: int = 3
+    excitation_ipp_limit_a: float = 12.0
+    shape_residual_limit: float = 0.25
+    repeat_change_fraction: float = 0.5
+    trip_drop_ratio: float = 0.2
+    monitor_min_rms_v: float = 0.002
+    h2_enabled: bool = False
+    h2_limit_pct: float = 5.0
+    harmonic_band_fraction: float = 0.1
     direct_start_us: float = 100.0
     direct_end_us: float = 400.0
     filter_enabled: bool = True
@@ -56,8 +73,8 @@ class BiasScanConfig:
         return config
 
     def validate(self, live=False):
-        flags = {"inductive_protection_confirmed", "independent_cutoff_confirmed", "filter_enabled"}
-        text = {"pzt_channel", "cooling_mode", "protection_notes", "scan_name", "protection_mode", "excitation_voltage_channel", "excitation_current_channel", "aggregation"}
+        flags = {"inductive_protection_confirmed", "independent_cutoff_confirmed", "filter_enabled", "waveform_guard_enabled", "auto_range_enabled", "h2_enabled"}
+        text = {"pzt_channel", "cooling_mode", "protection_notes", "scan_name", "protection_mode", "excitation_voltage_channel", "excitation_current_channel", "aggregation", "amplitude_mode", "amplitude_order"}
         for name, value in asdict(self).items():
             if name in flags and not isinstance(value, bool):raise ValueError(f"{name} 必须为布尔值")
             if name in text and not isinstance(value, str):raise ValueError(f"{name} 必须为字符串")
@@ -87,6 +104,20 @@ class BiasScanConfig:
             raise ValueError('激励窗口终点必须大于起点')
         if self.aggregation not in {'mean', 'trimmed_mean', 'median'}:
             raise ValueError('统计方式必须为 mean、trimmed_mean 或 median')
+        if self.amplitude_mode not in {'snapshot','fixed','sweep'} or self.amplitude_order not in {'bias_outer','amplitude_outer'}:
+            raise ValueError('激励幅值模式或扫描顺序无效')
+        if not 0 < self.amplitude_fixed_vpp <= 4 or not 0 < self.amplitude_start_vpp <= self.amplitude_stop_vpp <= 4 or not .01 <= self.amplitude_step_vpp <= 4:
+            raise ValueError('AWG 幅值必须位于 0–4 Vpp，步进至少 0.01 V')
+        if isinstance(self.range_max_retries,bool) or not isinstance(self.range_max_retries,int) or not 0 <= self.range_max_retries <= 5:
+            raise ValueError('量程重采次数必须为 0–5 的整数')
+        if not 0 < self.excitation_ipp_limit_a <= 12 or not .05 <= self.shape_residual_limit <= .8 or not .05 <= self.repeat_change_fraction <= .8 or not .02 <= self.trip_drop_ratio <= .8 or not 0 < self.monitor_min_rms_v <= 1:
+            raise ValueError('激励波形保护阈值无效，Ipp 硬上限为 12 A')
+        if not 0 < self.h2_limit_pct <= 100 or not .02 <= self.harmonic_band_fraction <= .25:
+            raise ValueError('二次谐波阈值或带宽无效')
+        if self.waveform_guard_enabled and (not self.excitation_voltage_channel or not self.excitation_current_channel):
+            raise ValueError('波形保护需要配置激励电压、电流通道及探头系数')
+        if (self.amplitude_mode != 'snapshot' or self.h2_enabled) and not self.waveform_guard_enabled:
+            raise ValueError('幅值调节/扫描和 H2 质量检测必须开启波形保护')
         if self.direct_end_us <= self.direct_start_us:
             raise ValueError('直达波窗口终点必须大于起点')
         if not 0 <= self.filter_low_hz < self.filter_high_hz or self.filter_transition_hz < 0:
@@ -148,6 +179,19 @@ class BiasScanConfig:
         config.pre_trigger_samples = round(total * source.trigger_position_ratio)
         config.post_trigger_samples = total - config.pre_trigger_samples
         config.validate()
+        if self.waveform_guard_enabled:
+            if not config.awg.enabled:
+                raise ValueError('波形保护需要启用 AWG')
+            if config.awg.waveform not in {'hann_burst','hann_ramp_hold','lcr_tone'}:
+                raise ValueError('当前波形保护支持 Hann burst / ramp hold / LCR tone；其他波形不能自动判定')
+            if config.sample_rate_hz < 16*config.awg.frequency_hz:
+                raise ValueError('波形形变检测需要每个基波周期至少 16 个采样点')
+            for _, amplitude in self.scan_plan(config):
+                trial = AcquisitionConfig.from_dict(config.to_dict())
+                trial.awg.pk_to_pk_v = amplitude
+                trial.validate()
+            if self.h2_enabled and (2*config.awg.frequency_hz*(1+self.harmonic_band_fraction) >= config.sample_rate_hz/2):
+                raise ValueError('二次谐波滤波带超过奈奎斯特频率')
         if self.filter_enabled and self.filter_high_hz >= config.sample_rate_hz / 2:
             raise ValueError('带通上限必须低于采样率的一半')
         if self.pzt_channel not in config.enabled_channels:
@@ -166,10 +210,35 @@ class BiasScanConfig:
                 raise ValueError('激励窗口必须完整位于记录内')
             if (self.excitation_end_us-self.excitation_start_us)*config.sample_rate_hz*1e-6 < 2:
                 raise ValueError('激励窗口至少需要两个采样点')
+        if self.waveform_guard_enabled:
+            from ..waveforms import normalized_waveform
+            _, repetition = normalized_waveform(config.awg)
+            if (self.excitation_end_us-self.excitation_start_us)*1e-6 < 1/repetition*1.01:
+                raise ValueError('激励窗需完整覆盖 burst，并保留少量起止余量')
+            if (self.excitation_end_us-self.excitation_start_us)*config.sample_rate_hz*1e-6 < 40:
+                raise ValueError('波形保护激励窗至少需要 40 个样本')
+            if self.h2_enabled and (self.direct_end_us-self.direct_start_us)*config.sample_rate_hz*1e-6 < 40:
+                raise ValueError('二次谐波评价窗至少需要 40 个样本')
         budget = total * (len(config.enabled_channels)+1) * 8 * self.repeats
         if budget > self.memory_limit_mb * 1024**2:
             raise ValueError('单档原始数据超过内存预算')
         return config
+
+    def scan_plan(self, acquisition):
+        currents = self.points()
+        if self.amplitude_mode == 'snapshot':
+            amplitudes = [acquisition.awg.pk_to_pk_v]
+        elif self.amplitude_mode == 'fixed':
+            amplitudes = [self.amplitude_fixed_vpp]
+        else:
+            start, end, step = map(lambda v: Decimal(str(v)), (self.amplitude_start_vpp,self.amplitude_stop_vpp,self.amplitude_step_vpp))
+            amplitudes = []
+            while start <= end:
+                amplitudes.append(float(start));start += step
+        if len(currents)*len(amplitudes)>601:
+            raise ValueError('偏置 × 幅值组合超过 601 点')
+        return ([(current,amplitude) for current in currents for amplitude in amplitudes] if self.amplitude_order=='bias_outer'
+                else [(current,amplitude) for amplitude in amplitudes for current in currents])
 
     def effective_limits(self, simulate):
         # These values are explicitly simulation-only, never fallbacks for hardware.
