@@ -31,6 +31,8 @@ sudo docker exec waveguard-r76s python -c "import pyvisa; print(pyvisa.ResourceM
 sudo docker exec waveguard-r76s python -c "from picosdk.ps4000a import ps4000a; print('Pico driver loaded')"
 ```
 
+网页“查找 USB”和重新连接会刷新 Linux PyUSB 的设备发现上下文，避免容器在拔插后继续返回旧设备列表；无需为此重启服务。刷新不会重置 USB、关闭既有采集句柄或开启电源。此兼容处理验证于 PyUSB 1.3.1。设备拔插前仍须停止任务并关闭输出；拔插中的通信失败会保留“输出状态未知”，重新连接并确认断电后才能恢复。
+
 连接两台设备请使用有独立供电的 USB 3.0 Hub，Pico 使用原装 USB 3.0 数据线。设备未接入时，网页及仿真可用；不能将仿真当成实机验收。
 
 更新代码前先停止扫描、确认偏置输出关闭；`git pull origin btf` 后重启服务即可加载前后端。依赖或驱动版本变更还需重新构建镜像。

@@ -1,8 +1,39 @@
 import math
+import sys
 import threading
 import time
 from collections import deque
 from .limits import MAX_CURRENT_A
+
+
+_usb_refresh_lock = threading.Lock()
+
+
+def refresh_linux_usb_context(backend=''):
+    """Renew PyUSB discovery after Docker hotplug, without closing live handles.
+
+    PyUSB 1.3.x caches one libusb context. Container udev events may not reach
+    that context, so enumeration keeps the device list from before a replug.
+    New handles use a new context; existing Device objects retain their own
+    backend and are not reset/disposed. PicoSDK contexts are independent.
+    Keep the PyUSB-private compatibility seam confined to this helper.
+    """
+    if not sys.platform.startswith('linux') or backend not in ('', '@py'):
+        return
+    try:
+        from usb.backend import libusb1
+    except ImportError:
+        return  # Native VISA does not require PyUSB; VISA reports missing backends.
+    with _usb_refresh_lock:
+        previous = libusb1.get_backend()
+        if previous is None:
+            if not backend:
+                return  # Auto-selected native VISA may work without libusb.
+            raise RuntimeError('Linux USB 后端不可用，请检查 libusb 与 PyUSB 安装')
+        factory = getattr(libusb1, '_LibUSB', None)
+        if factory is None or not hasattr(previous, 'lib'):
+            raise RuntimeError('当前 PyUSB 版本不支持热插拔刷新，请使用已验证的 PyUSB 1.3.1')
+        libusb1._lib_object = factory(previous.lib)
 
 
 class IT6524DController:
@@ -39,6 +70,7 @@ class IT6524DController:
     @staticmethod
     def resources(backend='', manager=None):
         try:
+            refresh_linux_usb_context(backend)
             owned = manager is None
             if owned:
                 import pyvisa
@@ -61,6 +93,7 @@ class IT6524DController:
         self._model_confirmed = False
         try:
             if self.manager_factory is None:
+                refresh_linux_usb_context(self.backend)
                 import pyvisa
                 self.manager = pyvisa.ResourceManager(self.backend)
             else:
