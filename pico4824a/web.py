@@ -13,9 +13,10 @@ from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
+import signal
 import time
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, quote
 
 import numpy as np
 
@@ -53,14 +54,25 @@ from .lcr_linearity import (
 from .storage import load_npz
 from .lcr import analyze_impedance, load_lcr_calibration
 from .big_signal_lcr import analyze_big_signal_impedance
-from .storage import default_stem, save_csv, save_npz
+from .storage import save_csv, save_npz
+from .storage_naming import capture_stem, preferences, save_preferences
 from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
 from .time_frequency import time_frequency_map
+from . import interference
+from .file_browser import list_directory
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = PROJECT_DIR / "web"
+INTERFERENCE_DIR = WEB_DIR / "interference"
+
+
+def snapshot_web_assets() -> dict[str, bytes]:
+    """Keep HTML/CSS/JS at one revision for this running backend."""
+    return {path.relative_to(WEB_DIR).as_posix(): path.read_bytes()
+            for path in WEB_DIR.rglob('*')
+            if path.is_file() and path.suffix in {'.html', '.css', '.js'}}
 
 
 @dataclass(slots=True)
@@ -74,15 +86,20 @@ class WebStatus:
     progress: dict[str, Any] | None = None
 
 
-class WebControlState:
+from .bias_scan.web_extension import BiasScanWebMixin
+
+
+class WebControlState(BiasScanWebMixin):
     def __init__(
         self,
         sweep_output_root: Path | None = None,
         lcr_output_root: Path | None = None,
         big_lcr_output_root: Path | None = None,
         lcr_linearity_output_root: Path | None = None,
+        interference_output_root: Path | None = None,
     ) -> None:
         self._lock = threading.RLock()
+        self.init_bias_scan(PROJECT_DIR)
         self.status = WebStatus()
         self.result: CaptureResult | None = None
         self.sweep_result: SweepOutcome | None = None
@@ -96,6 +113,7 @@ class WebControlState:
         self.lcr_output_root = lcr_output_root or PROJECT_DIR / "data" / "lcr"
         self.big_lcr_output_root = big_lcr_output_root or PROJECT_DIR / "data" / "lcr_big"
         self.lcr_linearity_output_root = lcr_linearity_output_root or PROJECT_DIR / "data" / "lcr_linearity"
+        self.interference_output_root = interference_output_root or interference.ROOT
         self._stop_event = threading.Event()
         self._resume_event = threading.Event()
         self._resume_event.set()
@@ -112,6 +130,10 @@ class WebControlState:
                 "task_kind": self.status.task_kind,
                 "progress": self.status.progress,
                 "trip_alarm": dict(self._trip_alarm) if self._trip_alarm else None,
+                "has_bias_result": self.bias_controller is not None,
+                "bias_output_unknown": self.bias_unknown,
+                "bias_power_state": self.bias_power.output_state if self.bias_power else "disconnected",
+                "bias_cleanup_pending": self.bias_cleanup_pending,
                 "has_result": self.result is not None,
                 "has_sweep_result": self.sweep_result is not None,
                 "has_lcr_result": self.lcr_result is not None,
@@ -124,7 +146,7 @@ class WebControlState:
         simulate = bool(values.pop("simulate", False))
         config = AcquisitionConfig.from_dict(values)
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有采集任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -162,7 +184,7 @@ class WebControlState:
         if len(points) * sweep.repeats > 10_000:
             raise ValueError("一次扫描最多允许 10,000 次采集")
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有采集或扫描任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -218,7 +240,7 @@ class WebControlState:
         config = AcquisitionConfig.from_dict(config_values)
         lcr = LcrConfig.from_dict(lcr_raw)
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -273,7 +295,7 @@ class WebControlState:
         total_points = len(big_lcr.parameter_points)
         total_runs = total_points * big_lcr.repeats
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -320,7 +342,7 @@ class WebControlState:
         config = AcquisitionConfig.from_dict(config_values)
         linearity = LinearityConfig.from_dict(linearity_raw)
         with self._lock:
-            if self.status.state in {"running", "paused"}:
+            if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
                 raise RuntimeError("已有仪器任务正在运行")
             self._stop_event.clear()
             self._resume_event.set()
@@ -806,6 +828,8 @@ class WebControlState:
                 "big_lcr": "正在停止大信号 LCR 测量",
                 "lcr_linearity": "正在停止大信号线性度测试",
             }.get(self.status.task_kind, "正在停止采集")
+        if self.status.task_kind == "bias_scan" and self.bias_controller is not None:
+            self.bias_controller.stop()
         if device is not None and not was_paused:
             device.stop()
 
@@ -818,6 +842,9 @@ class WebControlState:
             active = self.device
             worker = self._worker_thread
             hardware = self._hardware_device
+        bias_error = None
+        try:self.bias_shutdown()
+        except Exception as exc:bias_error = exc
         if active is not None:
             try:
                 active.stop()
@@ -838,6 +865,8 @@ class WebControlState:
                         self._hardware_device = None
                     if self.device is hardware:
                         self.device = None
+
+        if bias_error is not None:raise bias_error
 
     def result_payload(
         self,
@@ -890,15 +919,21 @@ class WebControlState:
         }
 
     def save(self, kind: str) -> Path:
+        if kind not in {'npz', 'csv'}:
+            raise ValueError('保存格式必须是 npz 或 csv')
         with self._lock:
             result = self.result
         if result is None:
             raise RuntimeError("尚无可保存的采集结果")
-        stem = PROJECT_DIR / "data" / default_stem()
+        with self._lock:
+            if getattr(self, "_saved_capture_result", None) is not result:
+                self._saved_capture_stem = capture_stem(result)
+                self._saved_capture_result = result
+            stem = self._saved_capture_stem
         if kind == "npz":
-            return save_npz(result, stem.with_suffix(".npz"))
+            return save_npz(result, stem.parent / (stem.name + ".npz"))
         if kind == "csv":
-            return save_csv(result, stem.with_suffix(".csv"))
+            return save_csv(result, stem.parent / (stem.name + ".csv"))
         raise ValueError("保存格式必须是 npz 或 csv")
 
     def sweep_result_payload(self) -> dict[str, Any]:
@@ -938,14 +973,20 @@ class WebControlState:
         if mode == "linearity":
             # Legacy Monitor-only analyses lived inside ordinary big_lcr_* folders.
             allowed_roots.append(self.big_lcr_output_root.resolve())
+        from .data_access import REFERENCE_DATA, import_directory
+        reference_modes = {"big_lcr": "lcr_big", "linearity": "lcr_linearity", "small_lcr": "lcr"}
+        reference_roots = [REFERENCE_DATA / reference_modes[mode]]
+        if mode == "linearity": reference_roots.append(REFERENCE_DATA / "lcr_big")
         if supplied.strip():
             directory = Path(supplied).resolve()
+            if any(directory.is_relative_to(p.resolve()) for p in reference_roots):
+                directory = import_directory(directory, roots[mode])
         else:
-            prefix = {"big_lcr": "big_lcr_*", "linearity": "linearity_*", "small_lcr": "lcr_*"}[mode]
+            marker = {"big_lcr": "big_lcr_config.json", "linearity": "linearity_config.json", "small_lcr": "lcr_config.json"}[mode]
             root = allowed_roots[0]
-            folders = sorted((p.resolve() for p in root.glob(prefix) if p.is_dir()), reverse=True) if root.is_dir() else []
+            folders = sorted((p.parent.resolve() for p in root.glob('*/'+marker)), key=lambda p:p.stat().st_mtime, reverse=True) if root.is_dir() else []
             if mode == "linearity" and not folders and allowed_roots[1].is_dir():
-                folders = sorted((p.resolve() for p in allowed_roots[1].glob("big_lcr_*") if p.is_dir()), reverse=True)
+                folders = sorted((p.parent.resolve() for p in allowed_roots[1].glob('*/big_lcr_config.json')), key=lambda p:p.stat().st_mtime, reverse=True)
             if not folders:
                 raise ValueError(f"{mode} 数据目录中没有可分析的测量文件夹")
             directory = folders[0]
@@ -996,12 +1037,15 @@ class WebControlState:
 
     def _linearity_directory(self, supplied: str) -> Path:
         root = self.big_lcr_output_root.resolve()
+        from .data_access import REFERENCE_DATA, import_directory
         if supplied.strip():
             directory = Path(supplied).resolve()
+            if directory.is_relative_to((REFERENCE_DATA / 'lcr_big').resolve()):
+                directory = import_directory(directory, root)
         else:
             with self._lock:
                 latest = self.big_lcr_result.directory if self.big_lcr_result else None
-            folders = sorted(root.glob("big_lcr_*"), reverse=True) if root.is_dir() else []
+            folders = sorted((p.parent for p in root.glob('*/big_lcr_config.json')), key=lambda p:p.stat().st_mtime, reverse=True) if root.is_dir() else []
             directory = latest.resolve() if latest else (folders[0].resolve() if folders else root)
         if not directory.is_relative_to(root):
             raise ValueError("大信号线性度分析仅允许读取本项目 data/lcr_big 下的测量目录")
@@ -1083,6 +1127,14 @@ class PicoWebHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {fmt % args}")
 
+    def handle(self) -> None:
+        try:
+            super().handle()
+        except (ConnectionError, TimeoutError):
+            # Navigation, cancellation and socket teardown can disconnect the
+            # client at any point, including while sending an error response.
+            self.close_connection = True
+
     def _send_json(self, payload: Any, status: int = 200) -> None:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
@@ -1102,8 +1154,11 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         return raw
 
     def _send_asset(self, name: str, content_type: str) -> None:
-        path = WEB_DIR / name
-        body = path.read_bytes()
+        assets = getattr(self.server, 'web_assets', None)
+        if assets is None:
+            # Also support embedded/test servers that do not call serve().
+            assets = self.server.web_assets = snapshot_web_assets()
+        body = assets[name]
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -1111,13 +1166,58 @@ class PicoWebHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_interference_asset(self, name: str, content_type: str) -> None:
+        self._send_asset('interference/' + name, content_type)
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            if path in {
+            if path in {"/views/magnetic-diagnosis.js", "/ui/workstation.js", "/ui/analysis-state.js", "/analysis/time-frequency.js", "/analysis/experimental.js", "/ui/storage-naming.js", "/ui/file-picker.js", "/views/signal-analysis.js", "/views/instruments.js", "/views/experiment.js", "/views/bias-scan.js"}:
+                self._send_asset(path.lstrip("/"), "text/javascript; charset=utf-8")
+            elif path in {"/magnetic-diagnosis", "/magnetic-diagnosis/"}:
+                self._send_asset("magnetic-diagnosis.html", "text/html; charset=utf-8")
+            elif path == "/views/magnetic-diagnosis.css":
+                self._send_asset("views/magnetic-diagnosis.css", "text/css; charset=utf-8")
+            elif path == "/views/bias-scan.css":
+                self._send_asset("views/bias-scan.css", "text/css; charset=utf-8")
+            elif path == "/ui/workstation.css":
+                self._send_asset("ui/workstation.css", "text/css; charset=utf-8")
+            elif path in {"/interference", "/interference/"}:
+                self._send_interference_asset("index.html", "text/html; charset=utf-8")
+            elif path in {"/interference/manual", "/interference/manual.html"}:
+                self._send_interference_asset("manual.html", "text/html; charset=utf-8")
+            elif path == "/interference/app.js":
+                self._send_interference_asset("app.js", "text/javascript; charset=utf-8")
+            elif path == "/interference/guide.js":
+                self._send_interference_asset("guide.js", "text/javascript; charset=utf-8")
+            elif path == "/interference/manual.js":
+                self._send_interference_asset("manual.js", "text/javascript; charset=utf-8")
+            elif path == "/interference/styles.css":
+                self._send_interference_asset("styles.css", "text/css; charset=utf-8")
+            elif path == "/interference/manual.css":
+                self._send_interference_asset("manual.css", "text/css; charset=utf-8")
+            elif path == "/api/interference/session":
+                session_id = parse_qs(parsed.query).get("id", [""])[0]
+                session = interference.load_session(session_id, self.control.interference_output_root)
+                self._send_json({"session": session, "summary": interference.summarize(session)})
+            elif path == "/api/interference/preview":
+                query = parse_qs(parsed.query)
+                self._send_json(interference.preview(query.get("id", [""])[0], query.get("run", [""])[0], self.control.interference_output_root))
+            elif path == "/api/interference/export":
+                session_id = parse_qs(parsed.query).get("id", [""])[0]
+                body = interference.export_csv(session_id, self.control.interference_output_root).read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                session_name=interference.load_session(session_id,self.control.interference_output_root).get('name','干扰实验')
+                self.send_header("Content-Disposition", "attachment; filename=interference.csv; filename*=UTF-8''"+quote(session_name+'__逐次统计.csv'))
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif path in {
                 "/",
                 "/measure",
+                "/bias-scan",
                 "/sweep",
                 "/analysis",
                 "/file-analysis",
@@ -1130,6 +1230,59 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_asset("app.js", "text/javascript; charset=utf-8")
             elif path == "/styles.css":
                 self._send_asset("styles.css", "text/css; charset=utf-8")
+            elif path == "/api/bias-scan/limits":
+                from .bias_scan.limits import MAX_CURRENT_A, LOAD_REFERENCE_RESISTANCE_OHM, SUPPLY_MAX_POWER_W
+                self._send_json({"max_current_a":MAX_CURRENT_A,
+                    "reference_resistance_ohm":LOAD_REFERENCE_RESISTANCE_OHM,
+                    "supply_max_power_w":SUPPLY_MAX_POWER_W})
+            elif path == "/api/bias-scan/resources":
+                from .bias_scan import IT6524DController
+                self._send_json({"resources":self.control.bias_resources()})
+            elif path == "/api/bias-scan/result":
+                self._send_json(self.control.bias_result_payload())
+            elif path == "/api/bias-scan/preview":
+                query=parse_qs(parsed.query)
+                self._send_json(self.control.bias_preview(int(query.get("point",["0"])[0]),int(query.get("repeat",["1"])[0])))
+            elif path == "/api/bias-scan/export":
+                name=parse_qs(parsed.query).get("name",["summary.csv"])[0]
+                if name == 'all.zip':
+                    archive=self.control.bias_archive()
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header('Content-Type','application/zip')
+                    self.send_header('Content-Disposition', "attachment; filename=bias-scan.zip; filename*=UTF-8''"+quote(archive.name))
+                    self.send_header('Content-Length', str(archive.stat().st_size))
+                    self.end_headers()
+                    with archive.open('rb') as stream:
+                        while chunk:=stream.read(1024*1024):self.wfile.write(chunk)
+                else:
+                    body=self.control.bias_export(name)
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header("Content-Type","application/octet-stream")
+                    labels={'summary.csv':'逐档统计.csv','runs.csv':'逐次记录.csv','result.json':'任务结果.json','config.json':'配置快照.json'}
+                    job_name=self.control.bias_controller.folder.name
+                    self.send_header("Content-Disposition", "attachment; filename=bias-"+name+"; filename*=UTF-8''"+quote(job_name+'__'+labels[name]))
+                    self.send_header("Content-Length",str(len(body)))
+                    self.end_headers();self.wfile.write(body)
+            elif path == "/api/storage/archive":
+                from .data_sessions import archive_session
+                supplied = parse_qs(parsed.query).get('directory', [''])[0]
+                folder = Path(supplied).resolve()
+                data_root = (PROJECT_DIR / 'data').resolve()
+                if not supplied or folder == data_root or not folder.is_relative_to(data_root) or 'exports' in folder.relative_to(data_root).parts:
+                    raise ValueError('请选择本项目 data 下一个已保存任务的文件夹')
+                with self.control._lock:
+                    if self.control.status.state in {'running', 'paused'}:
+                        raise RuntimeError('请等待仪器任务完成后打包')
+                    archive = archive_session(folder)
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header('Content-Type', 'application/zip')
+                    self.send_header('Content-Disposition', "attachment; filename=waveguard-data.zip; filename*=UTF-8''"+quote(archive.name))
+                    self.send_header('Content-Length', str(archive.stat().st_size))
+                    self.end_headers()
+                    with archive.open('rb') as stream:
+                        while chunk := stream.read(1024*1024): self.wfile.write(chunk)
+            elif path == "/api/storage/naming":
+                self._send_json({"names": preferences()})
             elif path == "/api/config":
                 self._send_json(AcquisitionConfig().to_dict())
             elif path == "/api/status":
@@ -1152,14 +1305,79 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json(self.control.sweep_run_payload(run_index))
             else:
                 self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        except ConnectionError:
+            self.close_connection = True
         except Exception as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
         path = urlparse(self.path).path
         try:
+            if getattr(self.server, "shutdown_in_progress", False):
+                self._send_json({"error": "服务正在关闭"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+            if path == "/api/admin/shutdown":
+                # Only the local launcher may shut down the instrument server.
+                # The non-simple header also prevents an unrelated web page
+                # from submitting this request through a browser form.
+                if (
+                    self.client_address[0] not in {"127.0.0.1", "::1"}
+                    or self.headers.get("Host", "").split(":")[0] != "127.0.0.1"
+                    or self.headers.get("Origin") is not None
+                    or self.headers.get("X-Pico-Local-Control") != "shutdown"
+                ):
+                    self._send_json({"error": "仅允许本机管理脚本关闭服务"}, HTTPStatus.FORBIDDEN)
+                    return
+                with self.control._lock:
+                    if self.control.status.state in {"running", "paused"}:
+                        raise RuntimeError("测量仍在运行；请先停止任务，再关闭服务")
+                    self.server.shutdown_in_progress = True  # type: ignore[attr-defined]
+                try:
+                    self.control.shutdown()
+                except Exception:
+                    self.server.shutdown_in_progress = False  # type: ignore[attr-defined]
+                    raise
+                try:
+                    self._send_json({"ok": True, "message": "设备已安全关闭，服务正在退出"})
+                finally:
+                    # Even if the launcher disconnects while receiving the
+                    # reply, the cleaned-up server must still leave the port.
+                    threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
             payload = self._read_json()
-            if path == "/api/capture":
+            if path == "/api/bias-scan/connect":
+                self._send_json(self.control.bias_connect(payload))
+            elif path == "/api/bias-scan/recover":
+                self._send_json(self.control.bias_recover())
+            elif path == "/api/bias-scan/preflight":
+                self._send_json(self.control.bias_preflight(payload))
+            elif path == "/api/bias-scan/start":
+                self._send_json({"task_id":self.control.start_bias_scan(payload)}, HTTPStatus.ACCEPTED)
+            elif path == "/api/interference/session":
+                self._send_json({"session": interference.create_session(payload, self.control.interference_output_root)}, HTTPStatus.CREATED)
+            elif path == "/api/interference/run":
+                capture_id = int(payload["capture_id"])
+                with self.control._lock:
+                    if (self.control.status.capture_id != capture_id or
+                        self.control.status.task_kind != "capture" or
+                        self.control.status.state != "complete" or self.control.result is None):
+                        raise RuntimeError("capture id is no longer the latest completed capture")
+                    result = interference.save_run(str(payload["session_id"]), capture_id,
+                        self.control.result, payload, self.control.interference_output_root)
+                self._send_json(result)
+            elif path == "/api/interference/reanalyze":
+                self._send_json(interference.reanalyze(str(payload["session_id"]), payload["windows_us"], self.control.interference_output_root))
+            elif path == "/api/interference/complete":
+                session_id = str(payload["session_id"])
+                with interference._LOCK:
+                    session = interference.load_session(session_id, self.control.interference_output_root)
+                    experiment = int(payload["experiment"])
+                    if experiment not in range(1, 13): raise ValueError("invalid experiment")
+                    if experiment not in session["completed_experiments"]:
+                        session["completed_experiments"].append(experiment)
+                    interference._write_json(interference._folder(session_id, self.control.interference_output_root) / "session.json", session)
+                self._send_json({"session": session, "summary": interference.summarize(session)})
+            elif path == "/api/capture":
                 capture_id = self.control.start_capture(payload)
                 self._send_json({"capture_id": capture_id}, HTTPStatus.ACCEPTED)
             elif path == "/api/sweep/start":
@@ -1195,6 +1413,8 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/awg-preview":
                 self._send_json(awg_preview_payload(payload))
+            elif path == "/api/files/list":
+                self._send_json(list_directory(str(payload.get("path", "")), PROJECT_DIR))
             elif path == "/api/analysis/browse":
                 self._send_json(discover_sources(str(payload.get("path", ""))))
             elif path == "/api/analysis/process":
@@ -1297,11 +1517,15 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             elif path == "/api/trip/resolve":
                 self.control.resolve_trip()
                 self._send_json({"ok": True, "resumed": True})
+            elif path == "/api/storage/naming":
+                self._send_json({"names": save_preferences(payload.get("names", {}))})
             elif path == "/api/save":
                 saved = self.control.save(str(payload.get("format", "npz")))
                 self._send_json({"path": str(saved)})
             else:
                 self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        except ConnectionError:
+            self.close_connection = True
         except RuntimeError as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.CONFLICT)
         except Exception as exc:
@@ -1310,6 +1534,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
 
 def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
     server = ThreadingHTTPServer((host, port), PicoWebHandler)
+    server.web_assets = snapshot_web_assets()  # type: ignore[attr-defined]
     server.control = WebControlState()  # type: ignore[attr-defined]
     try:
         server.control.initialize_hardware()  # type: ignore[attr-defined]
@@ -1322,6 +1547,13 @@ def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
             )
     print(f"PicoScope 4824A Web 控制台：http://{host}:{port}")
     print("按 Ctrl+C 停止服务")
+    # Docker/systemd normally stop a service with SIGTERM. Route it through
+    # the same finally cleanup as Ctrl+C, so bias OFF precedes process exit.
+    previous_term = None
+    if threading.current_thread() is threading.main_thread():
+        def terminate(_signum, _frame):
+            raise KeyboardInterrupt
+        previous_term = signal.signal(signal.SIGTERM, terminate)
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
@@ -1331,6 +1563,8 @@ def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
             server.control.shutdown()  # type: ignore[attr-defined]
         finally:
             server.server_close()
+            if previous_term is not None:
+                signal.signal(signal.SIGTERM, previous_term)
 
 
 if __name__ == "__main__":

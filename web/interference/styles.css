@@ -1,0 +1,17 @@
+/* Experiment content only; shared shell, controls and data materials come from ui/. */
+#experimentList {display:flex;flex-direction:column;gap:4px;}
+#experimentList button {text-align:left;justify-content:flex-start;width:100%;padding:12px;font-weight:500;}
+#experimentList button.active {background:color-mix(in srgb,var(--wg-signal) 8%,var(--wg-surface));color:var(--wg-signal);box-shadow:inset 2px 0 var(--wg-signal);}
+.asideHeading {margin:4px 0 16px;}.asideHeading small {font:10px Consolas,monospace;letter-spacing:.14em;}.asideHeading h2 {font-size:16px;margin:8px 0;}
+.asideLinks {display:flex;gap:12px;padding:14px 0;}.asideLinks a {font-size:12px;}
+.experiment-workspace h2 {font-size:16px;}.experiment-workspace h3 {font-size:13px;margin:20px 0 8px;}.experiment-workspace p,.experiment-workspace li {font-size:12px;line-height:1.8;}
+.title {display:flex;justify-content:space-between;align-items:center;}.title small {font:10px Consolas,monospace;letter-spacing:.12em;}.title #progress {color:var(--wg-success);}
+.condition {padding:12px;margin:6px 0;border:1px solid var(--wg-stage-line);border-radius:6px;background:var(--wg-stage-2);cursor:pointer;}.condition.active {border-color:var(--wg-signal);}.condition small {display:block;font:10px Consolas,monospace;color:var(--wg-data-muted);}
+.guidePanel {padding:16px 0;margin-top:20px;border-top:1px solid var(--wg-stage-line);}.guideHead {display:flex;justify-content:space-between;align-items:center;}.guidePanel li {margin:6px 0;}.guidePanel h4 {font-size:12px;margin:16px 0 8px;}
+.guideCheck {display:flex;gap:8px;align-items:start;border:1px solid var(--wg-stage-line);background:var(--wg-stage-2);padding:10px;border-radius:6px;margin:6px 0;font-size:12px;}
+.charts {display:grid;grid-template-columns:1fr;gap:20px;}.charts canvas {height:300px;}.chartToolbar {display:flex;gap:16px;align-items:end;margin-bottom:16px;}
+#evidence {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;}#evidence>div {padding:16px 0;border-bottom:1px solid var(--wg-stage-line);}
+#runMetrics,#fits,#comparisons {font:11px/1.8 Consolas,"Microsoft YaHei UI",monospace;margin-top:12px;}
+.restore {display:flex;flex-direction:column;gap:8px;margin:14px 0;}.restore input {width:100%;}
+#sessionId {font:10px/1.6 Consolas,monospace;overflow-wrap:anywhere;}#message {font-size:11px;margin:8px 0 0;}#message:empty {display:none;}
+@media(max-width:760px){#evidence {grid-template-columns:1fr;}.guideHead {flex-wrap:wrap;}}

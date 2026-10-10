@@ -20,3 +20,6 @@ pico4824a-gui = "pico4824a.gui:main"
 where = ["."]
 include = ["pico4824a*"]
 
+
+[project.optional-dependencies]
+bias = ["pyvisa>=1.14"]

@@ -3,35 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <title>PicoScope 4824A 控制台</title>
-    <link rel="stylesheet" href="/styles.css?v=20260923-lcr-folder-analysis1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>WaveGuard · 实时测量</title>
+    <link rel="stylesheet" href="/styles.css?v=shared-ui-v2" />
+  <link rel="stylesheet" href="/ui/workstation.css?v=shared-ui-v2">    <link rel="stylesheet" href="/views/bias-scan.css">
   </head>
-  <body data-page="measure">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark"><span></span><span></span><span></span></div>
-        <div>
-          <p class="eyebrow">GUIDED WAVE LAB</p>
-          <h1>PicoScope 4824A</h1>
-        </div>
-      </div>
-      <nav class="page-nav" aria-label="主功能">
-        <a href="/measure" data-nav="measure">实时测量</a>
-        <a href="/sweep" data-nav="sweep">参数扫描</a>
-        <a href="/lcr" data-nav="lcr">LCR测量</a>
-        <a href="/lcr-linearity" data-nav="lcr-linearity">LCR数据分析</a>
-        <a href="/file-analysis" data-nav="file-analysis">单数据分析</a>
-        <a href="/sweep-analysis" data-nav="sweep-analysis">参数数据分析</a>
-      </nav>
-      <div class="connection">
-        <span id="statusDot" class="status-dot"></span>
-        <div>
-          <strong id="stateText">系统就绪</strong>
-          <small id="modeText">本机仪器服务 · 127.0.0.1</small>
-        </div>
-      </div>
-    </header>
+  <body data-page="measure" data-analysis-theme="light">
+    <header data-wg-header></header><div hidden><span id="statusDot"></span><strong id="stateText"></strong><small id="modeText"></small></div>
+
+
 
     <main class="workspace">
       <aside class="control-stack">
@@ -427,12 +407,12 @@
 
         <section class="panel analysis-source-panel page-only" data-pages="file-analysis">
           <div class="panel-heading compact">
-            <div><span class="step">01</span><h2>数据源</h2></div>
+            <div><span class="analysis-panel-kicker">SOURCE</span><h2>数据源</h2></div>
             <small>NPZ / CSV</small>
           </div>
           <label>文件或文件夹完整路径
             <div class="inline-input">
-              <input id="analysisPath" type="text" value="F:\Project\01guided_waves\software\Pico_4824A\data" />
+              <input id="analysisPath" type="text" value="F:\Project\01guided_waves\software\Pico_4824A_btf\data" />
               <button id="analysisBrowseBtn">读取</button>
             </div>
           </label>
@@ -442,20 +422,18 @@
           <div id="analysisMeta" class="analysis-meta">尚未加载数据</div>
         </section>
 
-        <section class="panel page-only" data-pages="file-analysis">
+        <section class="panel analysis-time-controls page-only" data-pages="file-analysis">
           <div class="panel-heading compact">
-            <div><span class="step">02</span><h2>波形与带通</h2></div>
-            <label class="switch-label icon-only" title="启用带通">
-              <input id="analysisFilterEnabled" type="checkbox" />
-              <span class="switch"></span>
-            </label>
+            <div><span class="analysis-panel-kicker">CONTEXT</span><h2>分析上下文</h2></div>
+            <label class="analysis-input-filter"><input id="analysisFilterEnabled" type="checkbox" />数学分析使用带通输入</label>
           </div>
+          <div class="subhead analysis-band-heading"><span>带通参数</span><small>Filtered / Mix 共用</small></div>
           <div class="form-grid three">
             <label>下限 <span>kHz</span><input id="analysisBandLow" type="number" value="60" min="0" step="1" /></label>
             <label>上限 <span>kHz</span><input id="analysisBandHigh" type="number" value="90" min="0.001" step="1" /></label>
             <label>过渡带 <span>kHz</span><input id="analysisTransition" type="number" value="5" min="0" step="0.5" /></label>
           </div>
-          <div class="analysis-checks">
+          <div class="analysis-checks" hidden aria-hidden="true">
             <label><input id="analysisShowRaw" type="checkbox" checked />原始</label>
             <label><input id="analysisShowFiltered" type="checkbox" />带通后</label>
           </div>
@@ -476,9 +454,9 @@
           </div>
         </section>
 
-        <section class="panel page-only" data-pages="file-analysis">
+        <section class="panel analysis-spectrum-controls page-only" data-pages="file-analysis">
           <div class="panel-heading compact">
-            <div><span class="step">03</span><h2>多时段频谱</h2></div>
+            <div><span class="analysis-panel-kicker">FFT</span><h2>多时段频谱</h2></div>
             <button id="addSpectrumWindowBtn" class="small-button">＋时段</button>
           </div>
           <div class="form-grid">
@@ -497,9 +475,9 @@
           <p class="wiring-note"><span>i</span> 带通和频谱均为派生分析；原始文件永不覆盖。不同时间窗使用相同频率坐标，可叠加比较。</p>
         </section>
 
-        <section class="panel page-only" data-pages="file-analysis">
+        <section class="panel analysis-transform-controls page-only" data-pages="file-analysis">
           <div class="panel-heading compact">
-            <div><span class="step">04</span><h2>时频图</h2></div>
+            <div><span class="analysis-panel-kicker">TRANSFORM</span><h2>时频参数</h2></div>
             <small>STFT / WPD / CWT</small>
           </div>
           <div class="form-grid">
@@ -535,10 +513,10 @@
             </div>
             <div class="analysis-checks"><label><input id="cwtLogFrequency" type="checkbox" />对数频率轴</label></div>
           </div>
-          <button id="calculateTimeFrequencyBtn" class="sweep-start">计算时频图</button>
+          <button id="calculateTimeFrequencyBtn" class="sweep-start">应用参数并重新计算</button>
         </section>
 
-        <section class="panel experimental-panel page-only" data-pages="file-analysis">
+        <section class="panel experimental-panel analysis-experimental-controls page-only" data-pages="file-analysis">
           <div class="panel-heading compact">
             <div><span class="test-badge">TEST</span><h2>空间—时间对称性分析</h2></div>
             <small>不参与正式评价</small>
@@ -670,11 +648,37 @@
       </aside>
 
       <section class="monitor-stack">
+        <section class="analysis-intro workstation-intro" aria-label="WaveGuard 工作区">
+          <div class="analysis-app-title">
+            <p id="workspaceEyebrow" class="eyebrow">LIVE ACQUISITION</p>
+            <h2 id="workspaceTitle">实时测量</h2>
+          </div>
+          <div class="analysis-app-status">
+            <span id="workspaceInstrument" class="analysis-instrument-id">PicoScope 4824A · 8CH BLOCK CAPTURE</span>
+            <span id="analysisViewState" class="analysis-view-state">系统就绪 · READY</span>
+          </div>
+        </section>
+        <div class="analysis-lens-bar page-only" data-pages="file-analysis">
+          <nav class="analysis-lenses" role="tablist" aria-label="Analysis Lens">
+            <div class="lens-group"><span>TIME</span><button type="button" role="tab" aria-selected="true" data-analysis-lens="raw">Raw</button><button type="button" role="tab" aria-selected="false" data-analysis-lens="filtered">Filtered</button><button type="button" role="tab" aria-selected="false" data-analysis-lens="mix">Mix</button></div>
+            <div class="lens-group"><span>SPECTRUM</span><button type="button" role="tab" aria-selected="false" data-analysis-lens="fft">FFT</button></div>
+            <div class="lens-group"><span>TIME–FREQUENCY</span><button type="button" role="tab" aria-selected="false" data-analysis-lens="stft">STFT</button><button type="button" role="tab" aria-selected="false" data-analysis-lens="cwt">CWT</button></div>
+            <div class="lens-group"><span>DECOMPOSITION</span><button type="button" role="tab" aria-selected="false" data-analysis-lens="wpd">WPD</button></div>
+            <button type="button" class="lens-experimental" role="tab" aria-selected="false" data-analysis-lens="experimental"><span>EX</span> 实验分析</button>
+          </nav>
+          <div id="analysisLensSettings" class="analysis-lens-settings">
+            <button id="analysisLensSettingsButton" class="analysis-lens-settings-trigger" type="button" aria-label="打开当前 Lens 参数" aria-controls="analysisLensSettingsPopover" aria-expanded="false">
+              <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/><circle cx="6" cy="4" r="1.35"/><circle cx="10" cy="8" r="1.35"/><circle cx="5" cy="12" r="1.35"/></svg>
+              <span>参数设置</span>
+            </button>
+            <div id="analysisLensSettingsPopover" class="analysis-lens-settings-popover" hidden></div>
+          </div>
+        </div>
         <section class="metrics page-only" data-pages="measure">
           <article><span>采样点</span><strong id="sampleMetric">—</strong><small>每通道</small></article>
           <article><span>实际采样率</span><strong id="rateMetric">—</strong><small>MS/s</small></article>
           <article><span>采样间隔</span><strong id="intervalMetric">—</strong><small>ns</small></article>
-          <article><span>输入状态</span><strong id="overflowMetric">正常</strong><small>过量程检测</small></article>
+          <article><span>输入状态</span><strong id="overflowMetric">—</strong><small>过量程检测</small></article>
         </section>
 
         <section class="scope-panel page-only" data-pages="measure">
@@ -699,6 +703,20 @@
             </div>
           </div>
           <div class="timebar"><span id="timeStart">—</span><span class="trigger-mark">触发点 t = 0</span><span id="timeEnd">—</span></div>
+        </section>
+
+        <section id="sweepIdleStage" class="scope-panel workspace-idle-stage page-only" data-pages="sweep" aria-live="polite">
+          <div class="workspace-idle-copy">
+            <p id="sweepIdleEyebrow" class="eyebrow">PARAMETER SWEEP · IDLE</p>
+            <h2 id="sweepIdleTitle">扫描数据舞台</h2>
+            <p id="sweepIdleDescription">配置左侧参数网格并启动扫描。首个有效参数点完成后，这里将呈现评价结果与逐次采集波形。</p>
+          </div>
+          <div class="workspace-idle-axis" aria-hidden="true"><span></span><i></i><b></b></div>
+          <div class="workspace-idle-chain" aria-label="扫描处理链状态">
+            <span><small>01</small>AWG PROGRAM<strong>WAITING</strong></span>
+            <span><small>02</small>ADC BLOCK<strong>WAITING</strong></span>
+            <span><small>03</small>EVALUATION<strong>WAITING</strong></span>
+          </div>
         </section>
 
         <section id="sweepResultPanel" class="scope-panel sweep-result-panel page-only" data-pages="sweep" hidden>
@@ -808,6 +826,7 @@
 
         <section class="scope-panel page-only linearity-result-panel" data-pages="lcr-linearity" data-lcr-analysis-mode="linearity">
           <div class="scope-toolbar"><div><p class="eyebrow">ATA-2021B MONITOR ANALYSIS</p><h2>大信号线性度 / 波形畸变分析</h2><small id="linearityResultPath" class="scope-interaction-help">等待加载测量文件夹</small></div></div>
+          <div class="subhead"><span>按测量频率查看分析结果</span><label>频率<select id="linearityFrequency" aria-label="线性度分析频率"><option value="">加载后选择</option></select></label></div>
           <div class="big-lcr-status-grid"><div><span>有效运行 / 总运行</span><strong id="linearityRunCount">—</strong></div><div><span>最高谐波阶数</span><strong id="linearityOrderMetric">—</strong></div><div><span>当前频率</span><strong id="linearityFrequencyMetric">—</strong></div></div>
           <div class="lcr-chart-grid big-lcr-chart-grid"><div><div class="subhead"><span>Receiver amplitude vs I_peak</span><small>旧文件回退显示基波指标</small></div><div class="lcr-canvas-wrap"><canvas id="linearityReceiveCanvas"></canvas></div></div><div><div class="subhead"><span>K_ME vs I_peak</span><small>低电流参考区作为 0% 偏差基准</small></div><div class="lcr-canvas-wrap"><canvas id="linearityKmeCanvas"></canvas></div></div><div><div class="subhead"><span>THD_I / THD_RX</span><small>旧文件缺 Receiver 时展示 Voltage Monitor THD</small></div><div class="lcr-canvas-wrap"><canvas id="linearityThdCanvas"></canvas></div></div><div><div class="subhead"><span>D_wave vs I_peak</span><small>对齐同频参考波形</small></div><div class="lcr-canvas-wrap"><canvas id="linearityShapeCanvas"></canvas></div></div><div><div class="subhead"><span>Correlation vs I_peak</span><small>保留正负号</small></div><div class="lcr-canvas-wrap"><canvas id="linearityCorrCanvas"></canvas></div></div><div><div class="subhead"><span>Gain Compression vs I_peak</span><small>低电流参考模型</small></div><div class="lcr-canvas-wrap"><canvas id="linearityCompressionCanvas"></canvas></div></div><div><div class="subhead"><span>正反扫差异</span><small>不称作磁滞；兼容 up/down 数据</small></div><div class="lcr-canvas-wrap"><canvas id="linearityDirectionCanvas"></canvas></div></div><div><div class="subhead"><span>端面回波幅值</span><small>用户定义 Echo 时间窗</small></div><div class="lcr-canvas-wrap"><canvas id="linearityEchoCanvas"></canvas></div></div><div><div class="subhead"><span>端面回波形状</span><small>D_echo 和相关系数</small></div><div class="lcr-canvas-wrap"><canvas id="linearityEchoShapeCanvas"></canvas></div></div><div><div class="subhead"><span>旧版 Monitor 基波增益偏差</span><small>兼容旧 big_lcr 线性度文件夹</small></div><div class="lcr-canvas-wrap"><canvas id="linearityGainCanvas"></canvas></div></div></div>
           <div class="subhead"><span>单次运行的电压/电流谐波</span><label>运行<select id="linearityRunSelect"><option value="">分析后选择</option></select></label></div><div class="lcr-canvas-wrap"><canvas id="linearityHarmonicCanvas"></canvas></div>
@@ -860,12 +879,8 @@
         <section class="scope-panel analysis-workbench page-only" data-pages="file-analysis">
           <div class="scope-toolbar">
             <div>
-              <p class="eyebrow">NON-DESTRUCTIVE ANALYSIS</p>
-              <h2>波形浏览</h2>
-            </div>
-            <div class="analysis-readout">
-              <span id="analysisCursorTime">t = —</span>
-              <span id="analysisCursorValue">V = —</span>
+              <p id="analysisWaveEyebrow" class="eyebrow">TIME DOMAIN / RAW</p>
+              <h2 id="analysisWaveTitle">原始波形</h2>
             </div>
           </div>
           <div id="analysisWaveLegend" class="legend interactive-legend"></div>
@@ -874,6 +889,20 @@
             <div id="analysisWaveEmpty" class="run-empty">输入文件或文件夹路径后开始分析</div>
           </div>
           <div class="analysis-help">滚轮：时间缩放　拖动：时间平移　Shift＋滚轮：幅值缩放　双击：恢复全时段</div>
+        </section>
+
+        <section id="archiveIdleStage" class="scope-panel workspace-idle-stage page-only" data-pages="sweep-analysis" aria-live="polite">
+          <div class="workspace-idle-copy">
+            <p class="eyebrow">SAVED PARAMETER SWEEP · EMPTY</p>
+            <h2>等待扫描归档</h2>
+            <p>读取左侧扫描文件夹后，将在同一数据舞台中建立参数热图、评价表格和逐次采集波形。</p>
+          </div>
+          <div class="workspace-idle-axis" aria-hidden="true"><span></span><i></i><b></b></div>
+          <div class="workspace-idle-chain" aria-label="归档分析链状态">
+            <span><small>01</small>CONFIG<strong>WAITING</strong></span>
+            <span><small>02</small>RUNS<strong>WAITING</strong></span>
+            <span><small>03</small>SUMMARY<strong>WAITING</strong></span>
+          </div>
         </section>
 
         <section id="scanArchivePanel" class="scope-panel scan-archive-panel page-only" data-pages="sweep-analysis" hidden>
@@ -931,11 +960,11 @@
               <p class="eyebrow">TIME–FREQUENCY</p>
               <h2 id="timeFrequencyTitle">STFT时频图</h2>
             </div>
-            <small id="timeFrequencyMeta">设置参数后计算</small>
+            <small id="timeFrequencyMeta">切换 Lens 后自动计算</small>
           </div>
           <div class="tf-canvas-wrap">
             <canvas id="timeFrequencyCanvas"></canvas>
-            <div id="timeFrequencyEmpty" class="run-empty">尚未计算时频图</div>
+            <div id="timeFrequencyEmpty" class="run-empty">载入数据后将自动计算</div>
           </div>
           <div class="tf-colorbar"><span id="tfFloorLabel">−60 dB</span><i></i><span>0 dB</span></div>
         </section>
@@ -959,6 +988,14 @@
             </table>
           </div>
         </section>
+
+        <footer class="analysis-inspector page-only" data-pages="file-analysis" aria-label="当前数据上下文">
+          <div class="inspector-item"><span>DATASET</span><strong id="analysisLensFile">未加载</strong></div>
+          <div class="inspector-item"><span id="analysisLensChannelLabel">CHANNEL</span><strong id="analysisLensChannels">—</strong></div>
+          <div class="inspector-item"><span>SAMPLE RATE</span><strong id="analysisLensRate">—</strong></div>
+          <div class="inspector-item"><span id="analysisLensRangeLabel">TIME RANGE</span><strong id="analysisLensRange">—</strong></div>
+          <div class="analysis-readout"><span id="analysisCursorTime">t = —</span><span id="analysisCursorValue">V = —</span></div>
+        </footer>
 
         <section class="event-panel">
           <div><span class="event-label">运行信息</span><strong id="messageText">系统就绪，可以开始配置。</strong></div>
@@ -989,6 +1026,15 @@
         <small class="trip-alarm-footnote">这是基于监测波形的“疑似跳闸”判断，不是 ATA 硬件状态回读；本次已完成采集及原始数据已保存。</small>
       </section>
     </div>
-    <script src="/app.js?v=20260923-linearity-fixes1"></script>
+    <script src="/ui/workstation.js?v=shared-ui-v2"></script>
+    <script src="/ui/storage-naming.js"></script>
+    <script src="/ui/analysis-state.js"></script>
+    <script src="/analysis/time-frequency.js"></script>
+    <script src="/analysis/experimental.js"></script>
+    <script src="/app.js?v=shared-ui-v2"></script>
+    <script src="/views/signal-analysis.js?v=shared-ui-v2"></script>
+    <script src="/views/instruments.js?v=shared-ui-v2"></script>
+  <script src="/ui/file-picker.js?v=shared-ui-v2"></script>
+    <script src="/views/bias-scan.js"></script>
   </body>
 </html>

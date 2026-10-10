@@ -2,6 +2,26 @@
 
 本目录是一套独立的 PicoScope 4824A 控制程序。所有程序、配置、测试及默认采集数据均位于本目录内，不依赖工程中其他硬件控制代码。
 
+## 工程目录与验证
+
+- `pico4824a/`：设备、采集、分析与安全状态机；算法与硬件时序保持原实现。
+- `web/ui/`：共享布局、主题、Inspector、计算身份、文件选择与保存设置。
+- `web/analysis/`：时频与 EX 控制器；`web/views/`：各工作页的组合与展示。
+- `configs/`：配置示例；`data/`：原始数据、任务结果与派生导出。
+- `tests/`：功能、故障注入、算法兼容及 UI 回归；`tools/run_validation.ps1`：统一验证入口。
+- `archive/`：历史独立试稿与阶段记录，不参与应用运行。
+
+启动仍使用 `./start_web.ps1`；修复记录与验证边界参见 [工程修复与整理](PROJECT_REPAIR_REPORT.md)。
+在 TARGET 运行 `./tools/run_validation.ps1` 执行 Python 回归。UI 验证需要已经启动的仿真服务，以及 Node/Playwright：
+
+```powershell
+./tools/run_validation.ps1 -Browser -BaseUrl http://127.0.0.1:4824 -Node "node.exe" -PlaywrightModule "Playwright模块路径"
+```
+
+设置 →“导出已保存任务 · ZIP”可打包已保存任务。参考目录只读；LCR 与历史干扰会话先导入 TARGET 副本再分析。实机偏置扫描需明确填写电压、通电、稳定超时与冷却限值。默认可选仅软件保护，无需外部超时适配器；独立保护模式仍需接入真实适配器。评价默认带通后 Vpp，原始波形照常保存。
+
+偏置扫描允许范围已按用户指定的 6.4 Ω / 3000 W 开放至 21.65 A，默认扫描终点及实际电流上限仍为 6 A。提高终点前，请在参数设置中显式提高实际电流上限；冷却仍沿用 6 A 基准。详见 [偏置扫描运行说明](BIAS_SCAN_GUIDE.md#2165-a-范围设置)。
+
 第一次安装和日常操作请先看[《配置与使用说明》](配置与使用说明.md)；本文档保留功能概览、测量原理和详细分析说明。
 
 ## 已实现功能
@@ -46,7 +66,7 @@
 2. 在 PowerShell 中运行：
 
 ```powershell
-cd F:\Project\01guided_waves\software\Pico_4824A
+cd F:\Project\01guided_waves\software\Pico_4824A_btf
 .\setup.ps1
 ```
 
@@ -243,3 +263,7 @@ python -m unittest discover -s tests -v
 - PicoScope 4000A specifications: <https://www.picotech.com/oscilloscope/4000/picoscope-4000-specifications>
 - Pico Python wrappers/examples: <https://github.com/picotech/picosdk-python-wrappers>
 - ATA-2021B 官方规格（DC～1 MHz、交直流放大）：<https://www.aigtek.com/products/953.html>
+
+### 拉取更新后重启 Web 服务
+
+更新代码前先停止扫描并确认偏置电源输出关闭。在启动服务的终端按 Ctrl+C，执行 `git pull origin btf`，再运行 `./start_web.ps1`，最后刷新浏览器。仅刷新页面不会更新内存中的 Python 后端。服务启动时固定加载同一版 HTML/CSS/JS，防止旧 API 与新前端混用；更新前端文件也需要重启。

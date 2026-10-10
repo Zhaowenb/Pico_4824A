@@ -26,6 +26,7 @@ class WebApiTests(unittest.TestCase):
             lcr_output_root=output_root / "lcr",
             big_lcr_output_root=output_root / "lcr_big",
             lcr_linearity_output_root=output_root / "lcr_linearity",
+            interference_output_root=output_root / "interference",
         )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -86,6 +87,44 @@ class WebApiTests(unittest.TestCase):
         self.assertTrue(filtered["summary"]["display_filter"]["enabled"])
         self.assertEqual(tuple(filtered["channels"]), tuple("ABCDEFGH"))
         self.assertEqual(filtered["summary"]["samples"], 1000)
+
+    def test_interference_page_and_capture_save(self) -> None:
+        for asset in (
+            "/interference", "/interference/app.js", "/interference/styles.css",
+            "/interference/manual", "/interference/manual.html",
+            "/interference/guide.js", "/interference/manual.js", "/interference/manual.css",
+        ):
+            with urlopen(self.base + asset, timeout=3) as response:
+                self.assertEqual(response.status, 200)
+                self.assertTrue(response.read())
+        config = AcquisitionConfig(sample_rate_hz=1_000_000, pre_trigger_samples=100,
+                                   post_trigger_samples=900).to_dict()
+        config["awg"]["frequency_hz"] = 75_000
+        config["awg"]["cycles"] = 5
+        windows = {"t0": 0, "baseline_start": -50, "baseline_end": -5,
+                   "tail_end": 200, "echo_start": 300, "echo_end": 400}
+        created = self.post_json("/api/interference/session", {
+            "config": config, "repeats": 3,
+            "channels": {"rx": "B", "rod": "C", "trigger": "A", "rx_probe": 1, "rod_probe": 10},
+            "windows_us": windows})
+        session_id = created["session"]["id"]
+        capture = self.post_json("/api/capture", {**config, "simulate": True})
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            status = self.get_json("/api/status")
+            if status["state"] != "running":
+                break
+            time.sleep(.01)
+        self.assertEqual(status["state"], "complete")
+        saved = self.post_json("/api/interference/run", {"session_id": session_id,
+            "capture_id": capture["capture_id"], "experiment": 3,
+            "condition": "float", "variables": {"probe_description": "10x"}})
+        self.assertEqual(saved["run"]["experiment"], 3)
+        self.assertEqual(len(self.get_json("/api/interference/session?id=" + session_id)["session"]["runs"]), 1)
+        preview = self.get_json("/api/interference/preview?id=" + session_id + "&run=" + saved["run"]["id"])
+        self.assertIn("tx", preview["spectra"])
+        with urlopen(self.base + "/api/interference/export?id=" + session_id, timeout=3) as response:
+            self.assertIn(b"run_id", response.read())
 
     def test_simulated_lcr_measurement_through_http_api(self) -> None:
         config = AcquisitionConfig(
@@ -362,11 +401,12 @@ class WebApiTests(unittest.TestCase):
         self.assertIn('id="sweepRunCanvas"', html)
         self.assertIn('id="packetWindowScale"', html)
         self.assertIn('id="recommendationMaxDuration"', html)
-        self.assertIn('data-nav="measure"', html)
-        self.assertIn('data-nav="sweep"', html)
-        self.assertIn('data-nav="lcr"', html)
-        self.assertIn('data-nav="file-analysis"', html)
-        self.assertIn('data-nav="sweep-analysis"', html)
+        self.assertIn('data-wg-header', html)
+        with urlopen(self.base + "/ui/workstation.js", timeout=3) as response:
+            shared_ui = response.read().decode("utf-8")
+        for route in ("measure", "sweep", "lcr", "file-analysis", "sweep-analysis"):
+            self.assertIn(route, shared_ui)
+        self.assertIn("a.dataset.nav=route", shared_ui)
         self.assertIn('id="captureDurationUs"', html)
         self.assertIn('id="triggerPositionPercent"', html)
         self.assertIn('id="measureFilterEnabled"', html)
@@ -404,13 +444,14 @@ class WebApiTests(unittest.TestCase):
         self.assertIn('id="bigLcrSafetyAck"', html)
         self.assertIn('data-lcr-mode="big"', html)
         self.assertIn('id="linearityMeasurementResult"', html)
+        self.assertEqual(html.count('id="linearityFrequency"'), 1)
         self.assertIn("大信号线性度与波形畸变测试", html)
         self.assertIn('id="lcrAnalysisMode"', html)
         self.assertIn('value="big_lcr"', html)
         self.assertIn('value="linearity"', html)
         self.assertIn('value="small_lcr"', html)
-        self.assertIn('data-nav="lcr-linearity">LCR数据分析', html)
-        self.assertNotIn('data-nav="linearity"', html)
+        self.assertIn("['lcr-linearity','LCR数据分析']", shared_ui)
+        self.assertNotIn("['linearity',", shared_ui)
         self.assertIn('id="bigLcrVoltageWaveCanvas"', html)
         self.assertIn('id="bigLcrCurrentWaveCanvas"', html)
         self.assertIn('id="bigLcrTableBody"', html)
@@ -434,6 +475,10 @@ class WebApiTests(unittest.TestCase):
         with urlopen(self.base + "/app.js", timeout=3) as response:
             javascript = response.read().decode("utf-8")
         self.assertIn("channelNames.map((name)", javascript)
+        self.assertIn(
+            'onElement("linearityAnalyzeBtn", "click", () => analyzeBigLinearity(false))',
+            javascript,
+        )
         self.assertIn("/api/big-lcr/start", javascript)
         self.assertIn("mountLcrMode", javascript)
         self.assertNotIn("channelNames.slice(0, 7)", javascript)

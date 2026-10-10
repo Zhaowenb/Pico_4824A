@@ -4,19 +4,23 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.test-tmp/
 build/
 dist/
 *.egg-info/
-# Local machine settings; keep config.example.json as the shareable template.
 /config.json
 /config.local.json
-# Captures, sweeps, calibration results and generated analysis artifacts stay
-# local; the repository stores only the empty data directory marker.
-data/**
-!data/.gitkeep
-# Dependencies/build caches for the optional Sites dashboard are not source.
-sites/**/node_modules/
-sites/**/.next/
-sites/**/dist/
-# This is a separate, unfinished Sites workspace with its own empty .git.
-sites/
+data/processed/
+data/captures/
+data/sweeps/
+data/lcr/
+data/lcr_big/
+data/lcr_linearity/
+data/calibrations/
+data/interference/
+data/launcher_logs/
+
+data/bias_scans/
+data/analysis_exports/
+/configs/storage-naming.json
+data/**/exports/

@@ -1,0 +1,12 @@
+FROM python:3.12-slim-bookworm
+COPY debs/ /tmp/waveguard-debs/
+RUN dpkg -i /tmp/waveguard-debs/*.deb && ldconfig && rm -rf /tmp/waveguard-debs
+COPY wheels/ /tmp/waveguard-wheels/
+RUN pip install --no-index --find-links=/tmp/waveguard-wheels numpy picosdk pyvisa pyvisa-py pyusb \
+    && rm -rf /tmp/waveguard-wheels
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 LD_LIBRARY_PATH=/opt/picoscope/lib HOME=/tmp
+WORKDIR /app
+USER 1000:1000
+EXPOSE 4824
+STOPSIGNAL SIGTERM
+CMD ["python", "-B", "-m", "pico4824a", "web", "--host", "0.0.0.0", "--port", "4824"]
