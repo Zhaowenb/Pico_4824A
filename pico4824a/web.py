@@ -13,6 +13,7 @@ from pathlib import Path
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
+import signal
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse, quote
@@ -1542,6 +1543,13 @@ def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
             )
     print(f"PicoScope 4824A Web 控制台：http://{host}:{port}")
     print("按 Ctrl+C 停止服务")
+    # Docker/systemd normally stop a service with SIGTERM. Route it through
+    # the same finally cleanup as Ctrl+C, so bias OFF precedes process exit.
+    previous_term = None
+    if threading.current_thread() is threading.main_thread():
+        def terminate(_signum, _frame):
+            raise KeyboardInterrupt
+        previous_term = signal.signal(signal.SIGTERM, terminate)
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
@@ -1551,6 +1559,8 @@ def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
             server.control.shutdown()  # type: ignore[attr-defined]
         finally:
             server.server_close()
+            if previous_term is not None:
+                signal.signal(signal.SIGTERM, previous_term)
 
 
 if __name__ == "__main__":
