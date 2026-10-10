@@ -53,7 +53,7 @@ class GuardTests(unittest.TestCase):
         a,c=setup();c=replace(c,h2_enabled=True,h2_limit_pct=20)
         q=assess(signal(a),a,c);self.assertEqual(q['status'],'OK',q);self.assertAlmostEqual(q['receiver_h2_h1_pct'],10,delta=.2)
         self.assertEqual(assess(signal(a),a,replace(c,h2_limit_pct=5))['status'],'H2_LIMIT')
-    def test_off_precedes_all_diagnosis_and_saves(self):
+    def test_continuous_guard_checks_and_off_precedes_all_saves(self):
         a,c=setup();c=replace(c,amplitude_mode='sweep',amplitude_start_vpp=.5,amplitude_stop_vpp=1,amplitude_step_vpp=.5)
         with tempfile.TemporaryDirectory(dir=ROOT/'.test-tmp') as tmp:
             power=SimulatedPowerSupply();job=BiasScanController(c,a,power,Adapter(power),tmp,simulate=True);r=job.run()
@@ -62,7 +62,8 @@ class GuardTests(unittest.TestCase):
             for e in r['events']:
                 if e['event']=='on':powered=True
                 if e['event']=='off_confirmed':powered=False
-                if e['event'] in {'quality_check','save_waveform','save_task'}:self.assertFalse(powered)
+                if e['event'] in {'save_waveform','save_task','analyze'}:self.assertFalse(powered)
+            self.assertEqual(sum(e['event']=='on' for e in r['events']),1)
             self.assertEqual(power.output_state,'off')
             self.assertEqual(len(list(job.folder.rglob('*.npz'))),10)
     def test_faults_shutdown_and_preserve(self):
@@ -89,11 +90,13 @@ class GuardTests(unittest.TestCase):
                 a,c=setup();power=FailedOff() if mode=='off' else SimulatedPowerSupply()
                 job=BiasScanController(c,a,power,Adapter(power),tmp,simulate=True)
                 if mode=='save':
-                    with patch('pico4824a.bias_scan.guarded.save_npz',side_effect=OSError('disk failed')):r=job.run()
+                    with patch('pico4824a.bias_scan.controller.save_npz',side_effect=OSError('disk failed')):r=job.run()
                 else:r=job.run()
                 self.assertEqual(r['status'],'error');self.assertEqual(r['output_state'],'unknown' if mode=='off' else 'off')
                 self.assertEqual(r['safety_alarm']['output_state'],r['output_state'])
-                if mode=='off':self.assertTrue(list(job.folder.rglob('*.npz')))
+                if mode=='off':
+                    self.assertFalse(list(job.folder.rglob('*.npz')))
+                    self.assertTrue(job._pending_group[1])
     def test_blocked_capture_deadline(self):
         class Blocked(Adapter):
             def __init__(self,power):super().__init__(power);self.event=threading.Event()

@@ -1,4 +1,4 @@
-"""OFF-only waveform diagnosis. Reuses the project's AWG and harmonic algorithms."""
+"""In-memory protection checks. Reuses the project's AWG and harmonic algorithms."""
 import math
 from types import SimpleNamespace
 import numpy as np
@@ -62,7 +62,7 @@ def assess(capture, acquisition, config, reference=None):
         raw=capture.volts.get(channel)
         if raw is None or len(raw)!=len(t) or not np.all(np.isfinite(raw)):return fail('INVALID',f'激励 {role} 原始数据异常')
         if channel in capture.overflow_channels or np.max(np.abs(raw))>=.98*RANGE_VOLTS[capture.config.channels[channel].range]:
-            return fail('ADC_RANGE',f'激励 {channel} ADC 溢出/接近满量程，须断电后重采')
+            return fail('ADC_RANGE',f'激励 {channel} ADC 溢出/接近满量程，须调整量程重采')
         segment=raw[mask];vpp=float(np.ptp(segment))*scale
         if not math.isfinite(vpp):return fail('INVALID','探头系数换算结果非有限')
         output['excitation_'+role+'_vpp']=vpp
@@ -84,7 +84,7 @@ def assess(capture, acquisition, config, reference=None):
     channel=config.pzt_channel;raw=capture.volts.get(channel)
     if raw is None or not np.all(np.isfinite(raw)):return fail('INVALID','PZT 原始数据异常')
     if channel in capture.overflow_channels or np.max(np.abs(raw))>=.98*RANGE_VOLTS[capture.config.channels[channel].range]:
-        return fail('ADC_RANGE','PZT ADC 超限，须断电后调整量程重采')
+        return fail('ADC_RANGE','PZT ADC 超限，须调整量程重采')
     if config.h2_enabled:
         try:
             frequency=acquisition.awg.frequency_hz;fs=capture.actual_sample_rate_hz

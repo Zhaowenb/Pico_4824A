@@ -81,7 +81,9 @@ class BiasScanWebMixin:
                 controller.event('manual_off_recovery',output_state='off')
                 controller.result['recovery']={'output_state':'off','wall_time':time.time()}
                 if controller.folder:
-                    try:controller.persist()
+                    try:
+                        controller.save_pending()
+                        controller.persist()
                     except Exception as exc:warning='；恢复记录保存失败：'+str(exc)
             self.status.state='idle';self.status.task_kind='bias_scan'
             self.status.message='已确认输出关闭，可以重新开始'+warning

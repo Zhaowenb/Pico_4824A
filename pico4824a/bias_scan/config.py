@@ -222,7 +222,9 @@ class BiasScanConfig:
                 raise ValueError('波形保护激励窗至少需要 40 个样本')
             if self.h2_enabled and (self.direct_end_us-self.direct_start_us)*config.sample_rate_hz*1e-6 < 40:
                 raise ValueError('二次谐波评价窗至少需要 40 个样本')
-        budget = total * (len(config.enabled_channels)+1) * 8 * self.repeats
+        group_points = max(len(group) for group in self.scan_groups(config))
+        attempts = self.range_max_retries+1 if self.waveform_guard_enabled else 1
+        budget = total * (len(config.enabled_channels)+1) * 8 * self.repeats * group_points * attempts
         if budget > self.memory_limit_mb * 1024**2:
             raise ValueError('单档原始数据超过内存预算')
         return config
@@ -242,6 +244,15 @@ class BiasScanConfig:
             raise ValueError('偏置 × 幅值组合超过 601 点')
         return ([(current,amplitude) for current in currents for amplitude in amplitudes] if self.amplitude_order=='bias_outer'
                 else [(current,amplitude) for amplitude in amplitudes for current in currents])
+
+    def scan_groups(self, acquisition):
+        """Preserve requested order; adjacent equal bias points share one ON cycle."""
+        groups = []
+        for index, (current, amplitude) in enumerate(self.scan_plan(acquisition)):
+            if not groups or groups[-1][0][1] != current:
+                groups.append([])
+            groups[-1].append((index, current, amplitude))
+        return groups
 
     def effective_limits(self, simulate):
         # These values are explicitly simulation-only, never fallbacks for hardware.

@@ -24,6 +24,7 @@ class BiasScanController:
         config.validate(live=not simulate)
         self.acquisition = config.acquisition(acquisition)
         self.plan = config.scan_plan(self.acquisition)
+        self.groups = config.scan_groups(self.acquisition)
         self.power, self.adapter = power, adapter
         self.output_root = Path(output_root).resolve()
         target = Path(__file__).resolve().parents[2]
@@ -54,22 +55,23 @@ class BiasScanController:
         self._started_at = time.monotonic()
         self._captured_count = 0
         self._cooled_count = 0
+        self._capture_durations = []
+        self._group_index = 0
+        self._save_capture = lambda capture, path: save_npz(capture, path)
 
     def event(self, name, **values):
         self.events.append({'event':name,'monotonic_time':time.monotonic(),'wall_time':time.time(),**values})
 
     def publish(self, phase, **values):
         self._last_progress.update(values)
-        points = [target for target, _ in self.plan]
-        total = len(points)*self.config.repeats
-        durations = [r['capture_duration_s'] for r in self.rows]
+        points = [group[0][1] for group in self.groups]
+        total = len(self.plan)*self.config.repeats
+        durations = self._capture_durations
         capture_s = max(self.config.interval_s, sum(durations)/len(durations) if durations else .1)
         cooling = sum(self.config.cooldown_for(p, self.simulate) for p in points[self._cooled_count:])
-        if self.config.waveform_guard_enabled:
-            cooling = sum(self.config.cooldown_for(p,self.simulate)*max(0,self.config.repeats-sum(1 for r in self.rows if r.get('point')==i and r.get('valid'))) for i,p in enumerate(points))
         if phase == 'cooling' and self._off_at is not None:
             cooling = max(0, cooling-min(self.config.cooldown_for(points[self._cooled_count], self.simulate), time.monotonic()-self._off_at))
-        remaining = (total-self._captured_count)*(capture_s+(self.config.stable_hold_s if self.config.waveform_guard_enabled else 0)) + (0 if self.config.waveform_guard_enabled else max(0,len(points)-len(self.summaries))*self.config.stable_hold_s) + cooling
+        remaining = max(0,total-self._captured_count)*capture_s + max(0,len(points)-self._cooled_count)*self.config.stable_hold_s + cooling
         fraction = (self._captured_count+self._cooled_count)/(total+len(points))
         self.progress({'phase':phase,'output_state':self.power.output_state,
                        'elapsed_s':max(0,time.monotonic()-self._started_at),
@@ -80,6 +82,13 @@ class BiasScanController:
                        'on_elapsed_s':max(0,time.monotonic()-self._on_at) if self._on_at else self._last_on_duration,
                        'actual_current_a':self._telemetry.get('current_a') if self._telemetry else None,
                        'completed_points':len(self.summaries),'total_points':len(self.plan),**self._last_progress})
+
+    def save_pending(self):
+        pending = getattr(self, '_pending_group', None)
+        if pending:
+            from .batched import save_group
+            save_group(self, *pending)
+            self._pending_group = None
 
     def off(self):
         with self._off_lock:
@@ -238,116 +247,5 @@ class BiasScanController:
         self.publish(self.result['status'])
 
     def run(self):
-        if self.config.waveform_guard_enabled:
-            from .guarded import run_guarded
-            return run_guarded(self)
-        try:
-            self._prepare_run()
-            self.result.update(guarded=False, scan_plan=[{'target_a':i,'awg_vpp':v} for i,v in self.plan])
-            for index,(target,amplitude) in enumerate(self.plan):
-                acquisition = AcquisitionConfig.from_dict(self.acquisition.to_dict())
-                acquisition.awg.pk_to_pk_v = amplitude
-                acquisition.validate()
-                self.check();self._fault=None;self._telemetry=None;self._point_done=threading.Event();self._threads=[]
-                self._point_peak_a = target
-                captured=[];error=None;batch_start=None;on_start=None;self._last_on_duration=0
-                self.publish('setting',point=index,target_a=target,repeat=0,awg_vpp=amplitude)
-                try:
-                    if target==0:
-                        self.off();self._telemetry=self.power.read_off_actual()
-                        if not math.isfinite(self._telemetry['current_a']) or abs(self._telemetry['current_a'])>self.config.stable_abs_a:raise RuntimeError('断电基线电流异常')
-                    else:
-                        self.power.configure(self.limits['voltage_limit_v'],target)
-                        self.protection.arm(self.limits['max_on_s'])
-                        self.check()
-                        self._on_at=on_start=time.monotonic()
-                        self._threads=[threading.Thread(target=self._deadline,args=(on_start+self.limits['max_on_s'],self._point_done),daemon=True)]
-                        self._threads[0].start()
-                        self.power.output_on();self.event('on',target_a=target)
-                        monitor=threading.Thread(target=self._monitor,args=(self._point_done,),daemon=True);self._threads.append(monitor);monitor.start()
-                        self.publish('stabilizing',point=index,target_a=target,repeat=0)
-                        self._stable(target)
-                    batch_start=time.monotonic();previous=None
-                    for repeat in range(self.config.repeats):
-                        if previous is not None:
-                            while not self.stop_event.is_set() and time.monotonic()<previous+self.config.interval_s:
-                                self.stop_event.wait(max(0,previous+self.config.interval_s-time.monotonic()))
-                        self.check()
-                        remaining=(on_start+self.limits['max_on_s']-time.monotonic()) if on_start else self.acquisition.capture_timeout_s
-                        if remaining<=0:raise RuntimeError('单档最大通电时间超限')
-                        self.publish('capturing',point=index,target_a=target,repeat=repeat+1)
-                        started=previous=time.monotonic();telemetry=dict(self._telemetry)
-                        self.event('capture_start',point=index,repeat=repeat+1)
-                        result=self.adapter.capture(acquisition,remaining)
-                        ended=time.monotonic()
-                        # No reads, callbacks, analysis, compression or disk access here.
-                        if repeat==self.config.repeats-1:
-                            self._point_done.set()
-                            try:self.off()
-                            finally:captured.append((result,telemetry,started,ended))
-                        else:captured.append((result,telemetry,started,ended))
-                        self.event('capture_return',point=index,repeat=repeat+1,returned_at=ended)
-                        self._captured_count += 1
-                        self.check()
-                except BaseException as exc:
-                    error=RuntimeError(self._fault) if self._fault else exc
-                finally:
-                    # Signal telemetry to leave before OFF; no subsequent normal queries.
-                    self._point_done.set()
-                    try:self.off()
-                    except Exception as exc:error=exc
-                    if error is not None or self._fault:
-                        try:self.adapter.stop()
-                        except Exception as exc:self.event("pico_stop_failed",reason=str(exc))
-                    for thread in self._threads:thread.join(timeout=.8)
-                    if any(thread.is_alive() for thread in self._threads):
-                        self.result["instrument_cleanup_pending"]=True
-                        error=RuntimeError("安全监控或 Pico 停止未返回，仪器占用保持锁定")
-                    try:
-                        if not self._unknown_latched:self.protection.disarm()
-                    except Exception as exc:error=exc
-                try:
-                    self.event('analyze',point=index)
-                    rows=[]
-                    point_folder = self.folder / (f'{index:02d}_电流{target:.3f}A' + ('_断电基线' if target == 0 else ''))
-                    if self.config.amplitude_mode != 'snapshot':
-                        point_folder = self.folder / f'电流{target:.3f}A' / f'{index:03d}_AWG{amplitude:.3f}Vpp'
-                    point_folder.mkdir(parents=True,exist_ok=True)
-                    for repeat,(result,telemetry,started,ended) in enumerate(captured):
-                        value,reason=BiasScanAnalyzer.vpp(result,self.config)
-                        row={'point':index,'repeat':repeat+1,'target_a':target,'awg_vpp':amplitude,
-                             'actual_current_a':telemetry['current_a'],'telemetry_monotonic_time':telemetry['monotonic_time'],
-                             'capture_start':started,'capture_end':ended,'capture_duration_s':ended-started,'telemetry_wall_time':telemetry.get('wall_time'),
-                             'vpp_v':value,'vpp_basis':'filtered' if self.config.filter_enabled else 'raw',
-                             'filter_low_hz':self.config.filter_low_hz,'filter_high_hz':self.config.filter_high_hz,
-                             'filter_transition_hz':self.config.filter_transition_hz,'valid':value is not None,'invalid_reason':reason,
-                             'file':(point_folder / f'重复{repeat+1:02d}__PZT-{self.config.pzt_channel}__原始波形.npz').relative_to(self.folder).as_posix()}
-                        row.update(BiasScanAnalyzer.excitation(result,self.config))
-                        self.event('save_waveform',point=index,repeat=repeat+1)
-                        save_npz(result,self.folder/row['file']);rows.append(row);self.rows.append(row)
-                    summary=BiasScanAnalyzer.summary(target,rows,self.config.repeats,eligible=error is None,method=self.config.aggregation)
-                    summary.update(awg_vpp=amplitude,batch_duration_s=max(0,time.monotonic()-batch_start) if batch_start else 0,
-                                   capture_batch_duration_s=captured[-1][3]-batch_start if captured else 0,
-                                   on_duration_s=self._off_at-on_start if on_start and self._off_at else 0)
-                    summary['capture_batch_target_met']=bool(captured and summary['capture_batch_duration_s']<=1.5 and len(captured)==self.config.repeats)
-                    current_for_cooling = max(target, self._point_peak_a) if target else 0.0
-                    summary['cooldown_current_a'] = current_for_cooling
-                    summary['cooldown_s'] = self.config.cooldown_for(current_for_cooling, self.simulate)
-                    summary['cooling_mode'] = self.config.cooling_mode
-                    self._csv(point_folder / 'runs.csv', rows)
-                    (point_folder / 'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
-                    self.summaries.append(summary);self.result['revision']+=1;self.persist()
-                except BaseException as exc:error=error or exc
-                if error:raise error
-                self.publish('saved',point=index,target_a=target,repeat=len(captured))
-                self._cool(summary['cooldown_s'])
-                self._cooled_count += 1
-            self.result['status']='complete'
-        except BaseException as exc:
-            self.result['status']='stopped' if self.stop_event.is_set() or isinstance(exc,KeyboardInterrupt) else 'error'
-            self.result['reason']=str(exc) or type(exc).__name__
-            self.result['interrupted']=isinstance(exc,KeyboardInterrupt)
-            self.event('aborted',reason=self.result['reason'])
-        finally:
-            self._finalize_run()
-        return self.result
+        from .batched import run_batches
+        return run_batches(self)
