@@ -113,7 +113,7 @@ class PowerRecoveryTests(unittest.TestCase):
         with patch.object(p,'_query',side_effect=lambda instrument,command:'140' if command=='VOLT?' else '20'):
             p.configure(140,20)
         configured(i)
-        for current in [20.1,float('nan'),-1]:
+        for current in [21.66,float('nan'),-1]:
             with self.assertRaises(ValueError):p.configure(140,current)
 
     def test_status_transition_longer_than_old_100ms_budget(self):

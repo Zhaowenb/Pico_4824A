@@ -1226,8 +1226,10 @@ class PicoWebHandler(BaseHTTPRequestHandler):
             elif path == "/styles.css":
                 self._send_asset("styles.css", "text/css; charset=utf-8")
             elif path == "/api/bias-scan/limits":
-                from .bias_scan.limits import MAX_CURRENT_A
-                self._send_json({"max_current_a":MAX_CURRENT_A})
+                from .bias_scan.limits import MAX_CURRENT_A, LOAD_REFERENCE_RESISTANCE_OHM, SUPPLY_MAX_POWER_W
+                self._send_json({"max_current_a":MAX_CURRENT_A,
+                    "reference_resistance_ohm":LOAD_REFERENCE_RESISTANCE_OHM,
+                    "supply_max_power_w":SUPPLY_MAX_POWER_W})
             elif path == "/api/bias-scan/resources":
                 from .bias_scan import IT6524DController
                 self._send_json({"resources":self.control.bias_resources()})

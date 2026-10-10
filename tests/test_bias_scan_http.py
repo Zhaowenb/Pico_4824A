@@ -115,7 +115,7 @@ class BiasHttpTests(unittest.TestCase):
 
     def test_twenty_amp_limits_and_preflight(self):
         limits=json.loads(self.req('/api/bias-scan/limits')[1])
-        self.assertEqual(limits['max_current_a'],20)
+        self.assertEqual(limits['max_current_a'],21.65)
         payload={'simulate':True,'config':self.acq,'bias':{**self.config,'stop_a':20,'actual_current_limit_a':20}}
         response=json.loads(self.req('/api/bias-scan/preflight',payload)[1])
         self.assertEqual(response['points'][-1],20)

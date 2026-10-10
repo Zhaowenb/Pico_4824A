@@ -8,6 +8,7 @@ import threading
 import time
 
 from .analyzer import BiasScanAnalyzer
+from .limits import SUPPLY_MAX_POWER_W
 from .safety import SafetyProtection, SimulationProtection, SoftwareProtection, TemperatureProvider
 from ..storage import save_npz
 from ..storage_naming import session_directory, preferences
@@ -142,6 +143,8 @@ class BiasScanController:
                     raise RuntimeError('实际电流超过安全上限或出现负值')
                 if telemetry['voltage_v'] < 0 or telemetry['voltage_v'] > self.limits['voltage_limit_v']+.02:
                     raise RuntimeError('实际电压超过合规限值')
+                if telemetry['current_a'] * telemetry['voltage_v'] > SUPPLY_MAX_POWER_W:
+                    raise RuntimeError(f'实测功率超过 IT6524D {SUPPLY_MAX_POWER_W:g} W 上限')
                 self._point_peak_a = max(self._point_peak_a, telemetry['current_a'])
                 if self.config.cooling_mode in {'temperature','current_temperature'} and self.temperature_reading() >= self.config.temperature_limit_c:
                     raise RuntimeError('温度超过安全阈值')
