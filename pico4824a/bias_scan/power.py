@@ -151,9 +151,18 @@ class IT6524DController:
         try:
             self.instrument.clear()
         except Exception as exc:
+            if getattr(exc, 'error_code', None) == -1073807257:  # VI_ERROR_NSUP_OPER
+                # PyVISA-py USBTMC does not implement viClear. A matching IDN
+                # barrier in _resync_off must still drain stale replies before
+                # any numeric output state can be trusted. Never treat this
+                # fallback alone as successful synchronization or output OFF.
+                self._needs_clear = True
+                self._trace('USB clear unsupported; use identity barrier', error=exc)
+                return False
             self.last_error = f'USB 通信失步，清理失败；需要重新连接：{exc}'
             raise RuntimeError(self.last_error) from exc
         self._needs_clear = False
+        return True
 
     def _resync_off(self, deadline):
         """Drain to a recognizable identity reply before trusting booleans.

@@ -2,6 +2,9 @@
 import unittest
 from pico4824a.bias_scan import IT6524DController
 
+class UnsupportedClear(Exception):
+    error_code = -1073807257
+
 class Instrument:
     def __init__(self):
         self.timeout=0;self.identified=False;self.commands=[];self.responses=[];self.clear_count=0
@@ -63,6 +66,30 @@ class PowerRecoveryTests(unittest.TestCase):
         i.clear=fail
         with self.assertRaisesRegex(RuntimeError,'USB disconnected'):p.output_off()
         self.assertEqual(p.output_state,'unknown')
+
+    def test_unsupported_clear_uses_identity_barrier_before_confirming_off(self):
+        p,i=self.power();i.responses=['1','0','0']
+        i.clear=lambda:(_ for _ in ()).throw(UnsupportedClear('viClear unsupported'))
+        original=i.query
+        i.query=lambda command:'1' if command=='*IDN?' else original(command)
+        pending=iter(['0.2',p.identity])
+        i.read=lambda:next(pending)
+        start=len(i.commands)
+        p.output_off()
+        self.assertEqual(p.output_state,'off')
+        self.assertFalse(p._needs_clear)
+        self.assertEqual(sum(d['command']=='*IDN? continuation' for d in p.diagnostics),2)
+        self.assertNotIn(':OUTPut:STATe 1',i.commands[start:])
+
+    def test_unsupported_clear_without_identity_keeps_output_unknown(self):
+        p,i=self.power();p._needs_clear=True
+        i.clear=lambda:(_ for _ in ()).throw(UnsupportedClear('viClear unsupported'))
+        original=i.query
+        i.query=lambda command:'0' if command=='*IDN?' else original(command)
+        i.read=lambda:'0'
+        with self.assertRaisesRegex(RuntimeError,'身份回复'):p.output_off()
+        self.assertEqual(p.output_state,'unknown')
+        self.assertTrue(p._needs_clear)
 
     def test_web_recovery_reopens_transport_and_rechecks_model(self):
         from pico4824a.web import WebControlState
