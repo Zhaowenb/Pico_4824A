@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 WG_DEPLOY_ROOT=/home/pi/Pico_4824A_btf
-WG_IMAGE=${1:-waveguard-r76s:143942a}
+WG_IMAGE=${1:-waveguard-r76s:local}
+WG_BIND_ADDRESS=${WG_BIND_ADDRESS:-0.0.0.0}
 WG_FILES=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 if [ "$(id -u)" -ne 0 ]; then echo 'Run with sudo on the R76S host.' >&2; exit 1; fi
 if [ ! -f "$WG_DEPLOY_ROOT/app/pico4824a/web.py" ]; then echo 'Project checkout missing.' >&2; exit 1; fi
@@ -22,7 +23,7 @@ docker create --name waveguard-r76s --read-only --cap-drop=ALL --security-opt=no
   --mount type=bind,src="$WG_DEPLOY_ROOT/app",dst=/app \
   --mount type=bind,src=/usr/share/zoneinfo,dst=/usr/share/zoneinfo,readonly \
   -e TZ=Asia/Shanghai -e OPENBLAS_NUM_THREADS=4 -e OMP_NUM_THREADS=4 \
-  -p 192.168.10.26:4824:4824 \
+  -p "$WG_BIND_ADDRESS:4824:4824" \
   --log-opt max-size=10m --log-opt max-file=3 "$WG_IMAGE"
 systemctl daemon-reload
 systemctl enable --now waveguard-r76s.service

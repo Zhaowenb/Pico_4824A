@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm
 ARG PICO_DRIVER_VERSION=2.2.265-2r7906
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg libusb-1.0-0 libstdc++6 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg git libusb-1.0-0 libstdc++6 \
     && curl -fsSL -A 'Mozilla/5.0' https://labs.picotech.com/Release.gpg.key | gpg --dearmor -o /usr/share/keyrings/picotech.gpg \
     && printf '%s\n' 'deb [signed-by=/usr/share/keyrings/picotech.gpg] https://labs.picotech.com/rc/picoscope7/debian/ picoscope main' > /etc/apt/sources.list.d/picotech.list \
     && apt-get update && apt-get install -y --no-install-recommends libps4000a=${PICO_DRIVER_VERSION} \

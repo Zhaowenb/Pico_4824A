@@ -14,6 +14,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import signal
+import os
+import sys
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlparse, quote
@@ -61,6 +63,7 @@ from .waveforms import normalized_waveform
 from .time_frequency import time_frequency_map
 from . import interference
 from .file_browser import list_directory
+from .software_update import SoftwareUpdater
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -1118,6 +1121,10 @@ def awg_preview_payload(raw: dict[str, Any], max_points: int = 2400) -> dict[str
 
 
 class PicoWebHandler(BaseHTTPRequestHandler):
+    def software_updater(self):
+        if not hasattr(self.server, 'software_updates'):
+            self.server.software_updates = SoftwareUpdater(PROJECT_DIR, self.control)
+        return self.server.software_updates
     server_version = "Pico4824AWeb/0.1"
 
     @property
@@ -1230,6 +1237,10 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_asset("app.js", "text/javascript; charset=utf-8")
             elif path == "/styles.css":
                 self._send_asset("styles.css", "text/css; charset=utf-8")
+            elif path == "/api/software-update":
+                self._send_json(self.software_updater().snapshot())
+            elif path == "/ui/software-update.js":
+                self._send_asset("ui/software-update.js", "text/javascript; charset=utf-8")
             elif path == "/api/bias-scan/limits":
                 from .bias_scan.limits import MAX_CURRENT_A, LOAD_REFERENCE_RESISTANCE_OHM, SUPPLY_MAX_POWER_W
                 self._send_json({"max_current_a":MAX_CURRENT_A,
@@ -1313,6 +1324,9 @@ class PicoWebHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
         path = urlparse(self.path).path
         try:
+            updater = getattr(self.server, 'software_updates', None)
+            if updater and updater.snapshot()['phase'] in {'installing','restarting'}:
+                raise RuntimeError('软件正在更新，请等待服务重启后操作')
             if getattr(self.server, "shutdown_in_progress", False):
                 self._send_json({"error": "服务正在关闭"}, HTTPStatus.SERVICE_UNAVAILABLE)
                 return
@@ -1345,7 +1359,21 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                     threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
             payload = self._read_json()
-            if path == "/api/bias-scan/connect":
+            if path.startswith('/api/software-update/'):
+                origin = self.headers.get('Origin')
+                if self.headers.get('X-WaveGuard-Update') != '1' or (origin and origin != 'http://'+self.headers.get('Host','')):
+                    self._send_json({'error':'更新操作仅允许从当前工作站页面发起'}, HTTPStatus.FORBIDDEN)
+                    return
+                updater = self.software_updater()
+                if path == '/api/software-update/check':
+                    self._send_json(updater.check(), HTTPStatus.ACCEPTED)
+                elif path == '/api/software-update/apply':
+                    self._send_json(updater.apply(), HTTPStatus.ACCEPTED)
+                elif path == '/api/software-update/preferences':
+                    self._send_json(updater.preferences(payload))
+                else:
+                    self._send_json({'error':'not found'}, HTTPStatus.NOT_FOUND)
+            elif path == "/api/bias-scan/connect":
                 self._send_json(self.control.bias_connect(payload))
             elif path == "/api/bias-scan/recover":
                 self._send_json(self.control.bias_recover())
@@ -1536,6 +1564,12 @@ def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
     server = ThreadingHTTPServer((host, port), PicoWebHandler)
     server.web_assets = snapshot_web_assets()  # type: ignore[attr-defined]
     server.control = WebControlState()  # type: ignore[attr-defined]
+    def restart_updated_server():
+        server.restart_after_update = True
+        server.update_hardware_closed = True
+        server.shutdown()
+    server.software_updates = SoftwareUpdater(PROJECT_DIR, server.control, restart_updated_server)
+    server.software_updates.snapshot()
     try:
         server.control.initialize_hardware()  # type: ignore[attr-defined]
     except Exception as exc:
@@ -1560,11 +1594,14 @@ def serve(host: str = "127.0.0.1", port: int = 4824) -> None:
         pass
     finally:
         try:
-            server.control.shutdown()  # type: ignore[attr-defined]
+            if not getattr(server, 'update_hardware_closed', False):
+                server.control.shutdown()  # type: ignore[attr-defined]
         finally:
             server.server_close()
             if previous_term is not None:
                 signal.signal(signal.SIGTERM, previous_term)
+    if getattr(server, 'restart_after_update', False):
+        os.execv(sys.executable, [sys.executable, '-B', '-m', 'pico4824a', 'web', '--host', host, '--port', str(port)])
 
 
 if __name__ == "__main__":

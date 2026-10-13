@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm
 COPY debs/ /tmp/waveguard-debs/
-RUN dpkg -i /tmp/waveguard-debs/*.deb && ldconfig && rm -rf /tmp/waveguard-debs
+RUN dpkg -i /tmp/waveguard-debs/*.deb && command -v git && ldconfig && rm -rf /tmp/waveguard-debs
 COPY wheels/ /tmp/waveguard-wheels/
 RUN pip install --no-index --find-links=/tmp/waveguard-wheels numpy picosdk pyvisa pyvisa-py pyusb \
     && rm -rf /tmp/waveguard-wheels

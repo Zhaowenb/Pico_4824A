@@ -23,4 +23,6 @@ data/launcher_logs/
 data/bias_scans/
 data/analysis_exports/
 /configs/storage-naming.json
+/configs/software-updates.json
+data/software_updates/
 data/**/exports/
