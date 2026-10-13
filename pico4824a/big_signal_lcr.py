@@ -21,6 +21,7 @@ import numpy as np
 
 from .config import AcquisitionConfig, CHANNEL_NAMES, RANGE_VOLTS
 from .device import CaptureResult, Pico4824A
+from .storage_naming import session_directory
 from .storage import save_npz
 
 
@@ -622,8 +623,7 @@ def execute_big_signal_lcr(
     if base_config.sample_rate_hz / max(config.frequencies_hz) < 8:
         raise ValueError("最高大信号 LCR 频率至少需要每周期 8 个采样点")
 
-    stamp = datetime.now().strftime("big_lcr_%Y%m%d_%H%M%S_%f")
-    directory = output_root / stamp
+    directory = session_directory(output_root, "big_lcr", simulated=getattr(device, "simulate", False))
     raw_dir = directory / "raw"
     raw_dir.mkdir(parents=True, exist_ok=False)
     (directory / "big_lcr_config.json").write_text(
@@ -712,8 +712,8 @@ def execute_big_signal_lcr(
                 path = save_npz(
                     capture,
                     raw_dir / (
-                        f"p{point_index:05d}_f{frequency:012.3f}_v{drive_vpp:07.4f}"
-                        f"_r{repeat:03d}_a{attempts:02d}.npz"
+                        f"档{point_index:04d}__{frequency/1000:g}kHz__激励{drive_vpp:g}Vpp"
+                        f"__重复{repeat:02d}__尝试{attempts:02d}.npz"
                     ),
                 )
                 for key, value in _capture_peak_metrics(capture, config).items():

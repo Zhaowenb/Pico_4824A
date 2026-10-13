@@ -201,7 +201,8 @@ class AcquisitionConfig:
         return asdict(self)
 
     def save(self, path: str | Path) -> Path:
-        target = Path(path)
+        from .storage_naming import output_path
+        target = output_path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
         return target

@@ -11,7 +11,8 @@ import numpy as np
 
 from .config import AcquisitionConfig, AwgConfig, ChannelConfig, RANGE_VOLTS, TriggerConfig
 from .device import CaptureResult, Pico4824A
-from .storage import default_stem, save_csv, save_npz
+from .storage import save_csv, save_npz
+from .storage_naming import capture_stem
 
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
@@ -236,16 +237,23 @@ class ControlApp:
         if self.result is None:
             messagebox.showinfo("无数据", "请先完成一次采集")
             return
+        if getattr(self, "_saved_result", None) is not self.result:
+            self._saved_stem = capture_stem(self.result)
+            self._saved_result = self.result
         suffix = f".{kind}"
         path = filedialog.asksaveasfilename(
-            initialdir=PROJECT_DIR / "data",
-            initialfile=default_stem() + suffix,
+            initialdir=self._saved_stem.parent,
+            initialfile=self._saved_stem.name + suffix,
             defaultextension=suffix,
             filetypes=[(kind.upper(), "*" + suffix)],
         )
         if not path:
             return
-        saved = save_npz(self.result, path) if kind == "npz" else save_csv(self.result, path)
+        try:
+            saved = save_npz(self.result, path) if kind == "npz" else save_csv(self.result, path)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("保存失败", str(exc))
+            return
         self.status.set(f"已保存：{saved}")
 
 

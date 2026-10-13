@@ -15,6 +15,7 @@ import numpy as np
 
 from .config import AcquisitionConfig, CHANNEL_NAMES
 from .device import CaptureResult, Pico4824A
+from .storage_naming import session_directory
 from .storage import save_npz
 
 
@@ -535,7 +536,8 @@ def write_resistor_calibration(
             "corrected_real_ohm": float(corrected.real),
             "corrected_imag_ohm": float(corrected.imag),
         })
-    target = Path(path)
+    from .storage_naming import output_path
+    target = output_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema": "pico4824a-lcr-resistor-calibration-v1",
@@ -559,7 +561,7 @@ def discover_lcr_calibrations(output_root: str | Path) -> list[dict[str, Any]]:
     profiles: list[dict[str, Any]] = []
     if not root.is_dir():
         return profiles
-    for path in root.glob("lcr_*/calibration.json"):
+    for path in root.glob("*/calibration.json"):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
             points = raw.get("points", [])
@@ -617,8 +619,7 @@ def execute_lcr(
     else:
         calibration = None
 
-    stamp = datetime.now().strftime("lcr_%Y%m%d_%H%M%S_%f")
-    directory = output_root / stamp
+    directory = session_directory(output_root, "lcr", details=f'电阻校准{calibration_standard_ohm:g}Ohm' if calibration_run else '阻抗测量', simulated=getattr(device, "simulate", False))
     raw_dir = directory / "raw"
     raw_dir.mkdir(parents=True, exist_ok=False)
     (directory / "lcr_config.json").write_text(
@@ -680,7 +681,7 @@ def execute_lcr(
                     summary = aggregate_lcr_rows(rows)
                     return LcrOutcome(directory, rows, summary, True)
                 raise
-            file_name = f"f{frequency:012.3f}_r{repeat:03d}.npz"
+            file_name = f"频率{frequency/1000:g}kHz__重复{repeat:02d}.npz"
             path = save_npz(capture, raw_dir / file_name)
             factor = (
                 calibration.factor_at(frequency)

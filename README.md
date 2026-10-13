@@ -1,245 +1,311 @@
-# PicoScope 4824A 八通道同步采集与 AWG 控制程序
+# WaveGuard · PicoScope 4824A 导波工作站
 
-本目录是一套独立的 PicoScope 4824A 控制程序。所有程序、配置、测试及默认采集数据均位于本目录内，不依赖工程中其他硬件控制代码。
+**部署分支：`btf`。** 支持 Windows 本机／局域网 Web 工作站及 Linux ARM64 容器。PicoScope 和 IT6524D 连接到**运行 Python 服务的电脑**，其他电脑的浏览器只访问界面。
 
-第一次安装和日常操作请先看[《配置与使用说明》](配置与使用说明.md)；本文档保留功能概览、测量原理和详细分析说明。
+> **在另一台 Windows 从零部署，按 1 → 6 执行。** 不需要原电脑的 F 盘路径，不依赖 `Pico_4824A` 参考工程。不要复制旧电脑的 `.venv`，每台电脑单独创建环境。
 
-## 已实现功能
+## 目录
 
-- A～H 八路 ADC 同步块采集，通道可独立启用/禁用
-- AC/DC 耦合、±10 mV～±50 V 量程、模拟偏置
-- 简单硬件触发：A～H触发源、阈值、方向、采样时间和触发位置比例
-- 14 位 AWG：正弦、方波、三角波、Hann 加窗正弦脉冲、主动消振、线性爬升保持、自定义 CSV
-- ADC 先武装、AWG 后软件触发的激励—采集流程
-- 实时波形可选零相位 FFT 带通显示，并支持时间缩放/平移、幅值缩放和双击复位；保存数据保持原始值
-- NPZ（推荐）及 CSV + JSON 元数据保存
-- 单独扫频、单独扫周期及频率×周期二维笛卡尔扫描
-- 扫描每点重复采集、可停止、自动保存原始 NPZ、逐次 CSV 与按参数点汇总 CSV
-- 基于双通道相量拟合的 LCR/复阻抗单频与扫频测量，支持精准电阻逐频点复数校准、夹具校正和串/并联等效参数
-- `/lcr` 页面内的大信号/小信号互斥模式；大信号模式提供可配置换算系数、ATA 面板增益估算、Pico 双通道自动量程、疑似跳闸暂停告警及人工确认继续
-- `/lcr` 内提供大信号线性度/波形畸变采集；独立的 `/lcr-linearity`“LCR数据分析”页互斥支持大信号 LCR、大信号线性度与波形畸变、小信号 LCR 三种文件夹分析
-- 本地 Web 控制台、Tk 桌面控制界面和命令行控制
-- 无硬件仿真模式及自动测试
+- [1. 安装前准备](#1-安装前准备)
+- [2. 拉取 btf 分支](#2-拉取-btf-分支)
+- [3. 安装 Python 依赖](#3-安装-python-依赖)
+- [4. 无硬件验证与网页启动](#4-无硬件验证与网页启动)
+- [5. 连接 PicoScope 与 IT6524D](#5-连接-picoscope-与-it6524d)
+- [6. 日常启动、停止与局域网访问](#6-日常启动停止与局域网访问)
+- [页面功能](#页面功能)
+- [偏置与幅值扫描首次配置](#偏置与幅值扫描首次配置)
+- [数据保存与换机迁移](#数据保存与换机迁移)
+- [更新版本](#更新版本)
+- [常见问题](#常见问题)
+- [Linux 与详细文档](#linux-与详细文档)
 
-## 关键硬件能力与限制
+## 1. 安装前准备
 
-- ADC：8 通道、12 位；5～8 路启用时实时采样率最高 40 MS/s，1～4 路最高 80 MS/s。
-- ADC 缓存：256 MS，启用通道共享；驱动会返回当前配置实际可用点数。
-- AWG：14 位、80 MS/s 更新率、最大 16384 点、1 MHz 模拟带宽。
-- AWG 输出：总输出必须处于 ±2 V 范围，即 `abs(offset) + Vpp/2 <= 2 V`。
-- 各 ADC 通道由同一采样时钟同步，但 USB/Windows 软件命令本身不是确定性触发源。
+推荐 **Windows 10/11 x64 + 标准 CPython 3.12 x64**。项目要求 Python ≥3.10；不要使用 32 位 Python 或 Git/MSYS 自带的 Python。
 
-## 推荐同步接线
+| 软件 | 仿真／离线分析 | Pico 实机 | IT6524D 偏置扫描 | 获取方式 |
+|---|---|---|---|---|
+| Git | 拉取和更新需要 | 同左 | 同左 | [Git for Windows 官方安装](https://git-scm.com/install/windows)，确保终端能执行 `git` |
+| Python x64 | 必需 | 必需 | 必需 | [Python Windows 官方下载](https://www.python.org/downloads/windows/)，安装时启用 PATH |
+| NumPy、picosdk Python 包 | 必需 | 必需 | 必需 | 第 3 步 `setup.ps1` 自动安装 |
+| Pico 官方 x64 驱动／PicoSDK | 不需要 | 必需 | 必需 | [PicoSDK 64 位官方下载](https://www.picotech.com/downloads/_lightbox/pico-software-development-kit-64bit) |
+| PyVISA Python 包 | 不需要 | 单独 Pico 不需要 | 必需 | 第 3 步另外安装 |
+| 系统 VISA USB 驱动 | 不需要 | 单独 Pico 不需要 | 必需 | Windows 使用 [NI-VISA 官方下载](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html)，确认版本支持你的 Windows |
 
-为了让 AWG 激励与 ADC 采样在硬件上精确对齐：
+**不要混淆 Python 包与仪器驱动：**
 
-1. AWG 输出接外部激励功放输入。
-2. 将 AWG 输出或功放的低压监测输出分一路接到触发通道（Web 界面默认 CH H）。
-3. 其余 ADC 通道接传感器输出；务必共地并确保所有输入不超过所选量程及设备绝对最大值。
-4. 程序先执行 `RunBlock` 武装 ADC，再发出 AWG 软件触发；所选触发通道（Web 默认 CH H）检测到上升沿后，ADC 以硬件触发点对齐数据。
+- `pip install picosdk` 是 Python 封装，不安装 Pico 的 Windows DLL／USB 驱动。
+- `pip install pyvisa` 是 Python 接口，不安装 NI-VISA USB 驱动。[PyVISA 安装说明](https://pyvisa.readthedocs.io/en/stable/introduction/getting.html)
+- 使用浏览器界面不需要 Node、npm 或 Playwright；它们仅用于开发时的浏览器测试。
 
-如果功放输出为高压，禁止直接连接 PicoScope。应使用隔离/衰减/监测端口，并核算 PicoScope 输入范围。4824A 的 BNC 外壳及通道地不是彼此隔离的。
+只做分析或仿真时，可以先跳过仪器驱动。驱动安装可能需要管理员权限或重启 Windows；项目日常启动通常不需要管理员权限。安装 Git／Python 后重新打开 PowerShell，确保 PATH 生效。
 
-## Windows 安装
+Python 下载时选择 **Windows installer (64-bit)**；不要下载源代码压缩包、embeddable 包或 ARM64 安装包。若使用新的 Python 安装管理器，也须先安装可供终端调用的标准 x64 Python 运行时，再执行本项目 setup。
 
-1. 安装 64 位 PicoSDK（需要 `ps4000a.dll` 驱动）。官方下载：<https://www.picotech.com/downloads/_lightbox/pico-software-development-kit-64bit>
-2. 在 PowerShell 中运行：
+## 2. 拉取 btf 分支
 
-```powershell
-cd F:\Project\01guided_waves\software\Pico_4824A
-.\setup.ps1
-```
-
-3. USB 连接 PicoScope 4824A 后启动界面：
+打开 **PowerShell**。示例目录为 `D:\Pico\Pico_4824A_btf`；没有 D 盘，可把 `D:\Pico` 改为 `C:\Pico` 或其他可写目录。
 
 ```powershell
-.\start_gui.ps1
+New-Item -ItemType Directory -Force D:\Pico | Out-Null
+Set-Location D:\Pico
+git clone --branch btf --single-branch https://github.com/Zhaowenb/Pico_4824A.git Pico_4824A_btf
+Set-Location .\Pico_4824A_btf
+git branch --show-current
 ```
 
-推荐使用本地 Web 控制台：
+最后一行应输出 **`btf`**。目录中应有 `README.md`、`setup.ps1`、`start_web.ps1`、`pico4824a/` 和 `web/`。
+
+- 已有同名目录时，先确认内容，不要覆盖。已有 Git 副本按后面的“更新版本”操作。
+- GitHub ZIP 必须选 `btf` 分支。ZIP 没有 `.git`，一键更新不可用；需要一键更新请用 `git clone`。
+- 克隆显示权限错误时，检查 GitHub 账号是否有仓库访问权；它与仪器驱动无关。
+
+## 3. 安装 Python 依赖
+
+**以下命令都在项目根目录执行。** 即使终端前面显示 `(base)`，仍使用本项目 `.venv\Scripts\python.exe`，避免依赖装到其他环境。
+
+### 基础安装：所有用户执行
 
 ```powershell
-.\start_web.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-然后在浏览器打开 <http://127.0.0.1:4824>。服务默认只监听本机地址，不会发布到互联网。连接 USB 设备的电脑必须保持服务运行。
+脚本会寻找 Windows x64 Python、创建项目内 `.venv`，安装 `requirements.txt` 中的 NumPy 和 picosdk。`ExecutionPolicy Bypass` 只作用于这次 PowerShell 进程，不需要永久改变系统策略。
 
-Web 服务启动时会只打开一次 PicoScope，并立即把 AWG 明确设置为 `0 V DC`；之后单次采集和整组扫描都复用同一个设备会话，不再在每次点击时反复打开/关闭 USB 设备。每次任意波形配置前以及正常结束、异常、超时、人工停止和服务退出时，程序都会再次执行 AWG 归零。`ps4000aStop` 只停止 ADC，因此程序另行调用信号发生器接口来定义输出状态。
-
-首次连接 ATA-2021B 验证时，先关闭功放输出或置于待机状态，再启动 Web 服务；看到状态栏显示“设备已连接；AWG 已置为 0 V”后，先用示波器直接检查 Pico AWG 端口的启动和单次脉冲，再启用功放。这样可以把不可避免的 USB/设备首次打开过程与功放使能过程分开。
-
-Web 控制台分为六个独立地址，顶部导航可以直接切换：
-
-- <http://127.0.0.1:4824/measure>：实时测量、同步通道、触发、AWG和单次数据保存。
-- <http://127.0.0.1:4824/sweep>：单独扫频、单独扫周期、二维扫描和逐次/汇总评价。
-- <http://127.0.0.1:4824/lcr>：页面内切换 ATA-2021B 大信号 LCR 或原有小信号 LCR；大信号显示 `|Z|`、Phase、`Rs/Xs`、`Leff`、`Q`、`Vrms/Irms`、Voltage/Current Monitor 波形和安全状态，小信号的原有 Bode/Nyquist、校准和等效参数保持不变。
-- <http://127.0.0.1:4824/lcr-linearity>：LCR 数据分析入口，可选择大信号 LCR、大信号线性度与波形畸变、小信号 LCR 三种互斥文件夹分析；重新分析使用已保存数据，不重新激励。
-- <http://127.0.0.1:4824/file-analysis>：单个NPZ/CSV数据的波形、带通、频谱、时频和空间—时间对称性分析。
-- <http://127.0.0.1:4824/sweep-analysis>：完整参数扫描归档的热图、逐点/逐次指标、原始波形和N/f重新评价。
-
-硬件、AWG和扫描设置保存在当前浏览器的本地设置中，页面切换或重启Web服务后仍可恢复；实际每次采集和扫描仍会把完整配置写入数据文件。
-
-## LCR 复阻抗测量
-
-### ATA-2021B 大信号模式
-
-`/lcr` 默认进入“大信号测量”。Pico AWG 只输出 ATA-2021B 的低压输入，Voltage Monitor 和 Current Monitor 两个 SMA 分别回到两个 Pico ADC 通道；页面不会要求 AWG 监测端口，也不会把功放输出接入 Pico。两路监测系数可直接填写为“线圈实际电压 / Monitor V（V/V）”和“线圈实际电流 / Monitor V（A/V）”，并可设置 Current Monitor 极性。程序对监测端波形做同频最小二乘相量拟合，再计算 `Z=V/I`、`|Z|`、Phase、`Rs`、`Xs`、`Leff`、`Q`、`Vrms` 和 `Irms`。
-
-开始前必须填写 ATA 面板实际电压增益并勾选安全确认。扫描模式支持单点、单独扫频、单独扫 AWG Vpp，以及频率 × AWG Vpp 矩形扫描，得到 `Z(f,Vpp)`。Pico 双 Monitor 通道可自动调整 ADC 输入量程并最多重采两次，所有尝试的原始 NPZ 都保存。线圈电压 **400 Vpp**、电流 **2 Apeak** 是可调的程序提醒初值：超出记录 `WARN`，继续扫描，不作为硬件限值；它们高于 ATA-2021B 官网标称 200 Vpp / 0.5 Apeak。ADC 溢出、Monitor 故障和**疑似** ATA 跳闸仍停止后续组合点；疑似跳闸不是硬件状态读取。结果仍保存在 `data/lcr_big/big_lcr_时间戳`，不覆盖小信号数据。详细算法、安全边界和操作步骤见 [大信号保护与线性度说明](BIG_LCR_PROTECTION_AND_LINEARITY.md)。
-
-LCR 页面按 `LCR.asc`/`LCR.png` 中的双输出结构设计：AWG 接 `RF_IN1`；被测件接 `U19` 的 `HPOT–LPOT`；`RF_OUT1` 是器件电压监测，`RF_OUT2` 是反馈电阻形成的反相电流监测。只需要两个 Pico ADC 通道：`RF_OUT1` 接所选电压通道，`RF_OUT2` 接所选电流通道；其中任意一路可以兼作硬件触发，不需要 AWG 监测端口、分线或第三个触发通道。两个通道均可在 A～H 中选择，默认使用 A、B，并使用RF_OUT1触发；测量低阻抗器件时若RF_OUT1幅值太小，可切换为RF_OUT2触发。禁止把 18/20 V 电源、虚地节点或任何功放高压输出直接接到 PicoScope。
-
-默认换算关系为：
-
-```text
-Z = -Rf × (Gi/Gv) × V(RF_OUT1) / V(RF_OUT2)
-```
-
-负号来自图中 `VFB−LPOT` 的反相电流检测。`Rf` 是 `R2_1–R2_2` 之间实际装入的反馈电阻，不是原理图旁边未连接的候选电阻标称值；必须在网页填写实装值。两片 INA849 的默认增益按 `1 + 6000/6040 ≈ 1.993377` 设置，若实装增益电阻不同，也必须修改 `Gv/Gi`。如果实测已通过接线交换改变极性，可把“电流极性”切换为同相。
-
-程序先武装ADC，再软件触发AWG；所选的RF_OUT1或RF_OUT2上升沿只用于确定采集位置。复阻抗相位来自同一采样时钟下 `RF_OUT1/RF_OUT2` 两个相量之比，因此不依赖单独的AWG监测信号或其绝对触发时刻。程序输出带余弦缓升/缓降的平顶正弦，自动在稳定平顶区选择整数周期，用同频最小二乘同时拟合幅值、相位和直流项，再计算复阻抗。可选择单频、线性扫频或对数扫频，并设置每点重复次数。结果包括 `|Z|`、相位、`R+jX`、串/并联等效 R/C/L、Q/D、两路 RMS、拟合优度和残差 SNR；网页显示这些参数各自的频率曲线、Bode图、Nyquist图、最后一次原始波形和逐频点表格。频率、阻抗/电阻、电容和电感单位支持自动工程单位或手动固定，换算只影响网页显示，保存的CSV/NPZ仍使用Hz、Ω、F、H等SI单位。
-
-每次测量保存在 `data\lcr\lcr_日期_时间_微秒`：
-
-- `raw\*.npz`：每次重复的完整原始波形；
-- `runs.csv`：每次测量的相量拟合和阻抗结果；
-- `summary.csv`：每个频点的均值及标准差；
-- `lcr_config.json`：采集、激励、通道和校正参数快照。
-
-页面提供“精准电阻复数校准”。把标准电阻接到 DUT 位置，输入电阻的实测值，并按正式测量所需的频率表执行校准。软件在每个频点对重复测量的复阻抗求平均，然后计算 `K(f)=R标准/Z测量(f)`；正式测量使用 `Z校正(f)=K(f)×Z原始(f)`，所以会同时校正实部比例和虚部/相位误差。多频点校准可在校准范围内按对数频率插值，禁止外推；单频校准只能用于该频率。
-
-校准结果保存在对应 `data\lcr\lcr_日期_时间_微秒\calibration.json`，完成后会自动出现在“测量时使用的校准”列表。校准文件同时记录通道、量程、耦合、采样率、`Rf`、`Gv/Gi`、电流极性、手动幅相修正和激励幅值；其中任何参数变化，软件都会拒绝使用旧校准，要求重新校准。
-
-校正参数按以下顺序应用：手动阻抗幅值/相位校正 → 精准电阻逐频点复数校准 → 扣除串联残余 `R+jX` → 在导纳域扣除并联残余 `G+jB`。单个精准电阻属于一负载复数校准，适合消除两条测量链之间的相对增益和相位误差，但不能完全替代开路/短路/负载三标准校准，也不能消除超量程、前端饱和、虚地不稳或明显非线性造成的错误。
-
-首次上机前可在界面勾选“仿真模式”，或运行：
+确认环境：
 
 ```powershell
-.\run_simulation.ps1
+.\.venv\Scripts\python.exe -c "import sys,struct,numpy; print(sys.executable); print(sys.version); print('Python bits:',struct.calcsize('P')*8); print('NumPy:',numpy.__version__)"
 ```
 
-## 命令行
+应显示当前项目的 `.venv\Scripts\python.exe` 和 **64** 位。无需激活虚拟环境。
 
-在本目录执行：
+### 使用 IT6524D：额外执行
+
+先安装第 1 节的 NI-VISA，再安装 Python 包：
 
 ```powershell
-# 仿真采集
-python -m pico4824a capture --simulate --config config.example.json
-
-# 实机采集并同时保存 NPZ、CSV
-python -m pico4824a capture --config config.example.json --format both
-
-# 指定设备序列号
-python -m pico4824a capture --serial YOUR_SERIAL --config config.example.json
-
-# 生成新的默认配置
-python -m pico4824a generate-config config.json
+.\.venv\Scripts\python.exe -m pip install "pyvisa>=1.14"
 ```
 
-默认输出在 `data` 目录。NPZ 字段包括 `time_s`、`ch_A_v`～`ch_H_v` 以及 `metadata_json`；CSV 第一列是秒，后续列是各通道伏特值。
+`setup.ps1` **不会安装 PyVISA，也不会安装系统 VISA 驱动**。这两项都要单独完成。
 
-## 自动扫频与扫周期
+本指南的 Windows 路径使用系统 NI-VISA；Linux 容器使用 PyVISA-py／PyUSB。Windows 只安装 `pyvisa-py` 并不等于 USB 驱动已经齐全，不要随意替换 Pico 的 USB 驱动。[PyVISA-py USB 依赖说明](https://github.com/pyvisa/pyvisa-py/blob/main/docs/source/installation.rst)
 
-Web 控制台的“频率与周期扫描”支持三种方式：
+## 4. 无硬件验证与网页启动
 
-- 单独扫频：周期数沿用上方 AWG 设置，只改变频率。
-- 单独扫周期：频率沿用上方 AWG 设置，只改变周期数。
-- 频率 × 周期二维扫描：对两个轴做完整笛卡尔组合。
-
-停止值会被包含；如果步长不能正好到达停止值，程序会额外采集停止值。默认每个参数点重复 3 次、两次采集间隔 1 秒。扫描中可随时按“停止”，已完成并落盘的采集会保留。
-
-每次扫描保存在 `data\sweeps\sweep_日期_时间_微秒`：
-
-- `raw\*.npz`：每次重复的完整原始波形及采集配置。
-- `runs.csv`：每次重复的评价指标和对应 NPZ 文件名。
-- `summary.csv`：每个频率/周期参数点的均值和标准差。
-- `sweep_config.json`：本次 ADC、触发、AWG 和扫描参数快照。
-
-扫描完成后，网页“拖尾评价结果”可以在两个视图间切换：
-
-- `参数点汇总`：显示重复采集后的均值、标准差、曲线或二维热力图。
-- `每次采集`：逐条显示每次重复的指标、原始 NPZ 文件名；点击“查看波形”可按需读取该次 NPZ，并显示 A～H 中实际启用通道的独立波形。网页只读取被选中的一次，不会同时把全部原始波形载入内存。
-
-扫描评价现采用 `N/f` 自适应算法，不再对所有频率和周期使用同一组固定时间窗：程序先用围绕当前激励载频、带宽随周期数变化的检测滤波器定位直达波和端面反射，再以 `T=N/f` 为理论激励持续时间，在两个峰值周围建立默认宽度为 `T` 的主波包窗。主拖尾窗从直达波主窗结束延伸到端面反射主窗开始，所有参数点统一在默认 20–180 kHz 物理频带内比较 RMS、能量、SNR、稳定时间和综合质量。Web 页面可以调整检测范围、评价频带、`N/f` 主窗倍率、拖尾窗两侧保护周期、噪声窗、稳定阈值及推荐约束。
-
-最终评分可以使用A–H中任意一个或多个已启用通道。发射监测通道也可在A–H中选择，或设为“无”；被选作监测的通道不会同时参与接收评价。只启用D/H并以H触发时，可使用D评价、H监测与触发。主要优化量 `拖尾/直达波 (dB)` 越负越好；`质量指标 (dB)` 越高越好；`相对信号强度 (dB)` 用来防止只选到拖尾很小但整体响应过弱的点。空间分辨率若要换算为长度，还需要提供对应模态的群速度。
-
-## 单数据分析与参数数据分析
-
-单数据分析页可以填写单个波形文件，也可以填写包含大量测量数据的目录。目录会递归查找NPZ以及首列为 `time_s` 的波形CSV，并自动忽略 `runs.csv`、`summary.csv` 等结果表；如果同名NPZ和CSV同时存在，优先显示保留元数据更完整的NPZ。目录列表最多显示2000个文件。
-
-参数数据分析页专门读取包含 `sweep_config.json`、`runs.csv`、`summary.csv` 和 `raw` 的扫描归档。它会恢复频率×周期网格、扫描配置、每点重复次数和保存的评价指标；支持拖尾、反射、质量、SNR、强度、稳定时间等热力图，完整参数点汇总表，以及每一次独立采集的A～H原始波形和指标。可以重新选择任意A～H评价通道、发射监测通道、频带、直达/反射搜索、N/f窗、保护周期、噪声窗和稳定阈值，然后从所有原始NPZ重新计算；该操作不覆盖原始数据。
-
-波形显示支持：
-
-- A～H任意通道组合、双击通道独显；
-- 原始与带通结果叠加或分别隐藏；
-- 分通道和同轴叠加两种排列；
-- 数字输入时间范围，画布滚轮缩放时间、拖动平移；
-- Shift＋滚轮缩放幅值，或直接输入固定幅值上下限；
-- 光标读取时间和电压。
-
-带通采用带反射填充、余弦过渡带的零相位FFT滤波，只生成显示或派生文件，不覆盖原始数据。可导出带通后的NPZ或CSV，输出放在原文件旁的 `processed` 目录并记录处理参数。
-
-频谱支持最多8个独立时间窗。每个时段可单独设置名称、起点和终点，并在同一频率轴上比较不同通道；支持幅值谱、功率谱密度、Hann/Blackman/矩形窗、线性或dB纵轴以及可调显示频率范围。该功能只展示测得数据的时频证据，不把带通结果解释为“已去除结构拖尾”。
-
-时频图提供三种方法：
-
-- STFT：可调窗长度、重叠率、FFT点数和窗函数，同时显示真实窗长决定的频率分辨能力与零填充后的频率采样间隔。
-- WPD：支持Haar和Daubechies 4小波包、1～12层分解；层数0会根据当前数据长度自动选择最高可用层数。
-- CWT：使用复Morlet连续小波，可调频率点数、Morlet `ω0` 以及线性/对数频率轴。
-
-三种图都可以选择通道、时间范围、频率范围和dB动态范围，并可选择是否先应用当前零相位带通。
-
-单数据分析页另有明确标记为 `TEST` 的空间—时间对称性分析。可从实际文件包含的A–H通道中任选两个，在直达波窗内自动校准增益、极性和微小时差；随后分别计算直达窗、中间候选窗、端面窗和全分析窗的共模、差模及差模/共模能量比，并用可调滑动时间窗显示对称性随时间的变化，最后进行允许正反极性的端面归一化匹配。由于传感器周向角度、灵敏度及目标模态尚未固定，该结果只作为实验证据，不进入正式评价、排名或缺陷判定。
-
-## 自定义 AWG 数据
-
-把 `config.json` 中 `awg.waveform` 改为 `custom`，`custom_csv` 设置为 CSV 文件路径。程序读取 CSV 最后一列，重采样到 `buffer_samples`，去直流并归一化，再由 `pk_to_pk_v` 和 `offset_v` 设置实际幅值。CSV 只描述波形形状，不能绕过 ±2 V 输出校验。
-
-Hann 脉冲模式中，一个 AWG 缓存包含指定 `cycles` 个载波周期，DDS 缓存重复频率自动设为 `frequency_hz / cycles`，一次软件触发只输出一个完整脉冲。
-
-### 拖尾抑制 AWG 模式
-
-Web 控制台提供两种实验模式，并显示服务器实际生成的 AWG 缓冲波形：
-
-- `Hann + 主动消振`：主 Hann 脉冲后追加一个平滑起止的正弦消振段，可调消振幅值、频率、周期数、相位和延迟。建议从 10%～25% Vpk、相位 180° 开始，逐次采集并按直达波与端面反射之间的拖尾能量调节。
-- `Hann + 爬升保持`：主 Hann 脉冲结束后，从 0 V 线性上升到设定的正峰值比例，保持指定时间，再线性下降到 0 V。可调上升、保持、下降时间和稳定电压比例。
-
-这两种模式都在一次任意波形触发中完整输出，缓冲起点和终点保持 0 V。ATA-2021B 支持 DC～1 MHz，可传递爬升和保持段；但实际高压约等于 AWG 电压乘以功放增益，必须同时满足 ATA-2021B、压电片和接线的电压/电流限制。建议通过 ATA-2021B 的电压监测端口回接 PicoScope，禁止将高压输出直接接到示波器输入。
-
-## 测试
+先运行一次仿真采集：
 
 ```powershell
-python -m unittest discover -s tests -v
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run_simulation.ps1
 ```
 
-自动测试不访问 PicoSDK 或真实设备。实机验收建议依次进行：AWG 接示波器检查幅频、AWG 低压回接所选触发通道（默认 CH H）检查触发、8 个通道并联同一低压信号检查同步相位，最后再接功放与传感器。
+应看到 `Capture complete` 和保存路径，示例 NPZ 在 `data/captures/` 任务目录。该脚本使用模拟设备，不发送真实激励。
 
-## 代码结构
+启动 Web：
 
-- `pico4824a/config.py`：配置对象、设备边界校验
-- `pico4824a/waveforms.py`：AWG 波形生成与 DAC 量化
-- `pico4824a/device.py`：官方 `ps4000a` 驱动封装、同步采集、仿真器
-- `pico4824a/storage.py`：NPZ/CSV 数据保存
-- `pico4824a/sweep.py`：扫描轴、重复执行、N/f 自适应评价、排名与扫描数据归档
-- `pico4824a/lcr.py`：LCR 频率轴、稳态相量拟合、复阻抗/等效参数和测量归档
-- `pico4824a/big_signal_lcr.py`：ATA-2021B 大信号监测相量、换算系数、安全状态和独立测量归档
-- `pico4824a/big_signal_linearity.py`：大信号平顶区谐波拟合、THD、增益偏差和离线目录分析
-- `pico4824a/lcr_linearity.py`：三通道大信号线性度采集、Monitor 平顶 THD 与 LCR 文件夹分析
-- `pico4824a/analysis.py`：单文件分析、扫描归档恢复/重新评价、零相位带通、多时段频谱和派生数据导出
-- `pico4824a/time_frequency.py`：STFT、WPD和Morlet CWT时频图
-- `pico4824a/experimental_modes.py`：实验性任意双通道空间—时间对称性和端面回波匹配
-- `pico4824a/gui.py`：桌面控制界面
-- `pico4824a/web.py`：本地 Web API 与仪器任务管理
-- `web/`：浏览器控制台页面
-- `pico4824a/cli.py`：自动化命令行入口
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_web.ps1
+```
 
-代码设计依据、API 对应关系及当前验证边界参见 `DESIGN_BASIS.md`。
+浏览器打开 **[http://127.0.0.1:4824/measure](http://127.0.0.1:4824/measure)**，保留启动终端。
 
-## 官方资料
+没有硬件／驱动时，“设备预连接失败”不一定阻止网页和仿真使用。实时测量／扫描前确认对应的“仿真”选项已开启；离线分析直接加载文件。
 
-- 4000A API Programmer's Guide: <https://www.picotech.com/helpfiles/4000a-api/index.html>
-- PicoScope 4000A specifications: <https://www.picotech.com/oscilloscope/4000/picoscope-4000-specifications>
-- Pico Python wrappers/examples: <https://github.com/picotech/picosdk-python-wrappers>
-- ATA-2021B 官方规格（DC～1 MHz、交直流放大）：<https://www.aigtek.com/products/953.html>
+**这一步验证软件环境，不代表真实设备或带电扫描已验证。**
+
+## 5. 连接 PicoScope 与 IT6524D
+
+### PicoScope 4824A
+
+1. 安装官方 x64 SDK／驱动，USB 连接设备，等待 Windows 完成设备安装。
+2. 可先用 PicoScope 官方 App 验证识别，随后**退出官方 App**再启动 WaveGuard，避免占用同一设备。
+3. 涉及功放时先关闭功放输出／置于待机，再启动服务。服务连接 Pico 后将 AWG 归零；确认低压接线和触发后再采集。
+4. 实时测量页取消仿真，配置通道量程、采样、AWG 和触发。H 只是默认触发通道，不是固定接线要求。
+
+仅加载 DLL 的诊断，不打开示波器或发送激励：
+
+```powershell
+.\.venv\Scripts\python.exe -c "from pico4824a.device import Pico4824A; s=Pico4824A(); s._load_sdk(); print('ps4000a driver loaded')"
+```
+
+程序自动检查 `C:\Program Files\Pico Technology\SDK\lib`、`PicoSDK\lib` 和部分 PicoScope 7 目录。安装在其他位置时，指定**实际包含 `ps4000a.dll` 的目录**，再从同一终端启动：
+
+```powershell
+# 路径示例，按实际安装位置替换
+$env:PICO_SDK_PATH = 'C:\Program Files\Pico Technology\SDK\lib'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_web.ps1
+```
+
+不要只复制一个 DLL：它还依赖配套库及 USB 驱动，使用官方安装程序。[Pico 驱动依赖说明](https://www.picotech.com/helpfiles/4000a-api/driver.html)
+
+### IT6524D 电源
+
+确认 NI-VISA 和 PyVISA 均已安装，连接电源的 USB **数据接口**。先关闭电源输出，再检查资源：
+
+```powershell
+.\.venv\Scripts\python.exe -c "import pyvisa; rm=pyvisa.ResourceManager(); print('VISA backend:',rm); print('Resources:',rm.list_resources()); rm.close()"
+```
+
+应出现 `USB0::...::INSTR`。`ASRL1::INSTR` 是串口，不能作为本页的 USB 电源选择。
+
+打开 [偏置电流扫描](http://127.0.0.1:4824/bias-scan)：**查找 USB → 选择资源 → 连接并断电**。程序核对 IT6524D 型号并确认输出关闭；连接动作不开启电源。
+
+- 关闭其他电源控制软件，不同时运行第二个后端。
+- 出现“输出状态未知”时，使用 **确认断电并恢复**；不会自动恢复旧扫描。
+- 使用 `rm=...; ...; rm.close()`，不使用旧的 `with pyvisa.ResourceManager()` 写法。
+- 设备未发现时检查 NI MAX、设备管理器、USB 数据线和占用程序。[NI USB 通信排查](https://knowledge.ni.com/KnowledgeArticleDetails?id=kA03q000000x1qzCAA)
+
+两台仪器需要同一服务电脑的两个 USB 连接。接口不足可使用独立供电、支持 USB 3.0 数据传输的 Hub，Pico 使用合适的数据线；仅供电 USB 线无法通信。
+
+## 6. 日常启动、停止与局域网访问
+
+| 用途 | 启动方式 | 地址／说明 |
+|---|---|---|
+| 本机 Web（推荐） | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_web.ps1` | `http://127.0.0.1:4824` |
+| 手机／另一台电脑访问 | 双击 `start_web_lan.cmd` | 使用启动器显示的服务电脑 LAN 地址 |
+| Tk 桌面界面 | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_gui.ps1` | 旧桌面入口；新工作站及偏置扫描使用 Web |
+| 自定义端口 | `.\.venv\Scripts\python.exe -B -m pico4824a web --host 127.0.0.1 --port 4825` | 浏览器端口也改为 4825 |
+
+退出前先停止任务并确认偏置输出关闭，再在终端按 `Ctrl+C`。正常退出会执行设备收尾；强制结束进程不能保证这一点。
+
+局域网模式：
+
+- 可信网络应在 Windows 中设为“专用”。启动器可申请建立仅专用网络、TCP 4824、本地子网来源的防火墙规则。
+- 防火墙／网络条件未满足时可能退回仅本机监听，以启动器实际显示为准。
+- 字母后按 Enter：`i` 状态与地址、`o` 网页、`s` 停止测量、`q` 安全关闭、`r` 安全重启、`l` 日志、`h` 帮助。
+- 启动器日志在 `data/launcher_logs/`。客户端的 `127.0.0.1` 指客户端自己，应使用**服务电脑 IP**。
+- 当前没有登录鉴权，仅用于可信实验室网络，不做公网端口映射。
+
+## 页面功能
+
+所有页面共用一个后端和设置，无需分别启动。
+
+| 页面 | 路径 | 功能 |
+|---|---|---|
+| 实时测量 | `/measure` | ADC、AWG、触发、采集／停止／保存 |
+| 参数扫描 | `/sweep` | 频率、周期、二维扫描及评价 |
+| LCR 测量 | `/lcr` | 小／大信号阻抗和线性度采集 |
+| LCR 数据分析 | `/lcr-linearity` | LCR、线性度／畸变文件夹分析 |
+| 单数据分析 | `/file-analysis` | Raw／Filtered／Mix／FFT／STFT／CWT／WPD／EX |
+| 参数数据分析 | `/sweep-analysis` | 归档热图、逐点波形、重新评价 |
+| 偏置电流扫描 | `/bias-scan` | IT6524D + Pico 偏置／幅值扫描 |
+| 磁路诊断 | `/magnetic-diagnosis` | 当前为诊断思路仿真预览，不执行实机诊断 |
+| 干扰实验 | `/interference` | 实验配置、采集与会话 |
+
+顶部齿轮：Light/Dark、界面强调色、保存命名、任务 ZIP 导出、软件更新。通道颜色保持 PicoScope 色序，不随界面强调色改变。
+
+## 偏置与幅值扫描首次配置
+
+1. 在实时测量配置采样、启用通道、AWG 和触发；偏置任务启动时冻结快照，默认记录窗口 2000 μs。
+2. 默认 0–6 A、0.5 A 步长，每幅值重复 5–10 次。软件范围最高 21.65 A，**不代表线圈安全工作电流**；不会自动提高实际电流保护限值。
+3. 设置 PZT 通道、直达波窗口及带通。Vpp 默认评价滤波后的直达波，原始 NPZ 保持不变；激励电压／电流通道和换算系数分别配置。
+4. 填写电压合规上限、每电流档总通电时间、稳定超时、实际电流上限及冷却参数。实机限值留空会拒绝启动，不照搬另一台机器的实验限值。
+5. 固定偏置扫幅值：同一电流档通电／稳定一次，连续采完全部幅值。完成／超时／异常后先断电，再保存、分析、冷却一次；切换幅值／量程重采不重置截止时间。
+6. 波形保护是可选开关，开启才检查形变、削顶、跳闸和可选 H2/H1。无论此开关是否开启，偏置通电限时、过流／过压／功率异常与停止关断均有效。
+7. 没有独立适配器可选“仅软件保护”；独立模式要求真正接入适配器。软件不能保证强杀、USB 断开或主机掉电后断电；输出关闭不等于线圈储能释放。
+
+**触发阈值使用 Pico 输入端的原始 V，不是探头换算后的电压。** 阈值高于实际信号会等待自动触发，增加通电耗时。50 次采集按 100 ms 开始间隔，仅开始时刻跨度就至少 4.9 s，3 s 上限无法采完。
+
+详见 [偏置扫描指南](BIAS_SCAN_GUIDE.md)。CLI 仿真：
+
+```powershell
+.\.venv\Scripts\python.exe -B -m pico4824a bias-scan --config configs/bias-scan.example.json --simulate
+```
+
+## 数据保存与换机迁移
+
+| 数据 | 项目内默认位置 |
+|---|---|
+| 实时／CLI 采集 | `data/captures/` |
+| 参数扫描 | `data/sweeps/` |
+| 小信号 LCR／校准 | `data/lcr/` |
+| 大信号 LCR | `data/lcr_big/` |
+| LCR 线性度 | `data/lcr_linearity/` |
+| 干扰实验 | `data/interference/` |
+| 偏置扫描 | `data/bias_scans/<扫描任务>/电流…A/<幅值点>/` |
+| 带通派生文件 | `data/analysis_exports/` |
+
+扫描任务自动保存；“导出”用于下载 CSV／JSON 或完整任务 ZIP。实时测量使用“保存”。可读命名与目录详见 [数据保存指南](DATA_STORAGE_GUIDE.md)。
+
+换电脑时：
+
+- Git 不包含旧电脑实测数据、`.venv`、本机配置和系统驱动。需要的数据／校准文件另行复制或 ZIP 迁移，新电脑重新安装环境。
+- 按需复制 `configs/storage-naming.json`、`configs/software-updates.json` 和自己的 CLI 配置；检查本机路径。
+- 浏览器采集／显示设置不随 Git 自动迁移，新电脑重新核查通道、探头系数、触发、AWG 和安全限值。
+- 文件选择器浏览的是**服务电脑**磁盘，不是手机／客户端磁盘。
+- 程序保存结果限制在本项目目录。`Pico_4824A` 参考工程不需要复制，不能作为写入／运行目录。
+
+## 更新版本
+
+已有新版本：**顶部设置 → 软件更新 → 检查更新 → 更新并重启**。
+
+- 间隔可设 1 分钟～1 年（365 天），默认 1 小时；只提示，不自动安装。
+- 需要 Git、`btf`、正确 origin 和干净工作目录。
+- 仪器运行、输出未知或待保存数据时阻止安装；依赖／驱动变更提示先处理环境。
+- 更新后后端重启、浏览器重连。只刷新网页不会升级旧后端。
+
+首次启用、ZIP 版迁移或手动更新：停止任务并确认断电，在启动终端 `Ctrl+C`，然后执行：
+
+```powershell
+git status --short
+git branch --show-current
+git pull --ff-only origin btf
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_web.ps1
+```
+
+`git status --short` 有输出时先保存自己的修改，不使用强制 reset／clean。ZIP 版改用 Git 副本。详见 [软件更新说明](SOFTWARE_UPDATE_GUIDE.md)。
+
+## 常见问题
+
+| 现象 | 处理 |
+|---|---|
+| `git`／`python` 无法识别 | 安装并加入 PATH，重开终端；Python 使用标准 x64 CPython |
+| GitHub 克隆／更新超时或 SSL 错误 | 检查 GitHub 访问、代理、系统时间与证书；这是网络问题，不反复安装仪器驱动，也不关闭 TLS 验证 |
+| 找不到 Python 3.10+／生成 `.venv/bin` | 使用 Windows x64 Python，重新运行 setup；不复制 Linux `.venv` |
+| 禁止运行 PowerShell 脚本 | 使用本文带 `-ExecutionPolicy Bypass -File` 的命令 |
+| `No module named numpy / picosdk / pyvisa` | 使用本项目 `.venv\Scripts\python.exe -m pip ...`，不要安装到 `(base)` |
+| 不能加载 ps4000a DLL | 官方 x64 SDK、Python 位数、真实 DLL 目录及 `PICO_SDK_PATH` |
+| Pico 找不到／忙 | 检查 USB，关闭官方 App／第二个后端；Web 占用时不再开实机 CLI／GUI |
+| `Could not locate a VISA implementation` | 安装系统 NI-VISA，再重启服务；只有 PyVISA 不够 |
+| VISA 资源为空 | 检查 NI MAX、设备管理器、数据线和设备占用 |
+| ResourceManager 不支持 context manager | 用本文 `rm=...; ...; rm.close()`，更新 btf，弃用旧 `with` 写法 |
+| 输出状态未知 | 核实输出，使用“确认断电并恢复”；刷新／消除弹窗不代表确认断电 |
+| 采集慢／第一组通电超限 | 检查原始触发阈值、自动触发等待和真实耗时；上限涵盖整个电流档 |
+| 实机限值待定／未接入独立适配器 | 填实验限值；无适配器选仅软件保护，不伪造独立确认 |
+| 网页打不开／4824 被占用 | 查看终端日志，避免重复启动；需要时改 4825；LAN 启动器用 `i`／`l` |
+| 手机访问不了 | 服务电脑 LAN IP、同一可信网络、专用网络、防火墙、客户端隔离 |
+| 一键更新禁用 | 查看设置中的 Git、分支、本地修改、网络、仪器状态或环境变更原因 |
+
+网络安装失败可重新运行 `setup.ps1`；脚本提供镜像与官方 PyPI。自行指定官方源：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple -r requirements.txt
+# 使用 IT6524D 时另装
+.\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple "pyvisa>=1.14"
+```
+
+## Linux 与详细文档
+
+Linux／R76S ARM64 按 [Linux 部署指南](deploy/linux/README.md) 操作。Windows `.venv` 与 DLL 不能搬到 Linux；旧容器首次启用一键更新需重建含 Git 的镜像。本文的 PowerShell 命令不适用于 Linux shell。
+
+| 文档 | 内容 |
+|---|---|
+| [配置与使用说明](配置与使用说明.md) | 采集字段、操作细节、LAN 管理 |
+| [测量与分析参考](docs/MEASUREMENT_REFERENCE.md) | 原 README 的 LCR 原理、N/f、滤波与时频、AWG |
+| [偏置扫描指南](BIAS_SCAN_GUIDE.md) | 偏置／幅值扫描、保护、统计 |
+| [数据保存指南](DATA_STORAGE_GUIDE.md) | 命名、目录、ZIP |
+| [软件更新说明](SOFTWARE_UPDATE_GUIDE.md) | 自动检查、一键更新和镜像要求 |
+| [磁路诊断预览](MAGNETIC_DIAGNOSIS_PREVIEW.md) | 预览范围与当前限制 |
+| [前端架构](FRONTEND_ARCHITECTURE.md) | 共享布局及交互 |
+
+目录：`pico4824a/` 后端；`web/` 前端；`configs/` 示例；`data/` 结果；`tests/` 回归；`archive/` 历史试稿，不参与应用运行。
+
+开发者回归，不属于首次安装必做步骤：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\run_validation.ps1
+```
+
+最低部署检查点：**btf 正确 → 本项目 x64 Python 可用 → 仿真保存成功 → 网页可打开 → Pico 实机识别 → 使用电源时 USB 身份及断电确认成功**。完整带电实验需在新电脑上验证真实接线、触发和允许限值。

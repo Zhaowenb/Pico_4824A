@@ -1,0 +1,1565 @@
+<!doctype html>
+<html lang="zh-CN" data-hero="A">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#F2F3F5" />
+    <title>WaveGuard Studio — Signal Instrument</title>
+    <style>
+      :root {
+        --paper: #F2F3F5;
+        --white: #fff;
+        --ink: #111820;
+        --graphite: #343a40;
+        --muted: #747c84;
+        --muted-2: #9299a0;
+        --hairline: rgba(26, 34, 42, .12);
+        --hairline-light: rgba(26, 34, 42, .07);
+        --blue: var(--signal);
+        --blue-soft: var(--signal-soft);
+        --blue-veil: rgba(var(--signal-rgb),.08);
+        --amber: var(--copper);
+        --green: var(--success);
+        --serif: "Iowan Old Style", "Baskerville", "Palatino Linotype", "Songti SC", serif;
+        --mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+        --ease: cubic-bezier(.2, .8, .2, 1);
+        --ease-enter: cubic-bezier(.16, 1, .3, 1);
+        --ease-cinematic: cubic-bezier(.22, 1, .36, 1);
+        color-scheme: light;
+        font-family: var(--sans);
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      *, *::before, *::after { box-sizing: border-box; }
+      html { min-width: 320px; min-height: 100%; scroll-behavior: smooth; }
+      body {
+        min-width: 320px; min-height: 100vh; margin: 0; overflow-x: hidden; color: var(--ink);
+        background:
+          radial-gradient(ellipse at 52% -18%, rgba(255,255,255,.98), transparent 55rem),
+          linear-gradient(180deg, #FBFCFD 0%, var(--paper) 68%, #ECEEF1 100%);
+      }
+      button, a { font: inherit; } button { color: inherit; }
+      button:focus-visible, a:focus-visible { outline: 3px solid rgba(var(--signal-rgb),.3); outline-offset: 4px; }
+      ::selection { color: #fff; background: var(--blue); }
+      .lab-grid {
+        position: fixed; z-index: -1; inset: 0; pointer-events: none; opacity: .34;
+        background-image: linear-gradient(rgba(39,52,64,.028) 1px, transparent 1px), linear-gradient(90deg, rgba(39,52,64,.028) 1px, transparent 1px);
+        background-size: 40px 40px;
+        mask-image: linear-gradient(to bottom, #000 0, rgba(0,0,0,.72) 48%, transparent 100%);
+      }
+      .masthead {
+        position: relative; z-index: 10; display: flex; width: min(100%, 1600px); min-height: 72px;
+        align-items: center; gap: 24px; margin: 0 auto; padding: 0 5.25vw;
+        border-bottom: 1px solid rgba(30,42,52,.075);
+        transition: opacity 520ms var(--ease), filter 520ms var(--ease), transform 520ms var(--ease);
+      }
+      .wordmark { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+      .wordmark-symbol { width: 26px; height: 26px; flex: 0 0 auto; }
+      .wordmark-copy { display: grid; gap: 4px; }
+      .wordmark-name { font-size: 10px; font-weight: 750; letter-spacing: .19em; }
+      .wordmark-sub { color: var(--muted); font: 9px var(--mono); letter-spacing: .035em; }
+      .mast-spacer { flex: 1; }
+      .prototype-mark { display: flex; align-items: center; gap: 11px; color: var(--muted); font: 9px var(--mono); letter-spacing: .075em; }
+      .prototype-mark .rule { width: 29px; height: 1px; background: #9ea7ae; }
+      .prototype-mark strong { color: #49545d; font-weight: 650; }
+      .opening-actions { display: flex; align-items: center; gap: 7px; }
+      .text-control {
+        min-height: 32px; padding: 0 9px; border: 0; border-radius: 6px; color: #5e6871;
+        background: transparent; cursor: pointer; font: 9px var(--mono); letter-spacing: .06em;
+        transition: color 160ms var(--ease), background 160ms var(--ease);
+      }
+      .text-control:hover { color: var(--blue); background: rgba(var(--signal-rgb),.05); }
+      .text-control[hidden] { display: none; }
+
+      .product-shell { width: min(100%, 1600px); margin: 0 auto; padding: 36px 5.25vw 24px; }
+      .product-heading {
+        display: grid; grid-template-columns: minmax(0, 1fr) minmax(195px, .34fr); align-items: end; gap: 34px;
+        margin: 0 0 16px; transition: opacity 460ms var(--ease), transform 620ms var(--ease-cinematic), filter 460ms var(--ease);
+      }
+      .product-eyebrow { display: flex; align-items: center; gap: 11px; margin: 0 0 15px; color: #717981; font: 9px var(--mono); letter-spacing: .06em; }
+      .product-eyebrow::before { width: 20px; height: 1px; background: var(--blue); content: ""; }
+      h1 { display: grid; gap: 0; margin: 0; font-size: clamp(38px, 5.45vw, 76px); font-weight: 400; letter-spacing: .01em; line-height: .94; }
+      h1 span { display: block; }
+      h1 span:first-child { color: #111820; font-weight: 700; }
+      h1 .title-second { padding-left: .045em; color: #626a71; font-family: var(--sans); font-size: .78em; font-weight: 400; font-style: normal; letter-spacing: .01em; line-height: 1.1; }
+      .product-description { display: flex; align-items: center; gap: 11px; margin: 15px 0 0 2px; color: var(--muted); font-size: 11px; }
+      .product-description .description-divider { width: 1px; height: 12px; background: #c5cbd0; }
+      .product-description .instrument-name { color: #424950; font-weight: 580; }
+      .system-state {
+        display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 4px 16px;
+        min-height: 84px; padding: 0 0 4px 18px; border-left: 1px solid #cbd0d4;
+        transition: transform 450ms var(--ease-cinematic), opacity 350ms var(--ease);
+      }
+      .state-caption { color: var(--muted); font: 9px var(--mono); letter-spacing: .06em; }
+      .state-name { grid-column: 1; color: #24292e; font: 500 clamp(19px, 2vw, 26px)/1 var(--sans); letter-spacing: .035em; }
+      .state-light { position: relative; grid-column: 2; grid-row: 1 / span 2; width: 9px; height: 9px; align-self: center; border: 1px solid #a7afb5; border-radius: 50%; background: #aab1b6; }
+      .state-light::after { position: absolute; inset: -5px; border: 1px solid rgba(98,112,122,.2); border-radius: 50%; content: ""; }
+      .state-detail { grid-column: 1 / -1; color: #828990; font: 8px var(--mono); letter-spacing: .07em; }
+      .system-state[data-state="armed"] .state-light,
+      .system-state[data-state="tx"] .state-light,
+      .system-state[data-state="wave"] .state-light,
+      .system-state[data-state="defect"] .state-light,
+      .system-state[data-state="echo"] .state-light,
+      .system-state[data-state="rx"] .state-light { border-color: var(--signal); background: var(--blue); }
+      .system-state[data-state="defect"] .state-light { border-color: var(--copper); background: var(--copper); }
+      .system-state[data-state="complete"] .state-light { border-color: var(--success); background: var(--green); }
+
+      .scene-stage {
+        position: relative; isolation: isolate; display: grid; grid-template-rows: 27px minmax(0,1fr) 77px;
+        height: clamp(400px, 37vw, 510px); overflow: hidden;
+        border-top: 1px solid rgba(31,44,54,.1); border-bottom: 1px solid rgba(31,44,54,.1);
+        transition: background 640ms var(--ease-cinematic), box-shadow 640ms var(--ease-cinematic);
+      }
+      .scene-transitioning .scene-stage { will-change: transform; }
+      .scene-stage::before {
+        position: absolute; z-index: -1; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at 51% 54%, rgba(255,255,255,.86), rgba(255,255,255,.13) 55%, transparent 80%);
+        content: "";
+      }
+      .scene-meta {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        color: #808890; font: 8px var(--mono); letter-spacing: .045em; white-space: nowrap;
+      }
+      .scene-meta strong { color: #58636d; font-weight: 600; }
+      .scene-meta-right { color: #979ea4; text-align: right; }
+      .scene-canvas { position: relative; min-width: 0; min-height: 0; }
+      .scene-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+      .scene-svg text { font-family: var(--mono); }
+      .metric-value { fill: #28343d; font-family: var(--mono); font-size: 18px; font-weight: 550; letter-spacing: -.04em; }
+      #morphTrace { fill: none; stroke: var(--signal); stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: none; stroke-dashoffset: 0; vector-effect: non-scaling-stroke; }
+      #mobileMorphTrace { stroke-dasharray: none; stroke-dashoffset: 0; }
+      #sceneCamera, #mobileCamera { transform-box: view-box; transform-origin: 0 0; }
+      #sceneWorld, #mobileWorld { transform-box: view-box; transform-origin: 0 0; }
+      .grid-stroke { stroke: rgba(33,48,61,.075); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .grid-major { stroke: rgba(33,48,61,.12); }
+      .ruler-text { fill: #98a0a6; font-size: 9px; letter-spacing: .04em; }
+      .ruler-tick { stroke: #9ca5ab; stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .specimen-body { transform-box: fill-box; transform-origin: center; transition: transform 640ms var(--ease-cinematic), opacity 520ms var(--ease); }
+      .specimen-face { fill: url(#specimenFill); stroke: rgba(79,94,105,.28); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .specimen-side { fill: url(#specimenSide); stroke: rgba(79,94,105,.2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .specimen-highlight { fill: none; stroke: rgba(255,255,255,.9); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .specimen-etch { fill: none; stroke: rgba(80,94,105,.17); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .shared-axis { stroke: #727e88; stroke-width: 1.25; vector-effect: non-scaling-stroke; transition: stroke 560ms var(--ease-cinematic), stroke-width 560ms var(--ease-cinematic); }
+      .static-transmission { fill: none; stroke: rgba(var(--signal-rgb),.27); stroke-width: 1.1; stroke-dasharray: 4 8; vector-effect: non-scaling-stroke; }
+      .station-stem { stroke: #616e78; stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .station-halo { fill: rgba(255,255,255,.66); stroke: #82909b; stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .station-core { fill: #727f89; }
+      .station-blue { stroke: var(--signal); }
+      .station-blue-core { fill: var(--signal); }
+      .station-name { fill: #434c54; font-size: 10px; font-weight: 650; letter-spacing: .035em; }
+      .station-note { fill: #90989e; font-size: 8px; letter-spacing: .025em; }
+      .defect-guide { stroke: rgba(164,112,37,.58); stroke-width: 1; stroke-dasharray: 3 5; vector-effect: non-scaling-stroke; transition: opacity 300ms var(--ease); }
+      .defect-mark { fill: #f3f4f3; stroke: var(--copper); stroke-width: 1.1; vector-effect: non-scaling-stroke; transition: fill 260ms var(--ease), stroke 260ms var(--ease), transform 420ms var(--ease-cinematic); transform-box: fill-box; transform-origin: center; }
+      .defect-crack { fill: none; stroke: var(--copper); stroke-width: 1.2; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      .defect-label { fill: var(--copper); font-size: 9px; letter-spacing: .035em; }
+      .defect-sub { fill: #9d968a; font-size: 8px; letter-spacing: .02em; }
+      .packet-curve { fill: none; stroke: var(--signal-hi); stroke-width: 1.7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      .packet-underlay { fill: none; stroke: rgba(var(--signal-rgb),.2); stroke-width: 5; stroke-linecap: round; filter: url(#softBlur); vector-effect: non-scaling-stroke; }
+      .packet-container { opacity: .055; transition: opacity 200ms linear; }
+      .packet-visible { opacity: .96; }
+      .packet-return .packet-curve { stroke: var(--signal-soft); stroke-width: 1.6; }
+      .propagation-tail { fill: none; stroke: rgba(var(--signal-rgb),.46); stroke-width: 1; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      .tx-flare { fill: rgba(var(--signal-rgb),.13); stroke: rgba(var(--signal-rgb),.38); stroke-width: 1; opacity: 0; transform-box: fill-box; transform-origin: center; vector-effect: non-scaling-stroke; }
+      .rx-flare { fill: rgba(var(--signal-rgb),.09); stroke: rgba(var(--signal-rgb),.52); stroke-width: 1; opacity: 0; vector-effect: non-scaling-stroke; }
+      .scene-stage.is-firing .tx-flare { animation: terminal-flash 320ms var(--ease-enter) both; }
+      .scene-stage.is-firing .tx-flare:nth-child(2) { animation-delay: 55ms; }
+      .scene-stage.is-rx .rx-flare { animation: terminal-flash 440ms var(--ease-enter) both; }
+      .scene-stage.is-rx .rx-flare:nth-child(2) { animation-delay: 65ms; }
+      .scene-stage.is-defect #defectMark { fill: #fff6e9; stroke: var(--copper); transform: scale(1.14); }
+      .scene-stage.is-defect #defectHalo { opacity: 1; transform: scale(1.1); }
+      .defect-halo { fill: rgba(202,140,47,.08); stroke: rgba(179,119,32,.3); stroke-width: 1; opacity: 0; transform-box: fill-box; transform-origin: center; transition: opacity 240ms ease, transform 520ms var(--ease-cinematic); }
+      .opening-draw { stroke-dasharray: 1; stroke-dashoffset: 1; }
+      .is-opening .opening-draw { animation: draw-signature 1120ms var(--ease-enter) 140ms forwards; }
+      .is-opening .product-heading { animation: editorial-enter 760ms var(--ease-enter) both; }
+      .is-opening .system-state { animation: editorial-enter 580ms var(--ease-enter) 170ms both; }
+      .scene-scope { opacity: 0; transition: opacity 140ms linear; }
+      .scope-grid, .scope-axis { stroke: rgba(39,59,76,.115); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .scope-grid.major { stroke: rgba(39,59,76,.18); }
+      .shared-axis { transition: stroke 120ms linear, stroke-width 120ms linear; }
+      .scope-axis { stroke: rgba(56,78,97,.58); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .scope-grid { stroke: rgba(39,59,76,.115); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .scope-grid.major { stroke: rgba(39,59,76,.18); }
+      .scope-label { fill: #78848d; font-size: 9px; letter-spacing: .035em; }
+      .scope-caption { fill: #6a7883; font-size: 8px; letter-spacing: .035em; }
+      .scope-trace { fill: none; stroke: var(--signal); stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; vector-effect: non-scaling-stroke; }
+      .scope-envelope { fill: url(#scopeFill); opacity: 0; transition: opacity 450ms ease; }
+      .scene-stage.is-measured .scope-trace { animation: draw-signature 690ms var(--ease-enter) forwards; }
+      .scene-stage.is-measured .scope-envelope { opacity: .11; }
+      .scope-cursor { stroke: rgba(var(--signal-rgb),.72); stroke-width: 1; stroke-dasharray: 3 5; opacity: 0; vector-effect: non-scaling-stroke; }
+      .scene-stage.is-measured .scope-cursor { opacity: .8; transition: opacity 380ms var(--ease) 260ms; }
+      .stage-caption { position: absolute; z-index: 2; top: 10%; left: 50%; width: min(90%, 540px); text-align: center; pointer-events: none; opacity: 0; transform: translate(-50%, 8px); transition: opacity 260ms ease, transform 420ms var(--ease-cinematic); }
+      .cinematic-active .stage-caption { opacity: 1; transform: translate(-50%, 0); }
+      .stage-caption-kicker { display: block; margin-bottom: 8px; color: #687782; font: 8px var(--mono); letter-spacing: .06em; }
+      .stage-caption-title { display: block; color: #252b30; font: 500 clamp(18px, 2.4vw, 29px)/1.1 var(--sans); letter-spacing: .015em; }
+      .stage-caption-detail { display: block; margin-top: 7px; color: #78828a; font: 8px var(--mono); letter-spacing: .05em; }
+
+      .mobile-scene { display: none; }
+      .mobile-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+      .mobile-scope-grid { fill: none; stroke: rgba(39,59,76,.115); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .mobile-scope-axis { fill: none; stroke: rgba(56,78,97,.32); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .mobile-scope-label { fill: #78848d; font: 11px var(--mono); letter-spacing: .025em; }
+      .mobile-station-name { fill: #434c54; font: 650 13px var(--sans); letter-spacing: .04em; }
+      .mobile-station-note { fill: #90989e; font: 10px var(--mono); letter-spacing: .02em; }
+      .mobile-packet-curve { fill: none; stroke: var(--signal-hi); stroke-width: 2; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      .mobile-scope-trace { fill: none; stroke: var(--signal); stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: none; stroke-dashoffset: 0; vector-effect: non-scaling-stroke; }
+      .mobile-metric { fill: #28343d; font: 550 18px var(--mono); letter-spacing: -.04em; }
+      #specimenBody, #stationSystem, #defectSystem, #scopeSystem, #mobilePhysical, #mobileScope,
+      #defectHalo, #incidentPacket, #reflectedPacket, #transmittedPacket, #mobileIncident,
+      #mobileReflected, #mobileTransmitted, #defectMark { transition: none !important; }
+      .wordmark-name { letter-spacing: .17em; }
+      .scene-readouts {
+        position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
+        align-items: center; padding: 9px 0 4px; border-top: 1px solid rgba(38,52,65,.1);
+        transition: border-color 420ms var(--ease), opacity 260ms ease;
+      }
+      .readout { position: relative; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; align-items: baseline; justify-content: start; gap: 0 7px; min-height: 52px; padding: 3px 14px 2px 0; }
+      .readout + .readout { padding-left: 18px; border-left: 1px solid rgba(47,61,73,.13); }
+      .readout-label { grid-column: 1 / -1; margin-bottom: 5px; color: #7d8790; font: 8px var(--mono); letter-spacing: .04em; transition: color 300ms ease; }
+      .readout-value { color: #303941; font: 500 clamp(19px, 2.2vw, 28px)/1 var(--mono); letter-spacing: -.065em; transition: color 300ms ease, transform 420ms var(--ease-enter); }
+      .readout-unit { color: #7c858d; font: 9px var(--mono); letter-spacing: .02em; }
+      .readout:nth-child(4) .readout-value { font-size: clamp(14px,1.5vw,18px); letter-spacing: -.04em; }
+      .scene-stage.is-measured .scene-readouts { border-color: rgba(var(--signal-rgb),.2); }
+      .scene-stage.is-measured .readout { animation: readout-enter 430ms var(--ease-enter) both; }
+      .scene-stage.is-measured .readout:nth-child(2) { animation-delay: 75ms; }
+      .scene-stage.is-measured .readout:nth-child(3) { animation-delay: 150ms; }
+      .scene-stage.is-measured .readout:nth-child(4) { animation-delay: 225ms; }
+      @keyframes readout-enter { from { opacity: .18; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+
+      .action-strip { display: flex; align-items: center; justify-content: center; gap: 25px; min-height: 92px; transition: opacity 360ms var(--ease), transform 420ms var(--ease); }
+      .action-context { display: grid; gap: 5px; color: #7a8289; font: 8px var(--mono); letter-spacing: .04em; text-align: right; }
+      .action-context strong { color: #4b555e; font-weight: 600; }
+      .start-inspection {
+        position: relative; display: inline-flex; min-width: 236px; min-height: 47px; align-items: center; justify-content: center; gap: 14px;
+        padding: 0 19px; border: 1px solid var(--signal); border-radius: 3px; color: #fff;
+        background: linear-gradient(180deg, var(--signal-hi), var(--signal)); box-shadow: 0 5px 16px rgba(var(--signal-rgb),.14), inset 0 1px 0 rgba(255,255,255,.24);
+        cursor: pointer; font: 650 10px var(--mono); letter-spacing: .08em;
+        transition: transform 170ms var(--ease), box-shadow 220ms var(--ease), background 220ms var(--ease);
+      }
+      .start-inspection::before { position: absolute; inset: 3px; border: 1px solid rgba(255,255,255,.2); content: ""; pointer-events: none; }
+      .start-inspection:hover { transform: translateY(-1px); background: linear-gradient(180deg, var(--signal-hi), var(--signal)); box-shadow: 0 7px 20px rgba(var(--signal-rgb),.2), inset 0 1px 0 rgba(255,255,255,.25); }
+      .start-inspection:active { transform: scale(.975); }
+      .start-inspection:disabled { cursor: default; opacity: .65; transform: none; }
+      .start-arrow { width: 13px; height: 13px; }
+      .complete-stamp { display: none; color: var(--green); font: 9px var(--mono); letter-spacing: .13em; }
+      .is-complete .complete-stamp { display: inline-flex; align-items: center; gap: 7px; }
+      .complete-stamp::before { width: 6px; height: 6px; border-radius: 50%; background: var(--success); content: ""; }
+
+      .workspace-dock {
+        display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 20px; min-height: 67px;
+        border-top: 1px solid rgba(29,41,51,.12); border-bottom: 1px solid rgba(29,41,51,.075);
+        transition: opacity 360ms var(--ease), transform 420ms var(--ease);
+      }
+      .dock-items { display: flex; min-width: 0; align-items: stretch; gap: 0; }
+      .dock-item {
+        position: relative; display: grid; grid-template-columns: auto auto; align-content: center; gap: 4px 9px;
+        min-width: 150px; padding: 0 21px 0 0; margin-right: 20px; border: 0; color: #626b73;
+        background: transparent; text-align: left; cursor: pointer; transition: color 180ms var(--ease);
+      }
+      .dock-item::after { position: absolute; right: 0; bottom: 17px; left: 0; height: 1px; background: transparent; content: ""; transition: background 180ms ease; }
+      .dock-item:hover, .dock-item[aria-current="page"] { color: #22292f; }
+      .dock-item[aria-current="page"]::after { background: var(--blue); }
+      .dock-index { grid-row: 1 / span 2; align-self: center; color: #9aa1a7; font: 8px var(--mono); }
+      .dock-name { font: 650 9px var(--mono); letter-spacing: .04em; }
+      .dock-detail { color: #8b9399; font-size: 8px; }
+      .dock-note { color: #92999f; font: 8px var(--mono); letter-spacing: .05em; text-align: right; }
+      .sub-footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 11px; color: #939aa0; font: 8px var(--mono); letter-spacing: .06em; transition: opacity 360ms var(--ease); }
+      .sub-footer strong { color: #69747d; font-weight: 600; }
+
+      .cinema-caption {
+        position: absolute; z-index: 60; top: 13%; left: 50%; width: min(92%, 600px);
+        opacity: 0; text-align: center; pointer-events: none; transform: translate(-50%, 9px);
+        transition: opacity 200ms ease, transform 420ms var(--ease-cinematic);
+      }
+      .cinematic-active .cinema-caption { opacity: 1; transform: translate(-50%, 0); }
+      .cinema-caption small { display: block; margin-bottom: 7px; color: #74828c; font: 8px var(--mono); letter-spacing: .22em; }
+      .cinema-caption strong { display: block; color: #242b30; font: 500 clamp(20px, 2.5vw, 31px)/1 var(--sans); letter-spacing: .02em; }
+      .cinema-caption span { display: block; margin-top: 7px; color: #78848d; font: 8px var(--mono); letter-spacing: .13em; }
+      .director-hud {
+        position: fixed; z-index: 80; right: max(24px, calc((100vw - 1480px)/2)); bottom: 25px; left: max(24px, calc((100vw - 1480px)/2));
+        display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 22px;
+        padding: 14px 17px 12px; border: 1px solid rgba(46,59,70,.12); color: #454e55;
+        background: rgba(249,250,251,.92); box-shadow: 0 10px 38px rgba(26,38,49,.09);
+        backdrop-filter: blur(18px) saturate(130%); -webkit-backdrop-filter: blur(18px) saturate(130%);
+        opacity: 0; visibility: hidden; transform: translateY(15px);
+        transition: opacity 300ms ease, transform 480ms var(--ease-cinematic), visibility 300ms;
+      }
+      .cinematic-active .director-hud { opacity: 1; visibility: visible; transform: translateY(0); }
+      .director-current { display: grid; min-width: 178px; gap: 4px; }
+      .director-current small { color: #7e8991; font: 8px var(--mono); letter-spacing: .15em; }
+      .director-current strong { color: #303941; font: 600 10px var(--mono); letter-spacing: .08em; }
+      .director-track { display: grid; min-width: 0; gap: 10px; }
+      .director-progress { height: 1px; overflow: hidden; background: #d8dde1; }
+      .director-progress-fill { width: 100%; height: 100%; background: var(--blue); transform: scaleX(0); transform-origin: left center; }
+      .director-steps { display: flex; min-width: 0; justify-content: space-between; gap: 5px; overflow: hidden; }
+      .director-step { overflow: hidden; color: #a0a6ab; font: 7px var(--mono); letter-spacing: .035em; text-overflow: ellipsis; white-space: nowrap; transition: color 180ms ease; }
+      .director-step[aria-current="step"] { color: var(--signal); }
+      .skip-inspection { position: fixed; z-index: 85; right: 30px; bottom: 24px; min-height: 34px; padding: 0 13px; border: 1px solid #d9dfe3; color: #616d76; background: rgba(255,255,255,.9); backdrop-filter: blur(10px); cursor: pointer; font: 9px var(--sans); letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity 240ms ease, color 180ms ease, border-color 180ms ease; }
+      .cinematic-active .skip-inspection:not([hidden]) { opacity: .88; pointer-events: auto; }
+      .skip-inspection:hover { border-color: var(--signal-soft); color: var(--signal); }
+      .skip-inspection[hidden] { display: none; }
+      .intro-cue {
+        position: fixed; z-index: 90; right: 20px; bottom: 18px; display: flex; align-items: center; gap: 10px;
+        padding: 9px 10px; border: 1px solid rgba(36,48,59,.12); color: #68737c; background: rgba(250,251,251,.94);
+        box-shadow: 0 7px 24px rgba(28,39,49,.08); font: 8px var(--mono); letter-spacing: .08em;
+        opacity: 0; transform: translateY(8px); transition: opacity 220ms ease, transform 350ms var(--ease-enter);
+      }
+      .intro-cue[hidden] { display: none; }
+      .is-opening .intro-cue:not([hidden]) { opacity: 1; transform: translateY(0); }
+      .intro-cue button { padding: 5px 7px; border: 1px solid #dfe3e6; color: #55616a; background: #fff; cursor: pointer; font: 8px var(--mono); }
+      .intro-cue button:hover { color: var(--blue); border-color: var(--signal-soft); }
+
+      .cinematic-active .masthead { opacity: .24; filter: blur(1px); transform: translateY(-3px); }
+      .cinematic-active .product-heading { opacity: .08; filter: blur(2px); transform: translateY(-20px) scale(.985); }
+      .cinematic-active .action-strip, .cinematic-active .workspace-dock, .cinematic-active .sub-footer { opacity: .04; transform: translateY(12px); pointer-events: none; }
+      .cinematic-active .scene-stage {
+        position: fixed; z-index: 40; inset: 0; width: 100%; height: 100vh; height: 100svh; max-height: none; min-height: 0;
+        grid-template-rows: 32px minmax(0,1fr) 94px; margin: 0; padding: 34px 5.2vw 105px;
+        border: 0; background: radial-gradient(ellipse at 50% 46%, #fff 0%, #FBFCFD 58%, #ECEEF1 100%);
+      }
+      .cinematic-active .scene-stage::before { background: radial-gradient(ellipse at 50% 49%, rgba(255,255,255,.98), rgba(255,255,255,.18) 65%, transparent 90%); }
+      .cinematic-active .scene-canvas { min-height: 0; }
+      .cinematic-active .stage-caption { opacity: 0; }
+      .cinematic-active .scene-readouts { opacity: 0; border-color: rgba(var(--signal-rgb),.16); pointer-events: none; }
+      .cinematic-active .scene-readouts .readout-value { color: #202a32; }
+      .cinematic-active .cinema-caption { top: 10.5%; }
+      .cinematic-active[data-phase="defect"] .cinema-caption strong { color: var(--copper); }
+      .cinematic-active[data-phase="complete"] .cinema-caption strong { color: var(--success); }
+      .cinematic-active .scene-meta { opacity: .62; }
+      .cinematic-active .mobile-scene { height: 100%; }
+      .is-complete .cinema-caption { opacity: 0; visibility: hidden; }
+
+      @keyframes draw-signature { to { stroke-dashoffset: 0; } }
+      @keyframes editorial-enter { from { opacity: 0; transform: translateY(14px); filter: blur(3px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+      @keyframes terminal-flash { 0% { opacity: 0; transform: scale(.65); } 35% { opacity: 1; transform: scale(1.08); } 100% { opacity: .05; transform: scale(1.8); } }
+
+      @media (max-width: 1040px) {
+        .masthead { padding-right: 4vw; padding-left: 4vw; }
+        .product-shell { padding-right: 4vw; padding-left: 4vw; }
+        .product-heading { grid-template-columns: minmax(0,1fr) minmax(165px,.36fr); gap: 22px; }
+        h1 { font-size: clamp(38px,6.1vw,64px); }
+        .scene-stage { height: clamp(400px,47vw,500px); }
+        .director-hud { right: 18px; left: 18px; gap: 15px; }
+        .director-current { min-width: 145px; }
+        .director-step { font-size: 6px; }
+      }
+      @media (max-width: 720px) {
+        .masthead { min-height: 62px; gap: 12px; padding-right: 19px; padding-left: 19px; }
+        .wordmark-symbol { width: 23px; height: 23px; }
+        .wordmark-name { font-size: 9px; } .wordmark-sub { font-size: 8px; }
+        .prototype-mark { gap: 7px; font-size: 7px; letter-spacing: .04em; }
+        .prototype-mark .rule { width: 15px; }
+        .opening-actions { gap: 0; }
+        .text-control { min-height: 29px; padding: 0 6px; font-size: 7px; }
+        .product-shell { padding: 28px 20px 19px; }
+        .product-heading { grid-template-columns: 1fr; gap: 18px; margin-bottom: 12px; }
+        .product-eyebrow { margin-bottom: 12px; font-size: 8px; }
+        h1 { font-size: clamp(38px,9.5vw,60px); }
+        h1 .title-second { font-size: .71em; }
+        .product-description { flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 10px; }
+        .system-state { grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 10px; min-height: 0; padding: 8px 0 2px; border-left: 0; border-top: 1px solid var(--hairline); }
+        .state-caption { grid-column: 1; grid-row: 1; font-size: 7px; }
+        .state-name { grid-column: 2; grid-row: 1; font-size: 17px; }
+        .state-light { grid-column: 3; grid-row: 1; }
+        .state-detail { grid-column: 1 / -1; grid-row: 2; font-size: 7px; }
+        .scene-stage { height: auto; min-height: 0; grid-template-rows: 24px 390px 92px; }
+        .scene-meta { gap: 9px; font-size: 6px; letter-spacing: .065em; }
+        .scene-meta-right { max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+        .desktop-scene { display: none; }
+        .mobile-scene { position: relative; display: block; width: 100%; height: 100%; }
+        .mobile-heading { position: absolute; top: 7px; left: 4px; color: #7e8890; font: 7px var(--mono); letter-spacing: .11em; }
+        .mobile-propagation { position: absolute; inset: 27px 0 0; opacity: 1; transform: scaleY(1); transform-origin: center; transition: opacity 480ms var(--ease-cinematic), transform 560ms var(--ease-cinematic); }
+        .mobile-rail { position: absolute; top: 5px; bottom: 2px; left: 50%; width: min(100%,310px); transform: translateX(-50%); }
+        .mobile-specimen {
+          position: absolute; top: 17px; bottom: 33px; left: calc(50% - 17px); width: 34px;
+          border: 1px solid rgba(78,94,106,.28); border-radius: 17px;
+          background: linear-gradient(90deg,#e3e7e9 0%,#fff 27%,#f4f6f7 72%,#dfe4e7 100%);
+          box-shadow: inset 0 0 0 5px rgba(255,255,255,.22);
+          transition: transform 560ms var(--ease-cinematic), opacity 450ms ease;
+        }
+        .mobile-specimen::before, .mobile-specimen::after { position:absolute; left: 6px; right:6px; height:1px; background:rgba(95,110,121,.19); content:""; }
+        .mobile-specimen::before { top:8px; } .mobile-specimen::after { bottom:8px; }
+        .mobile-axis { position:absolute; top: 17px; bottom:33px; left:50%; width:1px; background:rgba(35,54,69,.43); transform:translateX(-50%); transition:background 500ms ease,width 500ms ease; }
+        .mobile-station { position:absolute; left:50%; display:grid; justify-items:center; gap:5px; width:108px; color:#4c5760; transform:translateX(-50%); text-align:center; }
+        .mobile-station-top { top:0; } .mobile-station-mid { top:42%; } .mobile-station-bottom { top:77%; bottom:auto; }
+        .mobile-station strong { display:block; font:650 8px var(--mono); letter-spacing:.13em; }
+        .mobile-station small { color:#929ba1; font:7px var(--mono); letter-spacing:.07em; }
+        .mobile-node { width:14px; height:14px; border:1px solid #83919b; border-radius:50%; background:#fafbfb; box-shadow:0 0 0 4px rgba(255,255,255,.62); }
+        .mobile-station-mid .mobile-node { border-color:var(--signal); }
+        .mobile-station-bottom .mobile-node { border-color:var(--copper); border-radius:2px; transform:rotate(45deg); }
+        .mobile-packet { position:absolute; z-index:2; top:23px; left:50%; display:block; width:22px; height:46px; border-radius:50%; opacity:.06; background:linear-gradient(180deg,transparent,rgba(var(--signal-rgb),.19),var(--signal-hi) 48%,rgba(var(--signal-rgb),.15),transparent); filter:blur(1px); transform:translate(-50%,0); }
+        .mobile-packet.is-visible { opacity:.92; }
+        .mobile-echo { position:absolute; z-index:2; top:23px; left:50%; display:block; width:20px; height:34px; border-radius:50%; opacity:0; background:linear-gradient(180deg,transparent,rgba(var(--signal-rgb),.12),var(--signal-soft) 52%,transparent); filter:blur(1px); transform:translate(-50%,0); }
+        .mobile-defect-halo { position:absolute; top:77%; left:50%; width:30px; height:30px; border:1px solid rgba(183,126,41,.0); border-radius:50%; transform:translate(-50%,-50%); transition:border-color 200ms ease,transform 450ms var(--ease-cinematic); }
+        .scene-stage.is-defect .mobile-defect-halo { border-color:rgba(183,126,41,.46); transform:translate(-50%,-50%) scale(1.12); }
+        .mobile-scope { position:absolute; inset:35px 0 7px; display:grid; place-items:center; opacity:0; clip-path:inset(48% 0 48%); transform:scaleY(.08); transform-origin:center; transition:opacity 420ms var(--ease-cinematic),clip-path 560ms var(--ease-cinematic),transform 560ms var(--ease-cinematic); }
+        .mobile-scope svg { width:100%; height:100%; overflow:visible; }
+        .mobile-scope text { fill:#78848d; font:12px var(--mono); }
+        .mobile-scope-grid { stroke:rgba(45,63,78,.13); stroke-width:1; vector-effect:non-scaling-stroke; }
+        .mobile-scope-axis { stroke:rgba(56,78,97,.46); stroke-width:1; vector-effect:non-scaling-stroke; }
+        .mobile-scope-trace { fill:none; stroke:var(--signal); stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1; stroke-dashoffset:1; vector-effect:non-scaling-stroke; }
+        .scene-stage.is-scope .mobile-propagation { opacity:.04; transform:scaleY(.045); }
+        .scene-stage.is-scope .mobile-specimen { opacity:.08; transform:scaleY(.03); }
+        .scene-stage.is-scope .mobile-axis { width:2px; background:#4c82ad; }
+        .scene-stage.is-scope .mobile-scope { opacity:1; clip-path:inset(0); transform:scaleY(1); }
+        .scene-stage.is-measured .mobile-scope-trace { animation:draw-signature 650ms var(--ease-enter) forwards; }
+        .scene-readouts { grid-template-columns:repeat(2,minmax(0,1fr)); padding-top:7px; }
+        .readout { min-height:35px; padding:2px 5px 6px 0; gap:0 6px; }
+        .readout + .readout { padding-left:10px; }
+        .readout:nth-child(3) { border-left:0; padding-left:0; }
+        .readout-label { margin-bottom:3px; font-size:6px; }
+        .readout-value { font-size:17px; }
+        .readout-unit { font-size:7px; }
+        .readout:nth-child(4) .readout-value { font-size:12px; }
+        .action-strip { min-height:83px; flex-direction:column; gap:9px; padding:11px 0 13px; }
+        .action-context { display:flex; gap:7px; text-align:center; font-size:7px; }
+        .start-inspection { width:min(100%,360px); min-height:43px; }
+        .workspace-dock { grid-template-columns:1fr; gap:0; min-height:0; }
+        .dock-items { justify-content:space-between; overflow-x:auto; }
+        .dock-item { min-width:0; flex:1; gap:4px; margin-right:0; padding:14px 7px 15px 0; }
+        .dock-item::after { bottom:8px; }
+        .dock-index { grid-row:auto; font-size:6px; }
+        .dock-name { font-size:7px; letter-spacing:.04em; }
+        .dock-detail { grid-column:1 / -1; font-size:6px; white-space:nowrap; }
+        .dock-note { padding:0 0 11px; text-align:left; font-size:7px; }
+        .sub-footer { align-items:flex-start; flex-direction:column; gap:4px; font-size:7px; }
+        .intro-cue { right:10px; bottom:10px; left:10px; justify-content:space-between; }
+        .director-hud { display:none; }
+        .director-current { grid-column:1; grid-row:1; min-width:0; gap:3px; }
+        .director-current small { font-size:6px; } .director-current strong { font-size:8px; }
+        .director-track { grid-column:1 / -1; grid-row:2; gap:6px; }
+        .director-steps { gap:2px; }
+        .director-step { max-width:10%; font-size:5px; letter-spacing:0; }
+        .skip-inspection { right:12px; bottom:12px; min-height:30px; padding:0 10px; font-size:8px; }
+        .cinematic-active .scene-stage { inset:0; grid-template-rows:24px minmax(0,1fr) 94px; padding:20px 18px 116px; }
+        .cinematic-active .scene-canvas { min-height:0; }
+        .cinematic-active .cinema-caption { top:7.5%; left:20px; width:auto; text-align:left; transform:translateY(0); }
+        .cinematic-active .cinema-caption small { font-size:6px; margin-bottom:5px; }
+        .cinematic-active .cinema-caption strong { font-size:18px; }
+        .cinematic-active .cinema-caption span { font-size:6px; margin-top:5px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior:auto; }
+        *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; }
+      }
+      :root {
+        --shell-bg: #F2F3F5;
+        --surface: #FBFCFD;
+        --ink: #111820;
+        --muted: #6D7781;
+        --stage: #0B1320;
+        --stage-2: #132235;
+        --signal: #2F73FF;
+        --signal-hi: #59A9FF;
+        --signal-soft: #7EB6E8;
+        --signal-rgb: 47,115,255;
+        --copper: #C98435;
+        --copper-rgb: 201,132,53;
+        --warning: #D5963B;
+        --success: #3E8060;
+        --danger: #D94B4B;
+        --paper: var(--shell-bg);
+        --white: var(--surface);
+        --blue: var(--signal);
+        --blue-soft: var(--signal-soft);
+        --blue-veil: rgba(var(--signal-rgb),.08);
+        --amber: var(--copper);
+        --green: var(--success);
+        --hairline: rgba(17,24,32,.12);
+        --hairline-light: rgba(17,24,32,.07);
+      }
+      body { background: radial-gradient(ellipse at 52% -18%, rgba(255,255,255,.98), transparent 55rem), linear-gradient(180deg,#FBFCFD 0%,var(--shell-bg) 68%,#ECEEF1 100%); }
+      .scene-stage {
+        background: linear-gradient(142deg,var(--stage-2) 0%,var(--stage) 72%);
+        border-top-color: rgba(var(--signal-rgb),.24);
+        border-bottom-color: rgba(var(--signal-rgb),.2);
+      }
+      .scene-stage::before { background: radial-gradient(ellipse at 52% 52%,rgba(var(--signal-rgb),.09),rgba(89,169,255,.025) 48%,transparent 78%); }
+      .scene-meta { color: #91A3B5; }
+      .scene-meta strong { color: #D8E4F0; }
+      .scene-meta-right { color: #8295A9; }
+      .grid-stroke { stroke: rgba(159,183,208,.095); }
+      .grid-major { stroke: rgba(159,183,208,.17); }
+      .ruler-text { fill: #8295A9; }
+      .ruler-tick { stroke: #748BA3; }
+      .specimen-face { fill: #2A3E53; stroke: rgba(186,207,227,.24); }
+      .specimen-side { fill: #1A2B3D; stroke: rgba(186,207,227,.18); }
+      .specimen-highlight { stroke: rgba(220,235,248,.54); }
+      .specimen-etch { stroke: rgba(173,198,222,.18); }
+      .shared-axis { stroke: #A5B8CB; }
+      .static-transmission { stroke: rgba(var(--signal-rgb),.44); }
+      .station-stem { stroke: #758A9F; }
+      .station-halo { fill: #142235; stroke: #8EA6BE; }
+      .station-core { fill: #9FB2C6; }
+      .station-blue { stroke: var(--signal-hi); }
+      .station-blue-core { fill: var(--signal); }
+      .station-name { fill: #D6E2EF; }
+      .station-note { fill: #879BAF; }
+      .packet-curve { stroke: var(--signal-hi); }
+      .packet-underlay { stroke: rgba(var(--signal-rgb),.24); }
+      .packet-return .packet-curve { stroke: var(--copper); }
+      .propagation-tail { stroke: rgba(89,169,255,.58); }
+      .tx-flare { fill: rgba(var(--signal-rgb),.12); stroke: rgba(89,169,255,.5); }
+      .rx-flare { fill: rgba(var(--signal-rgb),.08); stroke: rgba(89,169,255,.66); }
+      .defect-guide { stroke: rgba(var(--copper-rgb),.66); }
+      .defect-mark { fill: #1B2835; stroke: var(--copper); }
+      .defect-crack { stroke: var(--copper); }
+      .defect-label { fill: #E0B47C; }
+      .defect-sub { fill: #AE9B82; }
+      .defect-halo { fill: rgba(var(--copper-rgb),.075); stroke: rgba(var(--copper-rgb),.4); }
+      .scene-scope { opacity: 0; }
+      .scope-grid { stroke: rgba(159,183,208,.1); }
+      .scope-grid.major { stroke: rgba(159,183,208,.18); }
+      .scope-axis { stroke: rgba(159,183,208,.55); }
+      .scope-label { fill: #B0C0D0; }
+      .scope-caption { fill: #91A5B9; }
+      .scope-trace { stroke: var(--signal-hi); }
+      .scope-envelope { opacity: 0; }
+      .scope-cursor { stroke: rgba(89,169,255,.82); }
+      .metric-value { fill: #E6F0FA; }
+      .stage-caption-kicker { color: #91A5B9; }
+      .stage-caption-title { color: #E7EFF8; }
+      .stage-caption-detail { color: #9AADC1; }
+      .mobile-scope-grid { stroke: rgba(159,183,208,.12); }
+      .mobile-scope-axis { stroke: rgba(159,183,208,.5); }
+      .mobile-scope-label { fill: #AFC0D1; }
+      .mobile-station-name { fill: #D6E2EF; }
+      .mobile-station-note { fill: #879BAF; }
+      .mobile-packet-curve { stroke: var(--signal-hi); }
+      .mobile-scope-trace { stroke: var(--signal-hi); }
+      .mobile-metric { fill: #E6F0FA; }
+      .scene-readouts { border-top-color: rgba(159,183,208,.17); }
+      .readout + .readout { border-left-color: rgba(159,183,208,.18); }
+      .readout-label { color: #8FA3B8; }
+      .readout-value { color: #E6EFF8; }
+      .readout-unit { color: #9AADC1; }
+      .scene-stage.is-measured .scene-readouts { border-color: rgba(var(--signal-rgb),.38); }
+      .start-inspection {
+        border-color: #245ED0;
+        background: linear-gradient(180deg,#3C7DFF,#2F73FF);
+        box-shadow: 0 4px 13px rgba(var(--signal-rgb),.15),inset 0 1px 0 rgba(255,255,255,.22);
+      }
+      .start-inspection:hover { background: linear-gradient(180deg,#4A88FF,#2F73FF); box-shadow: 0 6px 17px rgba(var(--signal-rgb),.19),inset 0 1px 0 rgba(255,255,255,.23); }
+      .complete-stamp { color: var(--success); }
+      .complete-stamp::before { background-color: var(--success); }
+      .cinematic-active .scene-stage { background: radial-gradient(ellipse at 50% 46%,#132235 0%,#0B1320 68%,#080F19 100%); }
+      .cinematic-active .scene-stage::before { background: radial-gradient(ellipse at 50% 47%,rgba(var(--signal-rgb),.12),rgba(19,34,53,.12) 57%,transparent 86%); }
+      .cinematic-active .scene-readouts { border-color: rgba(89,169,255,.26); }
+      .cinematic-active .scene-readouts .readout-value { color: #E6EFF8; }
+      .cinematic-active[data-phase="impact"] .stage-caption-title { color: #E2B77F; }
+      .cinematic-active[data-phase="complete"] .stage-caption-title { color: #90B89D; }
+      html[data-hero="A"] body.cinematic-active[data-phase="impact"] .stage-caption-title,
+      html[data-hero="C"] body.cinematic-active[data-phase="impact"] .stage-caption-title { color: var(--signal-hi); }
+      .variant-scene {
+        position: absolute; inset: 0; display: none; overflow: hidden; pointer-events: none;
+        background-image: linear-gradient(rgba(126,182,232,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(126,182,232,.035) 1px,transparent 1px);
+        background-size: 40px 40px;
+      }
+      html[data-hero="A"] .desktop-scene,html[data-hero="A"] .mobile-scene { display: none !important; }
+      html[data-hero="A"] .variant-scene.hero-a { display: block; }
+      .variant-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+      .variant-mobile { display: none; }
+      .hero-label { fill: #DDE8F3; font: 600 20px var(--sans); letter-spacing: .01em; }
+      .hero-label-large { fill: #F0F5FA; font: 550 35px var(--mono); letter-spacing: -.045em; }
+      .hero-kicker { fill: #90A4B8; font: 10px var(--mono); letter-spacing: .1em; }
+      .hero-note { fill: #91A4B8; font: 10px var(--mono); letter-spacing: .035em; }
+      .hero-micro { fill: #72879D; font: 8px var(--mono); letter-spacing: .045em; }
+      .hero-rule { stroke: rgba(159,183,208,.2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .hero-rule-dash { stroke: rgba(159,183,208,.25); stroke-width: 1; stroke-dasharray: 3 7; vector-effect: non-scaling-stroke; }
+      .hero-flow { fill: none; stroke: rgba(126,182,232,.55); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+      .hero-signal { fill: none; stroke: var(--signal-hi); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+      .hero-signal-mid { fill: none; stroke: var(--signal); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+      .hero-signal-soft { fill: none; stroke: var(--signal-soft); stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; opacity: .58; vector-effect: non-scaling-stroke; }
+      .hero-signal-dim { fill: none; stroke: rgba(89,169,255,.36); stroke-width: 1; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      .hero-node { fill: #132235; stroke: var(--signal-hi); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+      .hero-node-core { fill: var(--signal); }
+      .hero-stage-divider { stroke: rgba(159,183,208,.19); stroke-width: 1; stroke-dasharray: 2 7; vector-effect: non-scaling-stroke; }
+      .hero-axis { stroke: rgba(159,183,208,.45); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .hero-tick { stroke: rgba(159,183,208,.4); stroke-width: 1; vector-effect: non-scaling-stroke; }
+      .hero-dot { fill: var(--signal-hi); }
+      .hero-a .a-arm-indicator,.hero-a .a-zero-indicator { opacity: .3; transition: opacity 300ms ease,filter 300ms ease; }
+      .hero-a .a-channel-wave { opacity: .66; transition: opacity 380ms ease,stroke-width 380ms ease; }
+      .hero-a .a-awg-ring { opacity: .16; transform-box: fill-box; transform-origin: center; transition: opacity 300ms ease,transform 380ms var(--ease-cinematic); }
+      body[data-phase="armed"] .hero-a .a-arm-indicator { opacity: 1; }
+      body[data-phase="burst"] .hero-a .a-awg-ring { opacity: .82; transform: scale(1.12); }
+      body[data-phase="propagation"] .hero-a .a-transfer-pulse { opacity: 1; }
+      body[data-phase="impact"] .hero-a .a-zero-indicator { opacity: 1; }
+      body[data-phase="return"] .hero-a .a-channel-wave,
+      body[data-phase="acquisition"] .hero-a .a-channel-wave,
+      body[data-phase="analysis"] .hero-a .a-channel-wave { opacity: 1; stroke-width: 2.15; }
+      body[data-phase="complete"] .hero-a .a-zero-indicator { opacity: .74; }
+      .hero-a .a-transfer-pulse { opacity: .25; transition: opacity 300ms ease; }
+      .hero-c .c-domain { transition: opacity 440ms ease,transform 600ms var(--ease-cinematic); transform-box: fill-box; transform-origin: center; }
+      .hero-c .c-domain:not(.c-hann) { opacity: .84; }
+      body.cinematic-active[data-phase="burst"] .hero-c .c-domain:not(.c-hann) { opacity: .24; }
+      body.cinematic-active[data-phase="propagation"] .hero-c .c-domain:not(.c-wave) { opacity: .38; }
+      body.cinematic-active[data-phase="impact"] .hero-c .c-domain:not(.c-fft) { opacity: .42; }
+      body.cinematic-active[data-phase="return"] .hero-c .c-domain:not(.c-fft) { opacity: .58; }
+      body.cinematic-active[data-phase="acquisition"] .hero-c .c-domain:not(.c-stft) { opacity: .53; }
+      body.cinematic-active[data-phase="analysis"] .hero-c .c-domain:not(.c-stft) { opacity: .62; }
+      body.cinematic-active[data-phase="burst"] .hero-c .c-hann,
+      body.cinematic-active[data-phase="propagation"] .hero-c .c-wave,
+      body.cinematic-active[data-phase="impact"] .hero-c .c-fft,
+      body.cinematic-active[data-phase="return"] .hero-c .c-fft,
+      body.cinematic-active[data-phase="acquisition"] .hero-c .c-stft,
+      body.cinematic-active[data-phase="analysis"] .hero-c .c-stft { opacity: 1; }
+      .hero-c .c-energy { fill: var(--signal); }
+      .hero-c .c-energy-hi { fill: var(--signal-hi); }
+      .hero-c .c-wave-guide { stroke: rgba(89,169,255,.52); stroke-width: 1.6; fill: none; vector-effect: non-scaling-stroke; }
+      .hero-c .c-cursor { stroke: rgba(126,182,232,.62); stroke-width: 1; stroke-dasharray: 3 6; vector-effect: non-scaling-stroke; }
+      .hero-c .c-axis-label { fill: #8BA0B5; font: 8px var(--mono); letter-spacing: .025em; }
+      @media (max-width: 720px) {
+        .variant-desktop { display: none; }
+        .variant-mobile { display: block; }
+        .hero-label { font-size: 21px; }
+        .hero-label-large { font-size: 31px; }
+        .hero-kicker { font-size: 10px; }
+        .hero-note { font-size: 10px; }
+        .hero-micro { font-size: 9px; }
+      }
+      .hero-a .a-zero-line { stroke: var(--signal-hi); stroke-width: 1.5; }
+      .hero-a .a-channel-wave:nth-of-type(odd) { stroke: var(--signal-hi); }
+    </style>
+  </head>
+  <body>
+    <div class="lab-grid" aria-hidden="true"></div>
+    <header class="masthead">
+      <a class="wordmark" href="#top" aria-label="WaveGuard Studio">
+        <svg class="wordmark-symbol" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M2 16h5.5l3.4-8 5.1 16 3.1-9.1 2.2 4H30" stroke="var(--signal)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="16" cy="24" r="1.2" fill="var(--signal-soft)"/>
+        </svg>
+        <span class="wordmark-copy"><span class="wordmark-name">WAVEGUARD STUDIO</span><span class="wordmark-sub">导波检测动态系统</span></span>
+      </a>
+      <span class="mast-spacer"></span>
+      <div class="prototype-mark" aria-label="离线视觉演示，设备未连接">
+        <span class="rule"></span><strong>视觉原型</strong><span>·</span><span>设备离线</span>
+      </div>
+      <div class="opening-actions">
+        <button class="text-control" id="replayOpening" type="button" aria-label="重播产品开场动画">重播开场</button>
+      </div>
+    </header>
+
+    <main class="product-shell" id="top">
+      <section class="product-heading" aria-labelledby="mainTitle">
+        <div class="product-copy">
+          <p class="product-eyebrow">结构健康监测&nbsp;&nbsp; / &nbsp;&nbsp;01</p>
+          <h1 id="mainTitle"><span>导波检测</span><span class="title-second">测量工作站</span></h1>
+          <p class="product-description"><span class="instrument-name">PicoScope 4824A</span><i class="description-divider" aria-hidden="true"></i><span>八通道同步采集 · 导波检测工作站</span></p>
+        </div>
+        <div class="system-state" id="systemState" data-state="ready" aria-live="polite" aria-atomic="true">
+          <span class="state-caption">系统状态</span><strong class="state-name" id="systemStateName">系统就绪</strong><i class="state-light" aria-hidden="true"></i>
+          <span class="state-detail" id="systemStateDetail">模拟会话&nbsp;&nbsp;·&nbsp;&nbsp;未连接真实设备</span>
+        </div>
+      </section>
+
+      <section class="scene-stage" id="sceneStage" aria-label="信号仪器场景：AWG、ADC 武装、硬件触发 t=0 与八通道同步采集">
+        <div class="scene-meta">
+          <span id="sceneMode"><strong>信号链路</strong>&nbsp;&nbsp; / &nbsp;&nbsp;硬件触发 · 8CH</span>
+          <span class="scene-meta-right">参考试件&nbsp;&nbsp;·&nbsp;&nbsp;模拟数据</span>
+        </div>
+        <div class="scene-canvas">
+          <svg class="scene-svg desktop-scene" viewBox="0 0 1600 500" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="heroSvgTitle heroSvgDesc">
+            <title id="heroSvgTitle">WaveGuard 导波传播场景</title>
+            <desc id="heroSvgDesc">模拟汉宁窗导波脉冲从 TX 发射，沿试件传播并在缺陷处分裂，反射波返回 RX，连续变形成示波器采集波形。示例结果：飞行时间 462.0 微秒、峰值 0.384 伏、信噪比 38.6 分贝；设备未连接。</desc>
+            <defs>
+              <linearGradient id="specimenFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fdfefe"/><stop offset=".42" stop-color="#e8ecee"/><stop offset="1" stop-color="#dbe1e4"/></linearGradient>
+              <linearGradient id="specimenSide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e1e6e8"/><stop offset="1" stop-color="#ccd3d7"/></linearGradient>
+              <linearGradient id="scopeFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--signal-hi)"/><stop offset="1" stop-color="var(--signal-hi)" stop-opacity="0"/></linearGradient>
+              <filter id="softBlur" x="-30%" y="-200%" width="160%" height="500%"><feGaussianBlur stdDeviation="2.1"/></filter>
+              <pattern id="microGrid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="rgba(126,182,232,.06)" stroke-width="1"/></pattern>
+              <clipPath id="packetClip" clipPathUnits="userSpaceOnUse"><rect id="packetClipRect" x="0" y="-40" width="0" height="80"/></clipPath>
+            </defs>
+
+            <g id="sceneCamera">
+              <g id="sceneWorld">
+            <g aria-hidden="true">
+              <rect x="36" y="30" width="1528" height="430" fill="url(#microGrid)" opacity=".55"/>
+              <path d="M126 104H1474" class="grid-stroke"/>
+              <path d="M126 144H1474M126 184H1474M126 224H1474M126 264H1474M126 304H1474M126 344H1474M126 384H1474M126 424H1474" class="grid-stroke"/>
+              <path d="M246 90V432M406 90V432M566 90V432M726 90V432M886 90V432M1046 90V432M1206 90V432M1366 90V432" class="grid-stroke"/>
+              <path d="M126 90V432M1474 90V432" class="grid-major grid-stroke"/>
+              <path id="desktopRulerTicks" d="M126 89v9m160-9v9m160-9v9m160-9v9m160-9v9m160-9v9m160-9v9m160-9v9m160-9v9m108-9v9" class="ruler-tick"/>
+              <g id="distanceRuler">
+                <text x="126" y="78" class="ruler-text">0</text><text x="294" y="78" class="ruler-text">100</text><text x="463" y="78" class="ruler-text">200</text>
+                <text x="631" y="78" class="ruler-text">300</text><text x="800" y="78" class="ruler-text">400</text><text x="968" y="78" class="ruler-text">500</text>
+                <text x="1137" y="78" class="ruler-text">600</text><text x="1305" y="78" class="ruler-text">700</text><text x="1446" y="78" class="ruler-text">800 mm</text>
+              </g>
+              <g id="timeRuler" opacity="0">
+                <text x="132" y="78" class="ruler-text">−100</text><text x="280" y="78" class="ruler-text">0</text><text x="577" y="78" class="ruler-text">200</text>
+                <text x="874" y="78" class="ruler-text">400</text><text x="1171" y="78" class="ruler-text">600</text><text x="1434" y="78" class="ruler-text">800 μs</text>
+              </g>
+              <g id="distanceFooter">
+                <text x="126" y="447" class="ruler-text">声传播路径 / 相对位置</text>
+                <text x="1352" y="447" class="ruler-text">导波模式 · A₀</text>
+              </g>
+            </g>
+
+            <g id="scopeSystem" class="scene-scope" aria-hidden="true">
+              <g>
+                <path d="M132 112H1468M132 156H1468M132 200H1468M132 244H1468M132 288H1468M132 332H1468M132 376H1468M132 420H1468" class="scope-grid"/>
+                <path d="M132 112V420M266 112V420M400 112V420M534 112V420M668 112V420M802 112V420M936 112V420M1070 112V420M1204 112V420M1338 112V420M1468 112V420" class="scope-grid"/>
+                <path d="M132 112V420M1468 112V420" class="scope-axis"/>
+                <text x="132" y="99" class="scope-caption">采集卡 / 分块采集 · 20 MS/s · 每通道 200 k 点</text>
+                <text x="138" y="128" class="scope-label">+0.5</text><text x="144" y="291" class="scope-label">0</text><text x="138" y="416" class="scope-label">−0.5 V</text>
+                <text x="132" y="438" class="scope-label">−100 μs</text><text x="280" y="438" class="scope-label">0</text><text x="577" y="438" class="scope-label">200</text>
+                <text x="874" y="438" class="scope-label">400</text><text x="1171" y="438" class="scope-label">600</text><text x="1434" y="438" class="scope-label">800 μs</text>
+              </g>
+            </g>
+
+            <g id="propagationSystem">
+              <g id="specimenBody" class="specimen-body">
+                <path class="specimen-side" d="M142 279H1437L1460 296L1437 313H142L120 296Z"/>
+                <path class="specimen-face" d="M142 252H1437L1460 279H142L120 265Z"/>
+                <path class="specimen-highlight" d="M144 254H1436L1455 278H145"/>
+                <path class="specimen-etch" d="M142 287H1444M142 306H1437"/>
+                <path d="M185 260V307M213 260V307M1370 260V307M1398 260V307" class="specimen-etch"/>
+              </g>
+              <line id="sharedAxis" class="shared-axis" x1="128" y1="279" x2="1460" y2="279"/>
+              <path d="M205 279H1120" class="static-transmission"/>
+              <path id="propagationTail" class="propagation-tail" d="M205 279H205"/>
+
+              <g id="txFlare"><circle class="tx-flare" cx="205" cy="279" r="18"/><circle class="tx-flare" cx="205" cy="279" r="28"/></g>
+              <g id="rxFlare"><circle class="rx-flare" cx="556" cy="279" r="12"/><circle class="rx-flare" cx="556" cy="279" r="22"/></g>
+
+              <g id="stationSystem" class="station-system">
+                <g id="txStation">
+                  <path d="M205 197V279" class="station-stem"/>
+                  <circle cx="205" cy="279" r="9" class="station-halo station-blue"/><circle cx="205" cy="279" r="3.1" class="station-blue-core"/>
+                  <text x="205" y="174" text-anchor="middle" class="station-name">发射 TX</text>
+                  <text x="205" y="188" text-anchor="middle" class="station-note">激励端</text>
+                  <path d="M205 302v16m-9 0h18" class="station-stem"/>
+                </g>
+                <g id="rxStation">
+                  <path d="M556 205V279" class="station-stem"/>
+                  <circle cx="556" cy="279" r="12" fill="none" stroke="rgba(33,112,177,.27)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                  <circle cx="556" cy="279" r="7.5" class="station-halo station-blue"/><circle cx="556" cy="279" r="2.8" class="station-blue-core"/>
+                  <text x="556" y="181" text-anchor="middle" class="station-name">接收 RX</text>
+                  <text x="556" y="195" text-anchor="middle" class="station-note">回波传感器</text>
+                  <path d="M556 302v16m-9 0h18" class="station-stem"/>
+                </g>
+                <g id="farEnd">
+                  <path d="M1430 249V326" class="station-stem"/>
+                  <path d="M1421 254l18 18m-18 0 18 18" fill="none" stroke="#89939a" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
+                  <text x="1430" y="350" text-anchor="middle" class="station-note">试件端部</text>
+                </g>
+              </g>
+
+              <g id="defectSystem" class="defect-system">
+                <path d="M1120 169V375" class="defect-guide"/>
+                <circle id="defectHalo" class="defect-halo" cx="1120" cy="279" r="19"/>
+                <path id="defectMark" class="defect-mark" d="M1114 268l6 7 6-7 5 10-11 8-11-8Z"/>
+                <path class="defect-crack" d="M1120 276v5m-4-2 4 4 4-4"/>
+                <text x="1120" y="145" text-anchor="middle" class="defect-label">模拟缺陷</text>
+                <text x="1120" y="158" text-anchor="middle" class="defect-sub">反射位置 / 620 mm</text>
+              </g>
+
+              <g id="incidentPacket" class="packet-container" transform="translate(205 279)" clip-path="url(#packetClip)">
+                <path class="packet-underlay" id="incidentBlur" d=""/>
+                <path class="packet-curve" id="incidentCurve" d=""/>
+              </g>
+              <g id="reflectedPacket" class="packet-container packet-return" transform="translate(1120 279) scale(-1 1)">
+                <path class="packet-underlay" id="returnBlur" d=""/>
+                <path class="packet-curve" id="returnCurve" d=""/>
+              </g>
+              <g id="transmittedPacket" class="packet-container" opacity="0">
+                <path class="packet-underlay" id="transmitBlur" d=""/>
+                <path class="packet-curve" id="transmitCurve" d=""/>
+              </g>
+              <path id="morphTrace" class="scope-trace" d="" opacity="0" pathLength="1"/>
+              <g id="metricOverlay" opacity="0" aria-hidden="true">
+                <line id="scopeCursor" class="scope-cursor" x1="966" y1="112" x2="966" y2="420"/>
+                <circle id="scopeMarker" cx="966" cy="0" r="4" fill="#fff" stroke="var(--signal)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+                <path d="M966 168v20h-18M966 188h198m-198 0v34m0-34h-132" fill="none" stroke="rgba(var(--signal-rgb),.42)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+                <text x="948" y="151" class="scope-caption">飞行时间 / TOF</text>
+                <text x="948" y="174" class="metric-value">462.0 μs</text>
+                <text x="1168" y="174" class="scope-caption">峰值 / PEAK</text>
+                <text x="1168" y="197" class="metric-value">0.384 V</text>
+                <text x="834" y="214" class="scope-caption">信噪比 / SNR</text>
+                <text x="834" y="237" class="metric-value">38.6 dB</text>
+              </g>
+            </g>
+              </g>
+            </g>
+          </svg>
+
+          <div class="mobile-scene" id="mobileScene" role="img" aria-label="连续示意：汉宁窗波包沿试件传播，遇到模拟缺陷后反射并在接收端变形成测量波形。">
+            <svg class="mobile-svg" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+              <defs><clipPath id="mobilePacketClip"><rect id="mobilePacketClipRect" x="-30" y="-56" width="0" height="112"/></clipPath></defs>
+              <g id="mobileCamera"><g id="mobileWorld">
+                <path d="M36 55H564M36 95H564M36 135H564M36 175H564M36 215H564M36 255H564M36 295H564M36 335H564M36 375H564M36 415H564M36 455H564M36 495H564M36 535H564" fill="none" stroke="rgba(33,48,61,.055)" stroke-width="1"/>
+                <g id="mobileScope" opacity="0">
+                  <path d="M30 70H570M30 116H570M30 162H570M30 208H570M30 254H570M30 300H570M30 346H570M30 392H570M30 438H570M30 484H570M30 530H570M30 70V530M84 70V530M138 70V530M192 70V530M246 70V530M300 70V530M354 70V530M408 70V530M462 70V530M516 70V530M570 70V530" class="mobile-scope-grid"/>
+                  <path d="M30 70V530M30 300H570M570 70V530" class="mobile-scope-axis"/>
+                  <text x="36" y="91" class="mobile-scope-label">分块采集 · 20 MS/s</text>
+                  <text x="36" y="520" class="mobile-scope-label">−100 μs</text><text x="270" y="520" class="mobile-scope-label">300</text><text x="535" y="520" class="mobile-scope-label">800 μs</text>
+                </g>
+                <g id="mobilePhysical">
+                  <rect id="mobileSpecimen" x="284" y="72" width="32" height="456" rx="16" fill="url(#specimenFill)" stroke="rgba(79,94,105,.3)"/>
+                  <path d="M291 84v432m18-432v432" fill="none" stroke="rgba(80,94,105,.13)"/>
+                  <path id="mobileAxis" d="M300 62V540" fill="none" stroke="#727e88" stroke-width="1.25"/>
+                  <path id="mobileRulerTicks" d="" fill="none" stroke="#9ca5ab" stroke-width="1"/>
+                  <g id="mobileTx"><circle cx="300" cy="103" r="11" fill="#fff" stroke="var(--signal)"/><circle cx="300" cy="103" r="3" fill="var(--signal)"/><text x="345" y="99" class="mobile-station-name">发射 TX</text><text x="345" y="116" class="mobile-station-note">汉宁窗激励</text></g>
+                  <g id="mobileRx"><circle cx="300" cy="250" r="11" fill="#fff" stroke="var(--signal)"/><circle cx="300" cy="250" r="3" fill="var(--signal)"/><text x="345" y="247" class="mobile-station-name">接收 RX</text><text x="345" y="264" class="mobile-station-note">回波传感器</text></g>
+                  <g id="mobileDefect"><circle id="mobileDefectHalo" cx="300" cy="486" r="21" fill="rgba(202,140,47,.08)" stroke="rgba(179,119,32,.3)" stroke-width="1" opacity="0"/><path d="M293 477l7 8 7-8 5 11-12 8-12-8Z" fill="#f3f4f3" stroke="var(--copper)"/><text x="345" y="483" class="mobile-station-name">模拟缺陷</text><text x="345" y="500" class="mobile-station-note">反射位置 / 620 mm</text></g>
+                  <g id="mobileTxFlare" opacity="0"><circle cx="300" cy="103" r="23" fill="none" stroke="rgba(var(--signal-rgb),.42)"/><circle cx="300" cy="103" r="37" fill="none" stroke="rgba(var(--signal-rgb),.24)"/></g>
+                  <g id="mobileIncident" clip-path="url(#mobilePacketClip)" opacity="0"><path id="mobileIncidentPath" class="mobile-packet-curve" d=""/></g>
+                  <g id="mobileReflected" opacity="0"><path id="mobileReflectedPath" class="mobile-packet-curve" d=""/></g>
+                  <g id="mobileTransmitted" opacity="0"><path id="mobileTransmittedPath" class="mobile-packet-curve" d=""/></g>
+                </g>
+                <path id="mobileMorphTrace" class="mobile-scope-trace" d="" opacity="0"/>
+                <g id="mobileMetricOverlay" opacity="0">
+                  <text x="352" y="144" class="mobile-scope-label">飞行时间 / TOF</text><text x="352" y="166" class="mobile-metric">462.0 μs</text>
+                  <text x="352" y="194" class="mobile-scope-label">峰值 / PEAK</text><text x="352" y="216" class="mobile-metric">0.384 V</text>
+                  <text x="352" y="244" class="mobile-scope-label">信噪比 / SNR</text><text x="352" y="266" class="mobile-metric">38.6 dB</text>
+                </g>
+                <g id="mobileDistanceRuler" fill="#98a0a6" font-family="var(--mono)" font-size="12">
+                  <text x="328" y="107">0</text><text x="328" y="163">100</text><text x="328" y="219">200</text><text x="328" y="275">300</text><text x="328" y="331">400</text><text x="328" y="387">500</text><text x="328" y="443">600</text><text x="328" y="499">700</text><text x="328" y="535">800 mm</text>
+                </g>
+                <g id="mobileTimeRuler" fill="#98a0a6" font-family="var(--mono)" font-size="12" opacity="0">
+                  <text x="30" y="554">−100</text><text x="150" y="554">100</text><text x="270" y="554">300</text><text x="390" y="554">500</text><text x="510" y="554">700</text><text x="548" y="554">800 μs</text>
+                </g>
+              </g></g>
+            </svg>
+          </div>
+
+          <div class="variant-scene hero-a" aria-hidden="true">
+            <svg class="variant-svg variant-desktop" viewBox="0 0 1600 500" preserveAspectRatio="xMidYMid meet">
+              <path class="hero-rule" d="M112 92H1488M112 410H1488"/>
+              <path class="hero-rule-dash" d="M455 112V386M815 112V386M1060 112V386"/>
+              <path class="hero-flow" d="M342 250H491m-8-6 8 6-8 6M710 250H841m-8-6 8 6-8 6M950 250H1081m-8-6 8 6-8 6"/>
+              <g class="a-awg">
+                <text x="150" y="134" class="hero-kicker">01 / EXCITATION SOURCE</text>
+                <text x="150" y="181" class="hero-label-large">AWG</text>
+                <text x="150" y="203" class="hero-note">HANN BURST · 100 kHz · 5 CYCLES</text>
+                <path class="hero-rule" d="M150 250H340"/>
+                <path class="hero-signal" d="M164 250H208q7 0 12-7t12 14t12-25t14 32t15-17t17 3q7 0 12-7t12 14t12-25t14 32t15-17t17 3q7 0 12-7t12 14t12-25t14 32t15-17t17 3H340"/>
+                <circle class="a-awg-ring hero-node" cx="174" cy="250" r="16"/>
+                <circle class="hero-node-core" cx="174" cy="250" r="3"/>
+                <text x="150" y="294" class="hero-micro">2 Vpp · SOFTWARE FIRE AFTER ARM</text>
+                <text x="150" y="350" class="hero-kicker">SIGNAL GENERATION</text>
+                <path class="hero-signal-dim" d="M155 365h185"/>
+              </g>
+              <g class="a-adc">
+                <text x="510" y="134" class="hero-kicker">02 / ACQUISITION READY</text>
+                <text x="510" y="181" class="hero-label">ADC ARMED</text>
+                <text x="510" y="203" class="hero-note">RUNBLOCK · 8 INPUTS SYNCHRONIZED</text>
+                <path class="hero-rule" d="M510 232H702M510 270H702M510 308H702"/>
+                <path class="hero-signal-soft" d="M526 232h157M526 242h157M526 252h157M526 262h157M526 270h157M526 280h157M526 290h157M526 300h157"/>
+                <path class="hero-rule" d="M510 222v94M702 222v94"/>
+                <circle class="a-arm-indicator hero-node" cx="686" cy="154" r="6"/>
+                <circle class="hero-node-core" cx="686" cy="154" r="2"/>
+                <text x="510" y="350" class="hero-kicker">ARM BEFORE EXCITATION</text>
+                <text x="510" y="369" class="hero-micro">采集卡先武装 · 触发边沿定义零时刻</text>
+              </g>
+              <g class="a-zero">
+                <text x="848" y="134" class="hero-kicker">03 / HARDWARE REFERENCE</text>
+                <text x="848" y="181" class="hero-label">TRIGGER</text>
+                <text x="848" y="203" class="hero-note">HARDWARE EDGE</text>
+                <path class="hero-zero-line hero-axis" d="M932 224V328"/>
+                <path class="a-zero-indicator hero-node" d="M932 238l12 12-12 12-12-12z"/>
+                <circle class="hero-node-core" cx="932" cy="250" r="3.2"/>
+                <text x="951" y="260" class="hero-label-large">t=0</text>
+                <text x="848" y="350" class="hero-kicker">SHARED TIME ORIGIN</text>
+                <text x="848" y="369" class="hero-micro">采样时基由硬件触发建立</text>
+              </g>
+              <g class="a-capture">
+                <text x="1090" y="134" class="hero-kicker">04 / SYNCHRONOUS RECORD</text>
+                <text x="1090" y="181" class="hero-label">8CH CAPTURE</text>
+                <text x="1090" y="203" class="hero-note">20 MS/s · 200 k POINTS / CHANNEL</text>
+                <path class="hero-rule" d="M1090 220H1472M1090 340H1472"/>
+                <path class="hero-rule-dash" d="M1090 220V340M1185 220V340M1280 220V340M1375 220V340M1472 220V340"/>
+                <path class="hero-signal-dim" d="M1090 235H1472M1090 249H1472M1090 263H1472M1090 277H1472M1090 291H1472M1090 305H1472M1090 319H1472M1090 333H1472"/>
+                <path class="hero-signal a-channel-wave" d="M1090 235H1198q9 0 14-8t13 16t13-29t15 37t16-17t19 1H1472"/>
+                <path class="hero-signal-mid a-channel-wave" d="M1090 249H1224q9 0 14-7t13 14t13-25t15 32t16-14t19 1H1472"/>
+                <path class="hero-signal-soft a-channel-wave" d="M1090 263H1247q9 0 14-6t13 12t13-21t15 27t16-12t19 1H1472"/>
+                <path class="hero-signal a-channel-wave" d="M1090 277H1270q9 0 14-5t13 10t13-18t15 23t16-10t19 1H1472"/>
+                <path class="hero-signal-soft a-channel-wave" d="M1090 291H1293q9 0 14-5t13 9t13-16t15 20t16-9t19 1H1472"/>
+                <path class="hero-signal-mid a-channel-wave" d="M1090 305H1316q9 0 14-4t13 8t13-14t15 18t16-8t19 1H1472"/>
+                <path class="hero-signal-soft a-channel-wave" d="M1090 319H1339q9 0 14-4t13 7t13-12t15 16t16-7t19 1H1472"/>
+                <path class="hero-signal a-channel-wave" d="M1090 333H1362q9 0 14-3t13 6t13-10t15 13t16-6t19 1H1472"/>
+                <text x="1090" y="369" class="hero-micro">A  B  C  D  E  F  G  H</text>
+                <text x="1472" y="369" text-anchor="end" class="hero-micro">0 ─────────── TIME</text>
+              </g>
+              <path class="a-transfer-pulse hero-signal" d="M348 250H842" opacity=".25"/>
+              <text x="112" y="444" class="hero-micro">PICOSCOPE 4824A / EIGHT CHANNELS / STATIC SAMPLE · NOT MEASURED</text>
+              <text x="1488" y="444" text-anchor="end" class="hero-micro">HARDWARE FIRST</text>
+            </svg>
+            <svg class="variant-svg variant-mobile" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet">
+              <path class="hero-rule" d="M50 46H550M50 560H550"/>
+              <text x="62" y="74" class="hero-kicker">01 / AWG · HANN BURST</text>
+              <text x="62" y="112" class="hero-label-large">AWG</text>
+              <text x="198" y="108" class="hero-note">100 kHz · 5 CYCLES · 2 Vpp</text>
+              <path class="hero-rule" d="M64 145H536"/>
+              <path class="hero-signal" d="M66 145H128q7 0 12-7t12 14t12-24t14 31t14-16t17 2q7 0 12-7t12 14t12-24t14 31t14-16t17 2q7 0 12-7t12 14t12-24t14 31t14-16t17 2H536"/>
+              <path class="hero-flow" d="M300 165V202m-6-8 6 8 6-8"/>
+              <text x="62" y="233" class="hero-kicker">02 / ADC ARMED</text>
+              <text x="62" y="270" class="hero-label">8 INPUTS · RUNBLOCK</text>
+              <circle class="a-arm-indicator hero-node" cx="519" cy="225" r="7"/><circle class="hero-node-core" cx="519" cy="225" r="2.5"/>
+              <path class="hero-signal-soft" d="M80 292H520M80 302H520M80 312H520M80 322H520M80 332H520M80 342H520M80 352H520M80 362H520"/>
+              <path class="hero-flow" d="M300 376V405m-6-8 6 8 6-8"/>
+              <path class="hero-axis" d="M66 421H536"/>
+              <path class="a-zero-indicator hero-node" d="M300 410l11 11-11 11-11-11z"/><circle class="hero-node-core" cx="300" cy="421" r="3"/>
+              <text x="72" y="410" class="hero-kicker">03 / HARDWARE TRIGGER</text><text x="323" y="430" class="hero-label-large">t=0</text>
+              <text x="62" y="465" class="hero-kicker">04 / 8CH SYNCHRONOUS CAPTURE</text>
+              <path class="hero-rule-dash" d="M66 481H536M66 493H536M66 505H536M66 517H536M66 529H536M66 541H536"/>
+              <path class="hero-signal a-channel-wave" d="M66 481H170q8 0 13-7t13 14t13-24t15 31t15-15t16 1H536"/>
+              <path class="hero-signal-mid a-channel-wave" d="M66 493H206q8 0 13-6t13 12t13-20t15 26t15-12t16 1H536"/>
+              <path class="hero-signal-soft a-channel-wave" d="M66 505H242q8 0 13-5t13 10t13-17t15 22t15-10t16 1H536"/>
+              <path class="hero-signal a-channel-wave" d="M66 517H278q8 0 13-4t13 8t13-14t15 18t15-8t16 1H536"/>
+              <path class="hero-signal-soft a-channel-wave" d="M66 529H314q8 0 13-3t13 6t13-11t15 14t15-6t16 1H536"/>
+              <path class="hero-signal-mid a-channel-wave" d="M66 541H350q8 0 13-3t13 5t13-9t15 12t15-5t16 1H536"/>
+              <text x="540" y="552" text-anchor="end" class="hero-micro">20 MS/s · SAMPLE MODEL</text>
+            </svg>
+          </div>
+          <div class="stage-caption" id="stageCaption"><span class="stage-caption-kicker">SIGNAL INSTRUMENT / 8 CHANNELS</span><span class="stage-caption-title">真实采集链 · 从武装到采样</span><span class="stage-caption-detail">AWG → ADC ARMED → HARDWARE t=0 → 8CH CAPTURE</span></div>
+        </div>
+
+        <div class="scene-readouts" id="sceneReadouts" aria-label="演示参数与测量摘要">
+          <div class="readout"><span class="readout-label" data-readout-label="0">激励频率</span><strong class="readout-value" data-readout-value="0">100.0</strong><span class="readout-unit" data-readout-unit="0">kHz</span></div>
+          <div class="readout"><span class="readout-label" data-readout-label="1">波包周期</span><strong class="readout-value" data-readout-value="1">5</strong><span class="readout-unit" data-readout-unit="1">个周期</span></div>
+          <div class="readout"><span class="readout-label" data-readout-label="2">采样率</span><strong class="readout-value" data-readout-value="2">20.0</strong><span class="readout-unit" data-readout-unit="2">MS/s</span></div>
+          <div class="readout"><span class="readout-label" data-readout-label="3">采集通道</span><strong class="readout-value" data-readout-value="3">8 / 8</strong><span class="readout-unit" data-readout-unit="3">同步采集</span></div>
+        </div>
+      </section>
+
+      <section class="action-strip" aria-label="演示控制">
+        <div class="action-context"><strong>仅供演示</strong><span>不会发送设备指令</span></div>
+        <button class="start-inspection" id="startInspection" type="button">
+          <svg class="start-arrow" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-3.5-3.5L12 8l-3.5 3.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="startLabel">开始检测演示</span>
+          <svg class="start-arrow" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2.7v10.6M4.5 9.8 8 13.3l3.5-3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="complete-stamp" id="completeStamp">演示采集完成</span>
+      </section>
+
+      <nav class="workspace-dock" aria-label="工作区预览">
+        <div class="dock-items">
+          <button class="dock-item" type="button" data-workspace="live" aria-current="page"><span class="dock-index">01</span><span class="dock-name">实时采集</span><span class="dock-detail">8 通道 · 信号发生器 / 采集卡</span></button>
+          <button class="dock-item" type="button" data-workspace="sweep"><span class="dock-index">02</span><span class="dock-name">扫频测试</span><span class="dock-detail">频率 · 周期数 · F × N</span></button>
+          <button class="dock-item" type="button" data-workspace="lcr"><span class="dock-index">03</span><span class="dock-name">阻抗测量 LCR</span><span class="dock-detail">复阻抗 · 校准</span></button>
+          <button class="dock-item" type="button" data-workspace="analysis"><span class="dock-index">04</span><span class="dock-name">数据分析</span><span class="dock-detail">波形 · FFT · 时频分析</span></button>
+        </div>
+        <span class="dock-note" id="dockNote">工作区预览 / 实时采集</span>
+      </nav>
+      <footer class="sub-footer"><span><strong>WAVEGUARD STUDIO</strong>&nbsp;&nbsp;·&nbsp;&nbsp; 电影感科学仪器界面</span><span>模拟数据&nbsp;&nbsp;·&nbsp;&nbsp; PicoScope 设备离线</span></footer>
+    </main>
+
+    <div class="intro-cue" id="introCue" hidden role="status"><span>WAVEGUARD / 正在启动</span><button id="skipOpening" type="button">跳过开场</button></div>
+
+    <button class="skip-inspection" id="skipInspection" type="button" hidden>跳过演示&nbsp; →</button>
+
+    <script>
+      (() => {
+        const $ = (selector, root = document) => root.querySelector(selector);
+        const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+        const prefersLess = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const body = document.body;
+        const stage = $("#sceneStage");
+        const heroVariant = document.documentElement.dataset.hero || "B";
+        function setHeroMode(morph = 0) {
+          if (heroVariant === "A") {
+            $("#sceneMode").innerHTML = "<strong>信号链路</strong>&nbsp;&nbsp; / &nbsp;&nbsp;硬件触发 · 8CH";
+          } else if (heroVariant === "C") {
+            $("#sceneMode").innerHTML = "<strong>信号表征</strong>&nbsp;&nbsp; / &nbsp;&nbsp;Hann → 8CH → FFT → STFT";
+          } else {
+            $("#sceneMode").innerHTML = morph > .78
+              ? "<strong>测量场景</strong>&nbsp;&nbsp; / &nbsp;&nbsp;模拟波形"
+              : "<strong>导波传播</strong>&nbsp;&nbsp; / &nbsp;&nbsp;脉冲回波";
+          }
+        }
+        const systemState = $("#systemState");
+        const systemStateName = $("#systemStateName");
+        const systemStateDetail = $("#systemStateDetail");
+        const startButton = $("#startInspection");
+        const startLabel = $("#startLabel");
+        const replayOpening = $("#replayOpening");
+        const introCue = $("#introCue");
+        const incident = $("#incidentPacket");
+        const reflected = $("#reflectedPacket");
+        const transmitted = $("#transmittedPacket");
+        const sceneCamera = $("#sceneCamera");
+        const mobileCamera = $("#mobileCamera");
+        const readoutLabels = $$("[data-readout-label]");
+        const readoutValues = $$("[data-readout-value]");
+        const readoutUnits = $$("[data-readout-unit]");
+        const dockItems = $$(".dock-item");
+        const duration = 6300;
+        const txX = 205;
+        const rxX = 556;
+        const defectX = 1120;
+        const txY = 103;
+        const rxY = 250;
+        const defectY = 486;
+        const clipRect = $("#packetClipRect");
+        const mobileClipRect = $("#mobilePacketClipRect");
+        const trace = $("#morphTrace");
+        const mobileTrace = $("#mobileMorphTrace");
+        let openingTimer = 0;
+        let rafId = 0;
+        let inspectionStartedAt = 0;
+        let inspecting = false;
+        let sceneTransition = null;
+        let lastState = "";
+
+        const lerp = (a, b, t) => a + (b - a) * t;
+        function clamp(value, min = 0, max = 1) { return Math.max(min, Math.min(max, value)); }
+        function smooth(value) {
+          const t = clamp(value);
+          return t * t * (3 - 2 * t);
+        }
+        function span(progress, start, end) { return smooth((progress - start) / (end - start)); }
+        function pathFromPoints(points) {
+          return points.map((point, index) =>
+            (index ? "L" : "M") + point[0].toFixed(2) + " " + point[1].toFixed(2)
+          ).join(" ");
+        }
+        function hannPath(width, amplitude, phase = 0) {
+          const points = [];
+          for (let index = 0; index <= 160; index += 1) {
+            const t = index / 160;
+            const x = (t - .5) * width;
+            const envelope = Math.pow(Math.sin(Math.PI * t), 2);
+            const carrier = Math.sin(t * Math.PI * 10 + phase) * amplitude * envelope;
+            points.push([x, -carrier]);
+          }
+          return pathFromPoints(points);
+        }
+        function verticalHannPath(length, amplitude, phase = 0, returning = false) {
+          const points = [];
+          for (let index = 0; index <= 160; index += 1) {
+            const t = index / 160;
+            const envelope = Math.pow(Math.sin(Math.PI * t), 2);
+            const carrier = Math.sin(t * Math.PI * 10 + phase) * amplitude * envelope;
+            const y = (t - .5) * length * (returning ? -1 : 1);
+            points.push([carrier, y]);
+          }
+          return pathFromPoints(points);
+        }
+        function scopeSignal(x) {
+          const direct = Math.exp(-Math.pow((x - 520) / 58, 2)) *
+            Math.sin((x - 520) * .115 + Math.PI / 2) * 38;
+          const echo = Math.exp(-Math.pow((x - 966) / 48, 2)) *
+            Math.sin((x - 966) * .112 + Math.PI / 2) * 54;
+          const ring = Math.exp(-Math.pow((x - 754) / 155, 2)) *
+            Math.sin((x - 700) * .046) * 2.3;
+          return 288 - direct - echo - ring;
+        }
+        function mobileSignal(x) {
+          const direct = Math.exp(-Math.pow((x - 180) / 38, 2)) *
+            Math.sin((x - 180) * .18 + Math.PI / 2) * 43;
+          const echo = Math.exp(-Math.pow((x - 367) / 35, 2)) *
+            Math.sin((x - 367) * .19 + Math.PI / 2) * 58;
+          const ring = Math.exp(-Math.pow((x - 272) / 62, 2)) *
+            Math.sin((x - 258) * .09) * 3;
+          return 300 - direct - echo - ring;
+        }
+        const targetTrace = Array.from({ length: 161 }, (_, index) => {
+          const x = 1468 - index * (1336 / 160);
+          return [x, scopeSignal(x)];
+        });
+        const targetMobileTrace = Array.from({ length: 161 }, (_, index) => {
+          const x = 30 + index * (540 / 160);
+          return [x, mobileSignal(x)];
+        });
+        function setOpacity(node, value) { node.style.opacity = String(clamp(value)); }
+        function setSystemState(name, detail, state) {
+          if (lastState === name + detail + state) return;
+          lastState = name + detail + state;
+          systemStateName.textContent = name;
+          systemStateDetail.textContent = detail;
+          systemState.dataset.state = state;
+        }
+        function setReadouts(measured) {
+          const values = measured
+            ? [["往返时间 / TOF", "462.0", "μs"], ["峰值 / PEAK", "0.384", "V"], ["信噪比 / SNR", "38.6", "dB"], ["接收通道", "A / D / H", "回波采集"]]
+            : [["激励频率", "100.0", "kHz"], ["波包周期", "5", "个周期"], ["采样率", "20.0", "MS/s"], ["采集通道", "8 / 8", "同步采集"]];
+          values.forEach((row, index) => {
+            readoutLabels[index].textContent = row[0];
+            readoutValues[index].textContent = row[1];
+            readoutUnits[index].textContent = row[2];
+          });
+        }
+        function updateState(progress) {
+          if (progress < .12) {
+            body.dataset.phase = "armed";
+            setSystemState("系统武装", "采集卡预备 · H 通道触发", "armed");
+          } else if (progress < .205) {
+            body.dataset.phase = "burst";
+            setSystemState("激励已就绪", "汉宁窗 · 100.0 kHz · 5 个周期", "armed");
+          } else if (progress < .54) {
+            body.dataset.phase = "propagation";
+            setSystemState("导波传播中", "A₀ 模态 · 沿试件正向传播", "wave");
+          } else if (progress < .625) {
+            body.dataset.phase = "impact";
+            setSystemState("缺陷交互", "能量分裂 · 反射与透射", "defect");
+          } else if (progress < .785) {
+            body.dataset.phase = "return";
+            setSystemState("回波返回", "反射波沿试件反向传播", "echo");
+          } else if (progress < .91) {
+            body.dataset.phase = "acquisition";
+            setSystemState("接收采集中", "分块采集 · 多通道同步", "rx");
+          } else if (progress < 1) {
+            body.dataset.phase = "analysis";
+            setSystemState("信号分析", "TOF · 峰值 · 信噪比", "rx");
+          } else {
+            body.dataset.phase = "complete";
+            setSystemState("演示完成", "模拟数据 · 设备离线", "complete");
+          }
+        }
+        function setCamera(focusX, focusY, zoom, morph) {
+          const x = lerp(focusX, 800, smooth(morph));
+          const y = lerp(focusY, 300, smooth(morph));
+          const scale = lerp(zoom, 1, smooth(morph));
+          sceneCamera.setAttribute("transform", "matrix(" + scale.toFixed(4) + ",0,0," + scale.toFixed(4) + "," +
+            (800 - x * scale).toFixed(2) + "," + (279 - 279 * scale).toFixed(2) + ")");
+          mobileCamera.setAttribute("transform", "matrix(" + scale.toFixed(4) + ",0,0," + scale.toFixed(4) + "," +
+            (300 - 300 * scale).toFixed(2) + "," + (300 - y * scale).toFixed(2) + ")");
+        }
+        function setDesktopTrace(sourceCenter, amplitude, morph) {
+          const points = [];
+          for (let index = 0; index <= 160; index += 1) {
+            const t = index / 160;
+            const x = sourceCenter + 85 - t * 170;
+            const packetT = t;
+            const envelope = Math.pow(Math.sin(Math.PI * packetT), 2);
+            const packetY = 279 - Math.sin(packetT * Math.PI * 10 + .36) * amplitude * envelope;
+            const destination = targetTrace[index];
+            points.push([lerp(x, destination[0], morph), lerp(packetY, destination[1], morph)]);
+          }
+          trace.setAttribute("d", pathFromPoints(points));
+        }
+        function setMobileTrace(sourceCenter, amplitude, morph) {
+          const points = [];
+          for (let index = 0; index <= 160; index += 1) {
+            const t = index / 160;
+            const envelope = Math.pow(Math.sin(Math.PI * t), 2);
+            const packetX = 300 + Math.sin(t * Math.PI * 10 + .36) * amplitude * envelope;
+            const packetY = sourceCenter + 56 - t * 112;
+            const destination = targetMobileTrace[index];
+            points.push([lerp(packetX, destination[0], morph), lerp(packetY, destination[1], morph)]);
+          }
+          mobileTrace.setAttribute("d", pathFromPoints(points));
+        }
+        function mobileTicks(morph) {
+          const pieces = [];
+          for (let index = 0; index <= 10; index += 1) {
+            const y = 62 + index * 47.8;
+            const x = 30 + index * 54;
+            const x1 = lerp(294, x, morph);
+            const y1 = lerp(y, 294, morph);
+            const dx = lerp(12, 0, morph);
+            const dy = lerp(0, 12, morph);
+            pieces.push("M" + x1.toFixed(2) + " " + y1.toFixed(2) + "h" + dx.toFixed(2) + "v" + dy.toFixed(2));
+          }
+          $("#mobileRulerTicks").setAttribute("d", pieces.join(" "));
+        }
+        function desktopTicks(morph) {
+          const ticks = [];
+          for (let index = 0; index <= 8; index += 1) {
+            const distanceX = 126 + index * (1348 / 8);
+            const timeX = 132 + index * (1336 / 8);
+            const x = lerp(distanceX, timeX, morph);
+            ticks.push("M" + x.toFixed(2) + " 89v9");
+          }
+          $("#desktopRulerTicks").setAttribute("d", ticks.join(" "));
+        }
+        function setRulerAndAxis(morph) {
+          setOpacity($("#distanceRuler"), 1 - morph);
+          setOpacity($("#timeRuler"), morph);
+          setOpacity($("#mobileDistanceRuler"), 1 - morph);
+          setOpacity($("#mobileTimeRuler"), morph);
+          setOpacity($("#scopeSystem"), morph);
+          setOpacity($("#mobileScope"), morph);
+          $("#sharedAxis").setAttribute("x1", lerp(128, 132, morph).toFixed(2));
+          $("#sharedAxis").setAttribute("x2", lerp(1460, 1468, morph).toFixed(2));
+          $("#sharedAxis").setAttribute("y1", lerp(279, 288, morph).toFixed(2));
+          $("#sharedAxis").setAttribute("y2", lerp(279, 288, morph).toFixed(2));
+          $("#sharedAxis").setAttribute("stroke", morph > .08 ? "#4c82ad" : "#727e88");
+          desktopTicks(morph);
+          const axisStartX = lerp(300, 30, morph);
+          const axisStartY = lerp(62, 300, morph);
+          const axisEndX = lerp(300, 570, morph);
+          const axisEndY = lerp(540, 300, morph);
+          $("#mobileAxis").setAttribute("d", "M" + axisStartX.toFixed(2) + " " + axisStartY.toFixed(2) +
+            "L" + axisEndX.toFixed(2) + " " + axisEndY.toFixed(2));
+          mobileTicks(morph);
+        }
+        function setWorkspace(name) {
+          const details = {
+            live: "工作区预览 / 实时采集",
+            sweep: "工作区预览 / 频率 × 周期数",
+            lcr: "工作区预览 / 复阻抗测量",
+            analysis: "工作区预览 / 波形与时频分析"
+          };
+          dockItems.forEach((item) => {
+            if (item.dataset.workspace === name) item.setAttribute("aria-current", "page");
+            else item.removeAttribute("aria-current");
+          });
+          $("#dockNote").textContent = details[name] || details.live;
+        }
+        function resetScene() {
+          body.dataset.phase = "idle";
+          lastState = "";
+          stage.classList.remove("is-scope", "is-measured", "is-defect", "is-firing", "is-rx");
+          $("#defectMark").removeAttribute("style");
+          $("#defectHalo").setAttribute("opacity", "0");
+          $("#defectHalo").setAttribute("r", "19");
+          $("#mobileDefectHalo").setAttribute("opacity", "0");
+          $("#mobileDefectHalo").setAttribute("r", "21");
+          $("#specimenBody").style.opacity = "1";
+          $("#stationSystem").style.opacity = "1";
+          $("#defectSystem").style.opacity = "1";
+          $("#mobilePhysical").style.opacity = "1";
+          $("#scopeSystem").style.opacity = "0";
+          $("#mobileScope").style.opacity = "0";
+          $("#metricOverlay").style.opacity = "0";
+          $("#mobileMetricOverlay").style.opacity = "0";
+          $("#distanceFooter").style.opacity = "1";
+          incident.style.opacity = "0";
+          reflected.style.opacity = "0";
+          transmitted.style.opacity = "0";
+          trace.style.opacity = "0";
+          mobileTrace.style.opacity = "0";
+          trace.setAttribute("d", "");
+          mobileTrace.setAttribute("d", "");
+          $("#propagationTail").setAttribute("d", "M205 279H205");
+          clipRect.setAttribute("x", "-85");
+          clipRect.setAttribute("width", "0");
+          mobileClipRect.setAttribute("x", "-30");
+          mobileClipRect.setAttribute("y", "-56");
+          mobileClipRect.setAttribute("width", "60");
+          mobileClipRect.setAttribute("height", "0");
+          sceneCamera.setAttribute("transform", "matrix(1,0,0,1,0,0)");
+          mobileCamera.setAttribute("transform", "matrix(1,0,0,1,0,0)");
+          $("#timeRuler").style.opacity = "0";
+          $("#distanceRuler").style.opacity = "1";
+          $("#mobileTimeRuler").style.opacity = "0";
+          $("#mobileDistanceRuler").style.opacity = "1";
+          $("#sharedAxis").setAttribute("x1", "128");
+          $("#sharedAxis").setAttribute("x2", "1460");
+          $("#sharedAxis").setAttribute("y1", "279");
+          $("#sharedAxis").setAttribute("y2", "279");
+          $("#sharedAxis").setAttribute("stroke", "#727e88");
+          $("#mobileAxis").setAttribute("d", "M300 62V540");
+          desktopTicks(0);
+          mobileTicks(0);
+          setHeroMode(0);
+          $("#stageCaption").style.display = "";
+          $("#completeStamp").style.display = "";
+          setReadouts(false);
+          setSystemState("系统就绪", "模拟会话 · 未连接真实设备", "ready");
+        }
+        function closeOpening() {
+          window.clearTimeout(openingTimer);
+          body.classList.remove("is-opening");
+          introCue.hidden = true;
+        }
+        function playOpening() {
+          if (inspecting) return;
+          closeOpening();
+          if (prefersLess.matches) return;
+          void body.offsetWidth;
+          body.classList.add("is-opening");
+          introCue.hidden = false;
+          openingTimer = window.setTimeout(closeOpening, 1580);
+        }
+        function setDesktopPacket(center, opacity, amplitude, branch = "incident") {
+          const node = branch === "incident" ? incident : branch === "reflected" ? reflected : transmitted;
+          node.setAttribute("transform", branch === "reflected"
+            ? "translate(" + center.toFixed(2) + " 279) scale(-1 1)"
+            : "translate(" + center.toFixed(2) + " 279)");
+          node.style.opacity = String(clamp(opacity));
+          const curveId = branch === "incident" ? "#incidentCurve" : branch === "reflected" ? "#returnCurve" : "#transmitCurve";
+          const blurId = branch === "incident" ? "#incidentBlur" : branch === "reflected" ? "#returnBlur" : "#transmitBlur";
+          const phase = branch === "reflected" ? .36 : 0;
+          const path = hannPath(170, amplitude, phase);
+          $(curveId).setAttribute("d", path);
+          $(blurId).setAttribute("d", path);
+        }
+        function setMobilePacket(center, opacity, amplitude, branch = "incident", formation = 1) {
+          const node = branch === "incident" ? $("#mobileIncident") :
+            branch === "reflected" ? $("#mobileReflected") : $("#mobileTransmitted");
+          const pathNode = branch === "incident" ? $("#mobileIncidentPath") :
+            branch === "reflected" ? $("#mobileReflectedPath") : $("#mobileTransmittedPath");
+          const path = verticalHannPath(112, amplitude, branch === "reflected" ? .36 : 0, false);
+          node.setAttribute("transform", "translate(300 " + center.toFixed(2) + ")" +
+            (branch === "reflected" ? " scale(1 -1)" : ""));
+          node.style.opacity = String(clamp(opacity));
+          pathNode.setAttribute("d", path);
+          if (branch === "incident") {
+            mobileClipRect.setAttribute("x", "-30");
+            mobileClipRect.setAttribute("y", "-56");
+            mobileClipRect.setAttribute("width", "60");
+            mobileClipRect.setAttribute("height", (112 * formation).toFixed(2));
+          }
+        }
+        function setVisualState(progress) {
+          const formed = span(progress, .015, .18);
+          const launch = span(progress, .155, .245);
+          const travel = span(progress, .20, .545);
+          const split = span(progress, .535, .62);
+          const returnTravel = span(progress, .565, .79);
+          const morph = span(progress, .775, .975);
+          const metric = span(progress, .885, .99);
+          const firePulse = span(progress, .16, .195) * (1 - span(progress, .235, .30));
+          const impactPulse = span(progress, .545, .565) * (1 - span(progress, .605, .635));
+          const rxPulse = span(progress, .77, .795) * (1 - span(progress, .83, .875));
+          const incomingCenter = lerp(txX, defectX, travel);
+          const echoCenter = lerp(defectX, rxX, returnTravel);
+          const transmitTravel = span(progress, .545, .68);
+          const transmitCenter = lerp(defectX, 1430, transmitTravel);
+          const packetAmplitude = 20 * formed;
+          const incomingOpacity = formed * (.08 + launch * .92) * (1 - split);
+          const branchOpacity = split * .72;
+
+          updateState(progress);
+          setDesktopPacket(incomingCenter, incomingOpacity, packetAmplitude, "incident");
+          setDesktopPacket(echoCenter, branchOpacity * (1 - morph * .92), packetAmplitude * .72, "reflected");
+          setDesktopPacket(transmitCenter, branchOpacity * (1 - transmitTravel * .92), packetAmplitude * .48, "transmitted");
+          clipRect.setAttribute("x", "-85");
+          clipRect.setAttribute("width", (170 * formed).toFixed(2));
+          $("#propagationTail").setAttribute("d", "M205 279H" + Math.max(205, incomingCenter - 70).toFixed(2));
+          setOpacity($("#propagationTail"), travel * (1 - morph));
+
+          $("#defectHalo").setAttribute("opacity", String(clamp(Math.max(impactPulse, split * (1 - span(progress, .63, .73)) * .62))));
+          $("#defectHalo").setAttribute("r", (19 + impactPulse * 16).toFixed(2));
+          $("#defectMark").style.fill = impactPulse > .01 ? "#fff6e9" : "";
+          $("#defectMark").style.stroke = impactPulse > .01 ? "var(--copper)" : "";
+          $("#defectMark").style.transform = "scale(" + (1 + impactPulse * .14).toFixed(3) + ")";
+          $("#mobileDefectHalo").setAttribute("opacity", String(clamp(Math.max(impactPulse, split * (1 - span(progress, .63, .73)) * .62))));
+          $("#mobileDefectHalo").setAttribute("r", (21 + impactPulse * 17).toFixed(2));
+          const txFlare = $$("#txFlare circle");
+          txFlare.forEach((node, index) => {
+            node.style.opacity = String(firePulse * (index ? .48 : .72));
+            node.setAttribute("r", String((index ? 28 : 18) + firePulse * (index ? 15 : 9)));
+          });
+          $("#mobileTxFlare").style.opacity = String(firePulse * .85);
+          $$("#rxFlare circle").forEach((node, index) => {
+            node.style.opacity = String(rxPulse * (index ? .44 : .72));
+            node.setAttribute("r", String((index ? 22 : 12) + rxPulse * (index ? 14 : 8)));
+          });
+
+          setMobilePacket(lerp(txY, defectY, travel), incomingOpacity, packetAmplitude * .68, "incident", formed);
+          setMobilePacket(lerp(defectY, rxY, returnTravel), branchOpacity * (1 - morph * .92), packetAmplitude * .5, "reflected");
+          setMobilePacket(lerp(defectY, 535, transmitTravel), branchOpacity * (1 - transmitTravel * .92), packetAmplitude * .34, "transmitted");
+
+          const follow = span(progress, .08, .21);
+          const physicalFocusX = progress < .54
+            ? incomingCenter
+            : echoCenter;
+          const focusX = lerp(800, physicalFocusX, follow);
+          const physicalFocusY = progress < .54
+            ? lerp(txY, defectY, travel)
+            : lerp(defectY, rxY, returnTravel);
+          const focusY = lerp(300, physicalFocusY, follow);
+          const zoom = 1 + .052 * follow + .026 * impactPulse;
+          setCamera(focusX, focusY, zoom, morph);
+
+          const sourceCenter = echoCenter;
+          setDesktopTrace(sourceCenter, packetAmplitude * .72, morph);
+          setMobileTrace(lerp(defectY, rxY, returnTravel), packetAmplitude * .5, morph);
+          setOpacity(trace, morph);
+          setOpacity(mobileTrace, morph);
+          setRulerAndAxis(morph);
+          setOpacity($("#specimenBody"), 1 - morph);
+          setOpacity($("#stationSystem"), 1 - morph);
+          setOpacity($("#defectSystem"), (1 - morph) * (progress < .72 ? 1 : .3));
+          setOpacity($("#distanceFooter"), 1 - morph);
+          setOpacity($("#mobilePhysical"), 1 - morph);
+          setOpacity($("#metricOverlay"), metric);
+          setOpacity($("#mobileMetricOverlay"), metric);
+          setOpacity($("#scopeCursor"), metric);
+          $("#scopeMarker").setAttribute("cy", scopeSignal(966).toFixed(2));
+          setHeroMode(morph);
+
+          if (progress >= .9) $("#stageCaption").style.display = "none";
+          else $("#stageCaption").style.display = "";
+          if (progress >= .99) setReadouts(true);
+        }
+        function playSceneTransition(fromRect, toRect, transitionDuration = 820) {
+          if (prefersLess.matches || typeof stage.animate !== "function" || !fromRect.width || !toRect.width) return null;
+          const dx = fromRect.left - toRect.left;
+          const dy = fromRect.top - toRect.top;
+          const sx = fromRect.width / toRect.width;
+          const sy = fromRect.height / toRect.height;
+          return stage.animate([
+            { transformOrigin: "top left", transform: "translate(" + dx + "px," + dy + "px) scale(" + sx + "," + sy + ")" },
+            { transformOrigin: "top left", transform: "translate(0,0) scale(1,1)" }
+          ], { duration: transitionDuration, easing: "cubic-bezier(.22,1,.36,1)", fill: "both" });
+        }
+        function clearSceneTransition(animation = sceneTransition) {
+          if (!animation) return;
+          animation.cancel();
+          if (sceneTransition === animation) sceneTransition = null;
+        }
+        function setWorkspace(name) {
+          const details = {
+            live: "工作区预览 / 实时采集",
+            sweep: "工作区预览 / 频率 × 周期数",
+            lcr: "工作区预览 / 复阻抗测量",
+            analysis: "工作区预览 / 波形与时频分析"
+          };
+          dockItems.forEach((item) => {
+            if (item.dataset.workspace === name) item.setAttribute("aria-current", "page");
+            else item.removeAttribute("aria-current");
+          });
+          $("#dockNote").textContent = details[name] || details.live;
+        }
+        function tick(now) {
+          if (!inspecting) return;
+          const progress = clamp((now - inspectionStartedAt) / duration);
+          setVisualState(progress);
+          if (progress >= 1) {
+            finishInspection(false);
+            return;
+          }
+          rafId = window.requestAnimationFrame(tick);
+        }
+        async function finishInspection(skipped = false) {
+          if (rafId) window.cancelAnimationFrame(rafId);
+          rafId = 0;
+          clearSceneTransition();
+          const fromRect = stage.getBoundingClientRect();
+          inspecting = false;
+          body.classList.remove("cinematic-active");
+          body.classList.add("is-complete", "scene-transitioning");
+          body.dataset.phase = "complete";
+          $("#skipInspection").hidden = true;
+          setReadouts(true);
+          setSystemState("演示完成", skipped ? "已跳过 · 当前为模拟测量结果" : "模拟数据 · 设备离线", "complete");
+          startButton.disabled = true;
+          startLabel.textContent = "重播检测演示";
+          replayOpening.disabled = true;
+          const toRect = stage.getBoundingClientRect();
+          const exitAnimation = playSceneTransition(fromRect, toRect);
+          if (exitAnimation) {
+            sceneTransition = exitAnimation;
+            try { await exitAnimation.finished; } catch (error) { /* interrupted by replay */ }
+            clearSceneTransition(exitAnimation);
+          }
+          body.classList.remove("scene-transitioning");
+          if (!inspecting) {
+            startButton.disabled = false;
+            replayOpening.disabled = false;
+          }
+        }
+        async function startInspection() {
+          if (inspecting) return;
+          closeOpening();
+          clearSceneTransition();
+          body.classList.remove("is-complete");
+          resetScene();
+          const fromRect = stage.getBoundingClientRect();
+          body.classList.add("cinematic-active", "scene-transitioning");
+          body.dataset.phase = "armed";
+          const toRect = stage.getBoundingClientRect();
+          const entryAnimation = playSceneTransition(fromRect, toRect);
+          sceneTransition = entryAnimation;
+          inspecting = true;
+          setSystemState("场景聚焦中", "正在展开模拟检测场景", "armed");
+          startButton.disabled = true;
+          replayOpening.disabled = true;
+          $("#skipInspection").hidden = false;
+          if (prefersLess.matches) {
+            setVisualState(1);
+            finishInspection(true);
+            return;
+          }
+          if (entryAnimation) {
+            try { await entryAnimation.finished; } catch (error) { /* skipped or interrupted */ }
+            clearSceneTransition(entryAnimation);
+          }
+          if (!inspecting) return;
+          body.classList.remove("scene-transitioning");
+          inspectionStartedAt = performance.now();
+          rafId = window.requestAnimationFrame(tick);
+        }
+        function stopOpening() { closeOpening(); }
+        function bindWorkspaceDock() {
+          dockItems.forEach((item) => item.addEventListener("click", () => setWorkspace(item.dataset.workspace)));
+        }
+
+        resetScene();
+        bindWorkspaceDock();
+        startButton.addEventListener("click", startInspection);
+        $("#skipInspection").addEventListener("click", () => {
+          if (!inspecting) return;
+          setVisualState(1);
+          finishInspection(true);
+        });
+        $("#skipOpening").addEventListener("click", stopOpening);
+        replayOpening.addEventListener("click", playOpening);
+        document.documentElement.classList.add("js-ready");
+        window.requestAnimationFrame(playOpening);
+      })();
+    </script>
+      <script>
+      (() => {
+        const hero = document.documentElement.dataset.hero;
+        if (hero === "B") return;
+        const stateName = document.getElementById("systemStateName");
+        const stateDetail = document.getElementById("systemStateDetail");
+        const stateRoot = document.getElementById("systemState");
+        const labels = Array.from(document.querySelectorAll("[data-readout-label]"));
+        const values = Array.from(document.querySelectorAll("[data-readout-value]"));
+        const units = Array.from(document.querySelectorAll("[data-readout-unit]"));
+        const variants = {
+          A: {
+            idle: ["系统就绪","演示会话 · 未连接真实设备","ready"],
+            armed: ["ADC 已武装","RunBlock 已就绪 · 8 通道同步输入","armed"],
+            burst: ["AWG 激励就绪","Hann burst · 100 kHz · 5 周期","tx"],
+            propagation: ["等待硬件触发","ADC ARMED → AWG 软件触发","wave"],
+            impact: ["硬件触发 · t=0","触发边沿建立采样时间原点","rx"],
+            return: ["8CH 同步采集","20 MS/s · 200 k 点 / 通道","rx"],
+            acquisition: ["记录已接收","八通道同步记录 · 演示数据","rx"],
+            analysis: ["时基已锁定","示例采集 · 设备离线","rx"],
+            complete: ["演示完成","模拟数据 · 设备离线","complete"]
+          },
+          C: {
+            idle: ["系统就绪","演示会话 · 未连接真实设备","ready"],
+            armed: ["采集链路已武装","ADC RunBlock · 八通道同步输入","armed"],
+            burst: ["Hann burst","AWG · 100 kHz · 5 周期","tx"],
+            propagation: ["8CH 波形形成","共享时间基准 · 20 MS/s","wave"],
+            impact: ["频域映射 · FFT","同一采集信号 · 数学表征","rx"],
+            return: ["频谱结构就绪","时域 → 频率域","rx"],
+            acquisition: ["时频映射 · STFT","局部能量沿时间展开","rx"],
+            analysis: ["多域视图就绪","Hann → 8CH → FFT → STFT","rx"],
+            complete: ["演示完成","模拟数据 · 设备离线","complete"]
+          }
+        };
+        const resultReadouts = {
+          A: [["触发基准","t=0","hardware"],["采样率","20.0","MS/s"],["记录点数","200 k","点 / ch"],["采集通道","8 / 8","同步采集"]],
+          C: [["时域通道","8 / 8","同步采集"],["频谱主峰","100.0","kHz · 示例"],["时频分析","STFT","示意视图"],["采样率","20.0","MS/s"]]
+        };
+        const initialReadouts = [
+          ["激励频率","100.0","kHz"],
+          ["波包周期","5","个周期"],
+          ["采样率","20.0","MS/s"],
+          ["采集通道","8 / 8","同步采集"]
+        ];
+        let current = "";
+        function sync() {
+          const phase = document.body.dataset.phase || "idle";
+          if (phase === current) return;
+          current = phase;
+          const entry = variants[hero][phase] || variants[hero].idle;
+          stateName.textContent = entry[0];
+          stateDetail.textContent = entry[1];
+          stateRoot.dataset.state = entry[2];
+          const rows = phase === "analysis" || phase === "complete" ? resultReadouts[hero] : initialReadouts;
+          rows.forEach((row,index) => {
+            labels[index].textContent = row[0];
+            values[index].textContent = row[1];
+            units[index].textContent = row[2];
+          });
+        }
+        new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:["data-phase"]});
+        sync();
+      })();
+    </script>
+  </body>
+</html>

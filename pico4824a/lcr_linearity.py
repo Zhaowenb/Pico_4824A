@@ -21,6 +21,7 @@ import numpy as np
 
 from .config import AcquisitionConfig, CHANNEL_NAMES, RANGE_VOLTS
 from .device import CaptureResult, Pico4824A
+from .storage_naming import session_directory
 from .storage import load_npz, save_npz
 
 
@@ -853,8 +854,7 @@ def execute_linearity_test(base_config: AcquisitionConfig, cfg: LinearityConfig,
         raise ValueError("线性度测试必须且仅能同步启用 Voltage Monitor、Current Monitor、Receiver 三路所选通道")
     if cfg.sample_rate_hz / cfg.frequency_hz < 8:
         raise ValueError("每个激励周期至少需要 8 个采样点")
-    stamp = datetime.now().strftime("linearity_%Y%m%d_%H%M%S_%f")
-    folder = output_root / stamp
+    folder = session_directory(output_root, "linearity", simulated=getattr(device, "simulate", False))
     raw_dir = folder / "raw"
     raw_dir.mkdir(parents=True, exist_ok=False)
     config_payload = {"timestamp": datetime.now().astimezone().isoformat(), "measurement": asdict(cfg), "base_config": base_config.to_dict(),
@@ -910,7 +910,7 @@ def execute_linearity_test(base_config: AcquisitionConfig, cfg: LinearityConfig,
                           "total_points": len(plan), "repeat": repeat, "repeats": cfg.repeats,
                           "frequency_hz": cfg.frequency_hz, "awg_vpp": vpp, "direction": direction}, None)
             capture = device.capture(capture_config)
-            raw_name = f"p{point_index:04d}_{direction}_v{vpp:07.4f}_r{repeat:03d}.npz"
+            raw_name = f"档{point_index:04d}__{direction}__激励{vpp:g}Vpp__重复{repeat:02d}.npz"
             raw_path = save_npz(capture, raw_dir / raw_name)
             run_spec = {"run_index": index, "frequency_hz": cfg.frequency_hz, "cycles": cfg.cycles,
                         "direction": direction, "awg_vpp": vpp, "repeat": repeat,
