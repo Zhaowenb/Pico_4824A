@@ -9,6 +9,16 @@ import threading
 import time
 
 REMOTE = 'https://github.com/Zhaowenb/Pico_4824A.git'
+MIN_CHECK_INTERVAL_S = 60
+MAX_CHECK_INTERVAL_S = 365 * 24 * 3600
+DEFAULT_CHECK_INTERVAL_S = 3600
+
+
+def valid_check_interval(value):
+    if isinstance(value, bool) or not isinstance(value, int) or not MIN_CHECK_INTERVAL_S <= value <= MAX_CHECK_INTERVAL_S:
+        raise ValueError('自动检查间隔必须为 1 分钟至 1 年（365 天）的整数秒')
+    return value
+
 DEPENDENCIES = {'requirements.txt', 'pyproject.toml', 'setup.ps1', 'deploy/linux/Dockerfile',
                 'deploy/linux/Dockerfile.offline'}
 
@@ -25,11 +35,17 @@ class SoftwareUpdater:
         self._running = None
         self.preference_path = self.root/'configs/software-updates.json'
         auto = True
+        interval = DEFAULT_CHECK_INTERVAL_S
         try:
-            auto = bool(json.loads(self.preference_path.read_text(encoding='utf-8'))['auto_check'])
+            saved = json.loads(self.preference_path.read_text(encoding='utf-8'))
+            if not isinstance(saved, dict):
+                raise ValueError('无效的软件更新配置')
+            if isinstance(saved.get('auto_check'), bool):
+                auto = saved['auto_check']
+            interval = valid_check_interval(saved.get('check_interval_s', DEFAULT_CHECK_INTERVAL_S))
         except (OSError, ValueError, KeyError):
             pass
-        self.state = {'phase':'idle', 'auto_check':auto, 'branch':'btf', 'current':None,
+        self.state = {'phase':'idle', 'auto_check':auto, 'check_interval_s':interval, 'branch':'btf', 'current':None,
                       'running':None, 'latest':None, 'available':False, 'checked_at':None,
                       'message':'尚未检查更新', 'blocked':None, 'changes':0}
 
@@ -94,9 +110,11 @@ class SoftwareUpdater:
         if not isinstance(auto, bool):
             raise ValueError('auto_check 必须是布尔值')
         with self._lock:
+            interval = valid_check_interval(raw.get('check_interval_s', self.state['check_interval_s']))
             self.preference_path.parent.mkdir(parents=True, exist_ok=True)
-            self.preference_path.write_text(json.dumps({'auto_check':auto}, indent=2), encoding='utf-8')
+            self.preference_path.write_text(json.dumps({'auto_check':auto, 'check_interval_s':interval}, indent=2), encoding='utf-8')
             self.state['auto_check'] = auto
+            self.state['check_interval_s'] = interval
         return self.snapshot()
 
     def idle(self):

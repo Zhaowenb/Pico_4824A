@@ -5,12 +5,12 @@ const base=process.env.WAVEGUARD_URL||'http://127.0.0.1:4878';
  try{
   const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
-  let state={phase:'current',current:'11111111abcdef',running:'11111111abcdef',latest:'11111111abcdef',available:false,auto_check:false,message:'已是最新版本',blocked:null};
+  let state={phase:'current',current:'11111111abcdef',running:'11111111abcdef',latest:'11111111abcdef',available:false,auto_check:false,check_interval_s:3600,message:'已是最新版本',blocked:null};
   let applies=0,checks=0,appliedAt=0;
   await page.route('**/api/software-update**',async route=>{
    const r=route.request();
    if(r.url().endsWith('/check')){checks++;state={...state,phase:'available',latest:'22222222abcdef',available:true,message:'发现新版本'};}
-   if(r.url().endsWith('/preferences'))state.auto_check=r.postDataJSON().auto_check;
+   if(r.url().endsWith('/preferences')){state.auto_check=r.postDataJSON().auto_check;if(r.postDataJSON().check_interval_s!==undefined)state.check_interval_s=r.postDataJSON().check_interval_s;}
    if(r.url().endsWith('/apply')){applies++;appliedAt=Date.now();state={...state,phase:'installing',message:'正在安全关闭设备并更新代码'};}
    if(appliedAt&&Date.now()-appliedAt>500)state={...state,phase:'current',current:'22222222abcdef',running:'22222222abcdef',available:false,message:'已是最新版本'};
    if(r.method()==='POST'&&r.headers()['x-waveguard-update']!=='1')errors.push('missing explicit update header');
@@ -43,6 +43,15 @@ const base=process.env.WAVEGUARD_URL||'http://127.0.0.1:4878';
     if(overflow)errors.push('settings overflow '+width+' '+theme);
    }
   }
+  await page.locator('#wgUpdateIntervalUnit').selectOption('31536000');
+  await page.locator('#wgUpdateInterval').fill('1');
+  const saved=page.waitForResponse(r=>r.url().endsWith('/api/software-update/preferences'));
+  await page.locator('#wgUpdateIntervalSave').click();await saved;
+  if(state.check_interval_s!==31536000)errors.push('one-year interval not saved');
+  await page.locator('#wgUpdateInterval').fill('2');
+  await page.locator('#wgUpdateIntervalSave').click();
+  if(!(await page.locator('#wgUpdateStatus').textContent()).includes('1 年'))errors.push('year limit not enforced');
+  if(state.check_interval_s!==31536000)errors.push('invalid interval overwrote preference');
   await page.screenshot({path:'.test-tmp/software-update-settings.png'});
   state={...state,auto_check:true};appliedAt=0;
   const automatic=page.waitForResponse(r=>r.url().endsWith('/api/software-update/check'));

@@ -73,6 +73,24 @@ class SoftwareUpdateTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):self.updater.apply()
         self.assertEqual((self.local/'version.txt').read_text(),'my changes')
         self.assertEqual(self.control.events,[])
+
+    def test_check_interval_bounds_and_persistence(self):
+        for value in [60,3600,31536000]:
+            self.updater.preferences({'auto_check':True,'check_interval_s':value})
+            restored=SoftwareUpdater(self.local,self.control,trusted_remote=str(self.remote))
+            self.assertEqual(restored.snapshot()['check_interval_s'],value)
+        for value in [0,59,31536001,True,1.5,'3600',None]:
+            with self.subTest(value=value),self.assertRaises(ValueError):
+                self.updater.preferences({'auto_check':True,'check_interval_s':value})
+        self.updater.preferences({'auto_check':False})
+        self.assertEqual(self.updater.snapshot()['check_interval_s'],31536000)
+
+    def test_legacy_preference_uses_one_hour_and_preserves_disabled(self):
+        self.updater.preference_path.parent.mkdir(parents=True,exist_ok=True)
+        self.updater.preference_path.write_text('{"auto_check":false}')
+        restored=SoftwareUpdater(self.local,self.control,trusted_remote=str(self.remote))
+        self.assertFalse(restored.snapshot()['auto_check'])
+        self.assertEqual(restored.snapshot()['check_interval_s'],3600)
     def test_busy_and_unknown_output_do_not_update(self):
         self.new_version();self.check()
         for state in ['running','paused']:
