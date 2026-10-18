@@ -1253,7 +1253,7 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 self._send_json(self.control.bias_result_payload())
             elif path == "/api/bias-scan/preview":
                 query=parse_qs(parsed.query)
-                self._send_json(self.control.bias_preview(int(query.get("point",["0"])[0]),int(query.get("repeat",["1"])[0])))
+                self._send_json(self.control.bias_preview(int(query.get("point",["0"])[0]),int(query.get("repeat",["1"])[0]),int(query["attempt"][0]) if "attempt" in query else None))
             elif path == "/api/bias-scan/export":
                 name=parse_qs(parsed.query).get("name",["summary.csv"])[0]
                 if name == 'all.zip':

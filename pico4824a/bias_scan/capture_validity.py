@@ -6,7 +6,6 @@ ps4000a block readiness alone does not prove a hardware trigger occurred.
 import math
 import numpy as np
 from ..waveforms import BURST_WAVEFORMS
-from ..config import RANGE_VOLTS
 
 
 def assess_capture(capture, config):
@@ -21,23 +20,22 @@ def assess_capture(capture, config):
         return fail('INCOMPLETE_CAPTURE', '采集返回点数不足，未完成整段捕获')
     if capture.overflow_channels:
         return fail('ADC_OVERFLOW', '采集输入溢出：'+','.join(capture.overflow_channels))
+    pzt = capture.volts.get(config.pzt_channel)
+    if pzt is None or len(pzt)!=len(t) or not np.all(np.isfinite(pzt)):
+        return fail('INVALID_PZT', 'PZT 原始采集缺失或包含非有限值')
     info = getattr(capture, 'capture_info', {})
     if info.get('auto_triggered') is True or info.get('valid') is False:
         return fail('CAPTURE_FAILED', '采集元数据标记触发或捕获失败')
     acquisition = capture.config
     trigger = acquisition.trigger
-    raw_trigger = capture.volts.get(trigger.source)
-    # Conservative corroboration: elapsed time alone is never a trigger verdict.
-    if trigger.enabled and trigger.auto_trigger_ms>0 and raw_trigger is not None:
-        waited = info.get('ready_wait_s')
-        values = np.asarray(raw_trigger)
-        if isinstance(waited, (float,int)) and math.isfinite(waited) and waited >= trigger.auto_trigger_ms/1000 and np.all(np.isfinite(values)) and len(values):
-            tolerance = RANGE_VOLTS[acquisition.channels[trigger.source].range]/2047*2
-            unreachable = (np.max(values)<trigger.threshold_v-tolerance if trigger.direction in {'rising','above'}
-                           else np.min(values)>trigger.threshold_v+tolerance if trigger.direction in {'falling','below'}
-                           else np.min(values)>trigger.threshold_v+tolerance or np.max(values)<trigger.threshold_v-tolerance)
-            if unreachable:
-                return fail('TRIGGER_MISSED', '疑似自动触发：等待已达自动触发时限，原始触发通道未达到阈值')
+    # Discard late-ready frames conservatively. ps4000a does not expose an
+    # auto-trigger flag here; host/USB latency can also cause a late return.
+    waited = info.get('ready_wait_s')
+    if (trigger.enabled and trigger.auto_trigger_ms>0
+            and isinstance(waited, (float,int)) and math.isfinite(waited)
+            and waited >= trigger.auto_trigger_ms/1000):
+        return fail('TRIGGER_TIMEOUT',
+                    f'疑似触发超时：等待 {waited*1000:.1f} ms，达到自动触发阈值 {trigger.auto_trigger_ms:g} ms；该次不计合格，重新采集')
     channels = list(dict.fromkeys(c for c in [config.excitation_voltage_channel,config.excitation_current_channel] if c))
     if not channels or not acquisition.awg.enabled or acquisition.awg.waveform not in BURST_WAVEFORMS:
         return result

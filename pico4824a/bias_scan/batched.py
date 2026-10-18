@@ -5,6 +5,7 @@ import threading
 import time
 
 from ..config import AcquisitionConfig
+from ..device import CaptureTimeout
 from .analyzer import BiasScanAnalyzer
 from .quality import assess, suggest_ranges
 from .capture_validity import assess_capture
@@ -80,7 +81,7 @@ def save_group(owner, group, records, error):
             capture, telemetry = record['capture'], record['telemetry']
             value, reason = BiasScanAnalyzer.vpp(capture, config)
             diagnosis = record.get('diagnosis')
-            capture_quality = assess_capture(capture, config)
+            capture_quality = record.get('capture_quality') or assess_capture(capture, config)
             capture.capture_info['bias_validation'] = capture_quality
             if diagnosis is not None and diagnosis['status'] == 'OK' and value is None:
                 diagnosis.update(status='INVALID', reason=reason or 'PZT 无法评价')
@@ -89,8 +90,7 @@ def save_group(owner, group, records, error):
                                               'repeat':record['repeat'], **diagnosis, 'output_state':'off'}
             valid = value is not None and capture_quality['valid'] and not record.get('interrupted') and (diagnosis is None or diagnosis['status'] == 'OK')
             repeat, attempt = record['repeat'], record['attempt']
-            filename = (f'重复{repeat:02d}_尝试{attempt:02d}__原始波形.npz' if diagnosis is not None
-                        else f'重复{repeat:02d}__PZT-{config.pzt_channel}__原始波形.npz')
+            filename = f'重复{repeat:02d}_尝试{attempt:02d}__PZT-{config.pzt_channel}__原始波形.npz'
             row = {'point':index, 'repeat':repeat, 'target_a':target, 'awg_vpp':amplitude,
                    'actual_current_a':telemetry['current_a'], 'telemetry_monotonic_time':telemetry['monotonic_time'],
                    'telemetry_wall_time':telemetry.get('wall_time'), 'capture_start':record['started'],
@@ -100,7 +100,8 @@ def save_group(owner, group, records, error):
                    'filter_transition_hz':config.filter_transition_hz, 'valid':valid,
                    'invalid_reason':record.get('interrupted_reason', '') or (capture_quality['reason'] if not capture_quality['valid'] else '') or (diagnosis['reason'] if diagnosis else '') or reason,
                    'capture_valid':capture_quality['valid'], 'capture_status':capture_quality['status'],
-                   'capture_reason':capture_quality['reason'],
+                   'capture_reason':capture_quality['reason'], 'attempt':attempt,
+                   'capture_retry':record.get('capture_retry',False),
                    'file':(point_folder / filename).relative_to(owner.folder).as_posix()}
             if diagnosis is not None:
                 row.update(attempt=attempt, quality_status=diagnosis['status'], range_retry=record.get('retry', False),
@@ -117,10 +118,12 @@ def save_group(owner, group, records, error):
                 rows.append(row)
             if owner.result.get('safety_alarm', {}).get('point') == index and not valid:
                 owner.result['safety_alarm']['raw_file'] = row['file']
-        complete = len(rows) == config.repeats and all(r['valid'] for r in rows)
+        complete = sum(r['valid'] for r in rows) == config.repeats and error is None
         summary = BiasScanAnalyzer.summary(target, rows, config.repeats, eligible=complete, method=config.aggregation)
         h2 = [r['receiver_h2_h1_pct'] for r in rows if r['valid'] and r.get('receiver_h2_h1_pct') is not None]
         summary.update(point=index, awg_vpp=amplitude, bias_group=owner._group_index,
+                       capture_attempt_count=sum(e['event']=='capture_start' and e.get('point')==index for e in owner.events),
+                       capture_timeout_count=sum(e['event']=='capture_timeout' and e.get('point')==index for e in owner.events),
                        receiver_h2_h1_pct=BiasScanAnalyzer.aggregate(h2, config.aggregation)[0],
                        batch_duration_s=(point_records[-1]['ended']-point_records[0]['started']) if point_records else 0,
                        capture_batch_duration_s=(point_records[-1]['ended']-point_records[0]['started']) if point_records else 0,
@@ -157,6 +160,8 @@ def run_batches(owner):
             started = None
             finished = False
             previous = None
+            buffered_bytes = 0
+            retry_deadline = time.monotonic()+owner.limits['max_on_s']
             context.update(point=group[0][0], target_a=target, awg_vpp=group[0][2], repeat=0)
             owner.publish('setting', bias_group=group_index, **context)
             try:
@@ -172,7 +177,10 @@ def run_batches(owner):
                     owner.event('amplitude_point', point=index, target_a=target, awg_vpp=amplitude)
                     for repeat in range(1, config.repeats+1):
                         context['repeat'] = repeat
-                        for attempt in range(1, (config.range_max_retries+2) if guarded else 2):
+                        attempt = 0
+                        range_retries = 0
+                        while True:
+                            attempt += 1
                             owner.check()
                             if previous is not None:
                                 while time.monotonic() < previous+config.interval_s:
@@ -182,19 +190,32 @@ def run_batches(owner):
                             remaining = started+owner.limits['max_on_s']-time.monotonic() if started is not None else acquisition.capture_timeout_s
                             if remaining <= 0:
                                 raise RuntimeError('单档最大通电时间超限')
-                            owner.publish('capturing', **context)
+                            if started is None and time.monotonic() >= retry_deadline:
+                                raise RuntimeError('断电基线补采超时，未达到合格次数')
+                            estimated_bytes = acquisition.total_samples * (len(acquisition.enabled_channels)+1) * 8
+                            if buffered_bytes+estimated_bytes > config.memory_limit_mb*1024**2:
+                                raise RuntimeError('补采原始数据达到内存上限，未达到合格次数')
+                            owner.publish('capturing', attempt=attempt, **context)
                             capture_started = time.monotonic()
                             telemetry = dict(owner._telemetry)
                             owner.event('capture_start', point=index, repeat=repeat, attempt=attempt)
                             previous = time.monotonic()
-                            capture = owner.adapter.capture(AcquisitionConfig.from_dict(acquisition.to_dict()), remaining)
+                            try:
+                                capture = owner.adapter.capture(AcquisitionConfig.from_dict(acquisition.to_dict()), remaining)
+                            except CaptureTimeout as exc:
+                                owner.event('capture_timeout', point=index, repeat=repeat, attempt=attempt, reason=str(exc))
+                                owner._capture_durations.append(time.monotonic()-capture_started)
+                                owner.check()
+                                continue
                             ended = time.monotonic()
-                            last = index == group[-1][0] and repeat == config.repeats
+                            quality = assess_capture(capture, config)
+                            buffered_bytes += capture.time_s.nbytes + sum(v.nbytes for v in capture.volts.values())
+                            last = index == group[-1][0] and repeat == config.repeats and quality['valid']
                             record = {'point':index, 'repeat':repeat, 'attempt':attempt, 'capture':capture,
-                                      'telemetry':telemetry, 'started':capture_started, 'ended':ended}
+                                      'telemetry':telemetry, 'started':capture_started, 'ended':ended, 'capture_quality':quality}
                             if owner._fault or owner.stop_event.is_set() or (started is not None and ended >= started+owner.limits['max_on_s']):
                                 record.update(interrupted=True, interrupted_reason=owner._fault or ('用户停止' if owner.stop_event.is_set() else '单档最大通电时间超限'))
-                            # Unguarded final capture: OFF is the first operation after return.
+                            # Once basic validity is known, close power before bookkeeping or analysis.
                             if last and not guarded:
                                 try:
                                     finish_cycle(owner)
@@ -206,6 +227,10 @@ def run_batches(owner):
                             owner.event('capture_return', point=index, repeat=repeat, returned_at=ended)
                             owner._capture_durations.append(ended-capture_started)
                             owner.check()
+                            if not quality['valid'] and quality['status'] != 'ADC_OVERFLOW':
+                                record['capture_retry'] = True
+                                owner.event('capture_retry', point=index, repeat=repeat, attempt=attempt, reason=quality['reason'])
+                                continue
                             retry = False
                             if guarded:
                                 owner.event('quality_check', point=index, repeat=repeat, attempt=attempt)
@@ -215,18 +240,23 @@ def run_batches(owner):
                                 changes, range_error = suggest_ranges(capture, acquisition, config) if config.auto_range_enabled else ({}, None)
                                 if range_error and diagnosis['status'] == 'OK':
                                     diagnosis.update(status='ADC_RANGE', reason=range_error)
-                                retry = diagnosis['status']=='ADC_RANGE' and bool(changes) and not range_error and attempt<=config.range_max_retries
+                                retry = diagnosis['status']=='ADC_RANGE' and bool(changes) and not range_error and range_retries<config.range_max_retries
                                 record['retry'] = retry
                                 if diagnosis['status'] != 'OK' and not retry:
                                     owner.result['safety_alarm'] = {**context, **diagnosis}
                                     raise RuntimeError(diagnosis['reason'] or '波形无法可靠评价')
                                 if retry:
+                                    range_retries += 1
                                     owner.event('range_retry', point=index, repeat=repeat, changes=changes)
                                 elif reference is None:
                                     reference = diagnosis
                                 for channel, value in changes.items():
                                     acquisition.channels[channel].range = value
                                 current_ranges = {name:channel.range for name, channel in acquisition.channels.items()}
+                            if not guarded and not quality['valid']:
+                                record['capture_retry'] = True
+                                owner.event('capture_retry', point=index, repeat=repeat, attempt=attempt, reason=quality['reason'])
+                                continue
                             if not retry:
                                 owner._captured_count += 1
                                 if last and not finished:

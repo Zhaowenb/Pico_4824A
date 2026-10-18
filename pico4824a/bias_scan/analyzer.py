@@ -89,7 +89,7 @@ class BiasScanAnalyzer:
         center, sd, count = BiasScanAnalyzer.aggregate(values, method)
         summary = {'target_a':target,'captured_count':len(rows),'valid_count':len(valid),
                 'invalid_count':len(rows)-len(valid), 'failed_capture_count':sum(r.get('capture_valid') is False for r in rows),
-                'eligible':eligible and len(rows)==repeats and len(valid)==repeats,
+                'eligible':eligible and len(valid)==repeats,
                 'actual_current_mean_a':float(np.mean(currents)) if currents else None,
                 'actual_current_sd_a':float(np.std(currents,ddof=1)) if len(currents)>1 else None,
                 'aggregation':method, 'statistics_count':count,

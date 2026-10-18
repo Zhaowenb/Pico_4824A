@@ -29,14 +29,14 @@ class CaptureValidityTests(unittest.TestCase):
         self.assertFalse(q['valid'])
         self.assertEqual(q['status'],'EXCITATION_NOT_CAPTURED')
 
-    def test_elapsed_time_alone_is_not_a_trigger_verdict(self):
+    def test_late_ready_is_discarded_even_when_waveform_contains_signal(self):
         acq,cfg=setup()
         acq.trigger.enabled=True;acq.trigger.source='B';acq.trigger.threshold_v=.1
         acq.trigger.auto_trigger_ms=100;acq.trigger.direction='rising'
         good=signal(acq);good.capture_info['ready_wait_s']=.2
+        self.assertEqual(assess_capture(good,cfg)['status'],'TRIGGER_TIMEOUT')
+        good.capture_info['ready_wait_s']=.05
         self.assertTrue(assess_capture(good,cfg)['valid'])
-        good.volts['B']*=0
-        self.assertEqual(assess_capture(good,cfg)['status'],'TRIGGER_MISSED')
 
     def test_no_pzt_amplitude_gate_without_excitation_monitors(self):
         acq,cfg=setup();cfg=replace(cfg,excitation_voltage_channel='',excitation_current_channel='')
@@ -65,7 +65,7 @@ class CaptureValidityTests(unittest.TestCase):
         for key in ['vpp_mean_v','vpp_sd_v','excitation_voltage_mean_v','excitation_current_mean_a']:
             self.assertIsNone(s[key])
 
-    def test_failed_frames_saved_and_excluded_without_retry_or_power_extension(self):
+    def test_failed_frames_retried_until_five_valid_without_new_power_cycle(self):
         for failures in [{3},{2,4},set(range(1,6))]:
             with self.subTest(failures=failures),tempfile.TemporaryDirectory(dir=ROOT/'.test-tmp') as folder:
                 acq,cfg=setup();cfg=replace(cfg,waveform_guard_enabled=False,aggregation='mean')
@@ -82,12 +82,12 @@ class CaptureValidityTests(unittest.TestCase):
                 job=BiasScanController(cfg,acq,power,adapter,folder,simulate=True)
                 result=job.run()
                 self.assertEqual(result['status'],'complete',result['reason'])
-                self.assertEqual(adapter.count,5)
+                self.assertEqual(adapter.count,5+len(failures))
                 self.assertEqual(sum(e['event']=='on' for e in result['events']),1)
                 s=result['summary'][0]
-                self.assertEqual(s['valid_count'],5-len(failures))
+                self.assertEqual(s['valid_count'],5)
                 self.assertEqual(s['invalid_count'],len(failures))
-                self.assertIsNone(result['best_current_a'])
+                self.assertEqual(result['best_current_a'],.5)
                 valid=[r for r in result['runs'] if r['valid']]
                 for metric,mean,sd in [('vpp_v','vpp_mean_v','vpp_sd_v'),('excitation_voltage_vpp_v','excitation_voltage_mean_v','excitation_voltage_sd_v'),('excitation_current_vpp_a','excitation_current_mean_a','excitation_current_sd_a')]:
                     expected=[r[metric] for r in valid]
@@ -95,11 +95,11 @@ class CaptureValidityTests(unittest.TestCase):
                         self.assertAlmostEqual(s[mean],np.mean(expected))
                         self.assertAlmostEqual(s[sd],np.std(expected,ddof=1))
                     else:self.assertIsNone(s[mean]);self.assertIsNone(s[sd])
-                self.assertEqual(len(list(job.folder.rglob('*.npz'))),5)
+                self.assertEqual(len(list(job.folder.rglob('*.npz'))),5+len(failures))
                 for row in result['runs']:
                     loaded=load_npz(job.folder/row['file'])
                     self.assertEqual(loaded.capture_info['bias_validation']['valid'],row['valid'])
-                    if row['repeat'] in failures:
+                    if not row['valid']:
                         self.assertTrue(row['invalid_reason'])
                         np.testing.assert_array_equal(loaded.volts['B'],np.full(len(loaded.time_s),.05))
                 powered=False
@@ -119,3 +119,55 @@ class CaptureValidityTests(unittest.TestCase):
             self.assertEqual(loaded.capture_info,{})
             np.testing.assert_array_equal(loaded.time_s,r.time_s)
             np.testing.assert_array_equal(loaded.volts['A'],r.volts['A'])
+
+    def test_permanent_failure_stops_at_original_deadline(self):
+        import time
+        acq,cfg=setup();cfg=replace(cfg,waveform_guard_enabled=False,max_on_s=.12,stable_timeout_s=.1)
+        class Adapter:
+            def prepare(self):pass
+            def stop(self):pass
+            def capture(self,config,remaining):
+                time.sleep(.01)
+                r=signal(config)
+                for ch in r.volts:r.volts[ch]*=0
+                return r
+        with tempfile.TemporaryDirectory(dir=ROOT/'.test-tmp') as folder:
+            power=SimulatedPowerSupply()
+            result=BiasScanController(cfg,acq,power,Adapter(),folder,simulate=True).run()
+            self.assertEqual(result['status'],'error')
+            self.assertEqual(result['output_state'],'off')
+            self.assertEqual(result['summary'][0]['valid_count'],0)
+            self.assertIsNone(result['best_current_a'])
+            self.assertEqual(sum(e['event']=='on' for e in result['events']),1)
+            self.assertLess(result['summary'][0]['on_duration_s'],.5)
+
+    def test_sdk_timeout_and_late_ready_both_retry_same_valid_slot(self):
+        from pico4824a.device import CaptureTimeout
+        from pico4824a.web import WebControlState
+        acq,cfg=setup();cfg=replace(cfg,waveform_guard_enabled=False,aggregation='mean')
+        acq.trigger.enabled=True;acq.trigger.auto_trigger_ms=100
+        class Adapter:
+            count=0
+            def prepare(self):pass
+            def stop(self):pass
+            def capture(self,config,remaining):
+                self.count+=1
+                if self.count==1:raise CaptureTimeout('capture timed out')
+                r=signal(config)
+                r.capture_info['ready_wait_s']=.2 if self.count==2 else .005
+                return r
+        with tempfile.TemporaryDirectory(dir=ROOT/'.test-tmp') as folder:
+            adapter=Adapter();job=BiasScanController(cfg,acq,SimulatedPowerSupply(),adapter,folder,simulate=True)
+            result=job.run()
+            self.assertEqual(result['status'],'complete',result['reason'])
+            self.assertEqual(adapter.count,7)
+            self.assertEqual(result['summary'][0]['capture_attempt_count'],7)
+            self.assertEqual(result['summary'][0]['capture_timeout_count'],1)
+            self.assertEqual(result['summary'][0]['valid_count'],5)
+            self.assertEqual(result['runs'][0]['capture_status'],'TRIGGER_TIMEOUT')
+            self.assertEqual(result['runs'][0]['attempt'],2)
+            self.assertEqual(result['runs'][1]['attempt'],3)
+            self.assertEqual(sum(e['event']=='capture_timeout' for e in result['events']),1)
+            state=WebControlState();state.bias_controller=job
+            self.assertFalse(state.bias_preview(0,1,2)['row']['valid'])
+            self.assertTrue(state.bias_preview(0,1,3)['row']['valid'])

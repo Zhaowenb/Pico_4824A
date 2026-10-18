@@ -41,6 +41,10 @@ class PicoError(RuntimeError):
     """Raised for PicoSDK or device failures."""
 
 
+class CaptureTimeout(PicoError):
+    """Block capture did not become ready within its configured timeout."""
+
+
 @dataclass(slots=True)
 class CaptureResult:
     time_s: np.ndarray
@@ -562,7 +566,7 @@ class Pico4824A:
             )
             if time.monotonic() >= deadline:
                 self.stop()
-                raise PicoError(
+                raise CaptureTimeout(
                     "capture timed out; check trigger level/source and AWG loopback connection"
                 )
             time.sleep(0.001)

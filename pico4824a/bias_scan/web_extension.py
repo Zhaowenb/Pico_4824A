@@ -167,12 +167,12 @@ class BiasScanWebMixin:
             return {k:list(result.get(k,[])) if k in {'summary','runs'} else result.get(k) for k in ['status','simulated','reason','output_state','summary','runs','revision',
                 'best_current_a','best_awg_vpp','best_vpp_mean_v','ties_a','output_dir','device_identity','acquisition','configuration','protection_mode','evaluation','off_error','recovery','safety_alarm','scan_plan','guarded','elapsed_s']}
 
-    def bias_preview(self, point, repeat):
+    def bias_preview(self, point, repeat, attempt=None):
         with self._lock:
             controller=self.bias_controller
             if controller is None or controller.folder is None:raise RuntimeError('尚无偏置扫描结果')
             rows=list(controller.rows);folder=controller.folder
-        row=next((r for r in reversed(rows) if r['point']==point and r['repeat']==repeat),None)
+        row=next((r for r in reversed(rows) if r['point']==point and r['repeat']==repeat and (attempt is None or r.get('attempt',1)==attempt)),None)
         if row is None:raise ValueError('记录不存在或尚未保存')
         result=load_npz(folder/row['file']);step=max(1,int(np.ceil(len(result.time_s)/4000)))
         evaluated = BiasScanAnalyzer.evaluation_signal(result, controller.config)

@@ -16,7 +16,7 @@ from ..storage_naming import session_directory, preferences
 
 
 class BiasScanController:
-    """One job, immutable configuration; no analysis or waveform I/O while powered."""
+    """One job, immutable configuration; only capture validity/optional protection while powered; analysis and I/O after OFF."""
     def __init__(self, config, acquisition, power, adapter, output_root, simulate=False,
                  stop_event=None, progress=None, protection=None, temperature=None):
         self.config, self.simulate = config, simulate
