@@ -26,6 +26,7 @@ def save_npz(result: CaptureResult, path: str | Path) -> Path:
         "actual_sample_rate_hz": result.actual_sample_rate_hz,
         "overflow_channels": result.overflow_channels,
         "simulated": result.simulated,
+        "capture_info": getattr(result, "capture_info", {}),
         "config": result.config.to_dict(),
     }
     arrays = {"time_s": result.time_s, **{f"ch_{k}_v": v for k, v in result.volts.items()}}
@@ -55,6 +56,7 @@ def load_npz(path: str | Path) -> CaptureResult:
         overflow_channels=tuple(metadata.get("overflow_channels", ())),
         config=AcquisitionConfig.from_dict(metadata["config"]),
         simulated=bool(metadata.get("simulated", False)),
+        capture_info=dict(metadata.get("capture_info", {})),
     )
 
 
@@ -74,6 +76,7 @@ def save_csv(result: CaptureResult, path: str | Path) -> Path:
                 "actual_sample_rate_hz": result.actual_sample_rate_hz,
                 "overflow_channels": result.overflow_channels,
                 "simulated": result.simulated,
+                "capture_info": getattr(result, "capture_info", {}),
                 "config": result.config.to_dict(),
             },
             ensure_ascii=False,

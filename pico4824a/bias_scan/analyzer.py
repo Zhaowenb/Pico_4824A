@@ -84,10 +84,11 @@ class BiasScanAnalyzer:
     @staticmethod
     def summary(target, rows, repeats, eligible=True, method='mean'):
         valid=[row for row in rows if row['valid']]
-        currents=[row['actual_current_a'] for row in rows if row.get('actual_current_a') is not None]
+        currents=[row['actual_current_a'] for row in valid if row.get('actual_current_a') is not None and math.isfinite(row['actual_current_a'])]
         values=[row['vpp_v'] for row in valid]
         center, sd, count = BiasScanAnalyzer.aggregate(values, method)
         summary = {'target_a':target,'captured_count':len(rows),'valid_count':len(valid),
+                'invalid_count':len(rows)-len(valid), 'failed_capture_count':sum(r.get('capture_valid') is False for r in rows),
                 'eligible':eligible and len(rows)==repeats and len(valid)==repeats,
                 'actual_current_mean_a':float(np.mean(currents)) if currents else None,
                 'actual_current_sd_a':float(np.std(currents,ddof=1)) if len(currents)>1 else None,
@@ -95,7 +96,7 @@ class BiasScanAnalyzer:
                 'vpp_mean_v':center, 'vpp_sd_v':sd}
         for role, unit in [('voltage','v'), ('current','a')]:
             key = 'excitation_'+role
-            values = [r.get(key+'_vpp_'+unit) for r in rows]
+            values = [r.get(key+'_vpp_'+unit) for r in valid]
             center, sd, count = BiasScanAnalyzer.aggregate(values, method)
             summary.update({key+'_mean_'+unit:center, key+'_sd_'+unit:sd, key+'_statistics_count':count,
                             key+'_valid_count':sum(v is not None for v in values)})

@@ -7,6 +7,7 @@ import time
 from ..config import AcquisitionConfig
 from .analyzer import BiasScanAnalyzer
 from .quality import assess, suggest_ranges
+from .capture_validity import assess_capture
 
 
 def finish_cycle(owner):
@@ -79,12 +80,14 @@ def save_group(owner, group, records, error):
             capture, telemetry = record['capture'], record['telemetry']
             value, reason = BiasScanAnalyzer.vpp(capture, config)
             diagnosis = record.get('diagnosis')
+            capture_quality = assess_capture(capture, config)
+            capture.capture_info['bias_validation'] = capture_quality
             if diagnosis is not None and diagnosis['status'] == 'OK' and value is None:
                 diagnosis.update(status='INVALID', reason=reason or 'PZT 无法评价')
                 analysis_error = diagnosis['reason']
                 owner.result['safety_alarm'] = {'point':index, 'target_a':target, 'awg_vpp':amplitude,
                                               'repeat':record['repeat'], **diagnosis, 'output_state':'off'}
-            valid = value is not None and not record.get('interrupted') and (diagnosis is None or diagnosis['status'] == 'OK')
+            valid = value is not None and capture_quality['valid'] and not record.get('interrupted') and (diagnosis is None or diagnosis['status'] == 'OK')
             repeat, attempt = record['repeat'], record['attempt']
             filename = (f'重复{repeat:02d}_尝试{attempt:02d}__原始波形.npz' if diagnosis is not None
                         else f'重复{repeat:02d}__PZT-{config.pzt_channel}__原始波形.npz')
@@ -95,7 +98,9 @@ def save_group(owner, group, records, error):
                    'vpp_v':value, 'vpp_basis':'filtered' if config.filter_enabled else 'raw',
                    'filter_low_hz':config.filter_low_hz, 'filter_high_hz':config.filter_high_hz,
                    'filter_transition_hz':config.filter_transition_hz, 'valid':valid,
-                   'invalid_reason':record.get('interrupted_reason', '') or (diagnosis['reason'] if diagnosis else '') or reason,
+                   'invalid_reason':record.get('interrupted_reason', '') or (capture_quality['reason'] if not capture_quality['valid'] else '') or (diagnosis['reason'] if diagnosis else '') or reason,
+                   'capture_valid':capture_quality['valid'], 'capture_status':capture_quality['status'],
+                   'capture_reason':capture_quality['reason'],
                    'file':(point_folder / filename).relative_to(owner.folder).as_posix()}
             if diagnosis is not None:
                 row.update(attempt=attempt, quality_status=diagnosis['status'], range_retry=record.get('retry', False),
@@ -114,7 +119,7 @@ def save_group(owner, group, records, error):
                 owner.result['safety_alarm']['raw_file'] = row['file']
         complete = len(rows) == config.repeats and all(r['valid'] for r in rows)
         summary = BiasScanAnalyzer.summary(target, rows, config.repeats, eligible=complete, method=config.aggregation)
-        h2 = [r['receiver_h2_h1_pct'] for r in rows if r.get('receiver_h2_h1_pct') is not None]
+        h2 = [r['receiver_h2_h1_pct'] for r in rows if r['valid'] and r.get('receiver_h2_h1_pct') is not None]
         summary.update(point=index, awg_vpp=amplitude, bias_group=owner._group_index,
                        receiver_h2_h1_pct=BiasScanAnalyzer.aggregate(h2, config.aggregation)[0],
                        batch_duration_s=(point_records[-1]['ended']-point_records[0]['started']) if point_records else 0,
