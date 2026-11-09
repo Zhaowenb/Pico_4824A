@@ -58,6 +58,7 @@ from .lcr import analyze_impedance, load_lcr_calibration
 from .big_signal_lcr import analyze_big_signal_impedance
 from .storage import save_csv, save_npz
 from .storage_naming import capture_stem, preferences, save_preferences
+from .repeated_capture import RepeatCaptureConfig, run_capture_sequence
 from .sweep import SweepConfig, SweepOutcome, execute_sweep
 from .waveforms import normalized_waveform
 from .time_frequency import time_frequency_map
@@ -100,6 +101,7 @@ class WebControlState(BiasScanWebMixin):
         big_lcr_output_root: Path | None = None,
         lcr_linearity_output_root: Path | None = None,
         interference_output_root: Path | None = None,
+        capture_output_root: Path | None = None,
     ) -> None:
         self._lock = threading.RLock()
         self.init_bias_scan(PROJECT_DIR)
@@ -117,6 +119,7 @@ class WebControlState(BiasScanWebMixin):
         self.big_lcr_output_root = big_lcr_output_root or PROJECT_DIR / "data" / "lcr_big"
         self.lcr_linearity_output_root = lcr_linearity_output_root or PROJECT_DIR / "data" / "lcr_linearity"
         self.interference_output_root = interference_output_root or interference.ROOT
+        self.capture_output_root = capture_output_root or PROJECT_DIR / "data" / "captures"
         self._stop_event = threading.Event()
         self._resume_event = threading.Event()
         self._resume_event.set()
@@ -147,6 +150,7 @@ class WebControlState(BiasScanWebMixin):
     def start_capture(self, raw: dict[str, Any]) -> int:
         values = dict(raw)
         simulate = bool(values.pop("simulate", False))
+        repeat = RepeatCaptureConfig.from_dict(values.pop("repeat", None))
         config = AcquisitionConfig.from_dict(values)
         with self._lock:
             if self.status.state in {"running", "paused"} or self.bias_unknown or self.bias_cleanup_pending:
@@ -164,7 +168,7 @@ class WebControlState(BiasScanWebMixin):
             self.status.finished_at = None
         worker = threading.Thread(
             target=self._capture_worker,
-            args=(capture_id, config, simulate),
+            args=(capture_id, config, simulate, repeat),
             daemon=True,
             name=f"pico-capture-{capture_id}",
         )
@@ -471,42 +475,55 @@ class WebControlState(BiasScanWebMixin):
                 self.status.message = "设备已连接；AWG 已置为 0 V，等待采集"
 
     def _capture_worker(
-        self, capture_id: int, config: AcquisitionConfig, simulate: bool
+        self, capture_id: int, config: AcquisitionConfig, simulate: bool,
+        repeat: RepeatCaptureConfig | None = None,
     ) -> None:
-        device, temporary = self._device_for_task(simulate)
-        with self._lock:
-            self.device = device
+        device = None
         try:
+            device, temporary = self._device_for_task(simulate)
+            with self._lock:
+                self.device = device
+            def acquire():
+                if repeat is None or not repeat.enabled:
+                    return device.capture(config)
+                def progress(value):
+                    with self._lock:
+                        if self.status.capture_id != capture_id:return
+                        self.status.progress = value
+                        text = f"重复测量 {value['completed']}/{value['total']}"
+                        self.status.message = text + (f" · 等待回波消失 {value['wait_remaining_s']:.2f} s" if value['phase']=='waiting' else ' · '+{'capturing':'正在采集','saved':'已保存'}.get(value['phase'],value['phase']))
+                def captured(value, stem):
+                    with self._lock:
+                        if self.status.capture_id == capture_id:
+                            self.result = value
+                            self._saved_capture_result = value
+                            self._saved_capture_stem = stem
+                return run_capture_sequence(device, config, repeat,
+                    self.capture_output_root, self._stop_event, captured, progress)
             if temporary:
                 with device:
-                    result = device.capture(config)
+                    outcome = acquire()
             else:
                 device.open()
-                result = device.capture(config)
-            overflow = (
-                "；输入溢出：" + ",".join(result.overflow_channels)
-                if result.overflow_channels
-                else ""
-            )
+                outcome = acquire()
             with self._lock:
                 if self.status.capture_id == capture_id:
-                    if self._stop_event.is_set():
-                        self.status.state = "stopped"
-                        self.status.message = "采集已停止"
-                        self.status.finished_at = time.time()
-                        return
-                    self.result = result
-                    self.status.state = "complete"
-                    self.status.message = (
-                        f"采集完成：{result.samples:,} 点/通道，"
-                        f"{result.actual_sample_rate_hz / 1e6:.6g} MS/s{overflow}"
-                    )
+                    stopped = self._stop_event.is_set()
+                    self.status.state = 'stopped' if stopped else 'complete'
+                    if repeat is not None and repeat.enabled:
+                        self.status.message = f"重复测量{'已停止' if stopped else '完成'}：{outcome['completed']}/{repeat.count} 次 · 已自动保存：{outcome['output_dir']}"
+                    elif stopped:
+                        self.status.message = '采集已停止'
+                    else:
+                        self.result = outcome
+                        overflow = '；输入溢出：'+','.join(outcome.overflow_channels) if outcome.overflow_channels else ''
+                        self.status.message = f'采集完成：{outcome.samples:,} 点/通道，{outcome.actual_sample_rate_hz/1e6:.6g} MS/s{overflow}'
                     self.status.finished_at = time.time()
         except Exception as exc:
             with self._lock:
                 if self.status.capture_id == capture_id:
-                    self.status.state = "stopped" if self._stop_event.is_set() else "error"
-                    self.status.message = "采集已停止" if self._stop_event.is_set() else str(exc)
+                    self.status.state = 'stopped' if self._stop_event.is_set() else 'error'
+                    self.status.message = '采集已停止' if self._stop_event.is_set() else str(exc)
                     self.status.finished_at = time.time()
         finally:
             with self._lock:

@@ -888,16 +888,48 @@ function setEvent(message, state = "idle") {
   $("eventTime").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 
+let measureRepeatBusy = false;
+let measureRepeatPreviewKey = '';
+function updateMeasureRepeatControls() {
+  const enabled = $('measureRepeatEnabled').checked;
+  setDisabled('measureRepeatEnabled', measureRepeatBusy);
+  ['measureRepeatCount','measureEchoWaitMs'].forEach(id=>setDisabled(id,measureRepeatBusy||!enabled));
+  $('captureBtn').innerHTML = '<span class="play"></span>'+(enabled?'开始重复测量':'开始同步采集');
+  $('measureRepeatHint').textContent = enabled
+    ? '每次结束后等待指定时间再采；逐次自动保存，不做平均。'
+    : '关闭时执行单次采集；等待从本次采集结束后计时。';
+}
+['measureRepeatEnabled','measureRepeatCount','measureEchoWaitMs'].forEach(id=>$(id).addEventListener('change',()=>{
+  updateMeasureRepeatControls();
+  try { localStorage.setItem('waveguard-live-repeat',JSON.stringify({enabled:$('measureRepeatEnabled').checked,count:$('measureRepeatCount').value,wait:$('measureEchoWaitMs').value})); } catch {}
+}));
+try {
+  const saved=JSON.parse(localStorage.getItem('waveguard-live-repeat')||'{}');
+  if(typeof saved.enabled==='boolean')$('measureRepeatEnabled').checked=saved.enabled;
+  if(saved.count!=null)$('measureRepeatCount').value=saved.count;
+  if(saved.wait!=null)$('measureEchoWaitMs').value=saved.wait;
+} catch {}
+updateMeasureRepeatControls();
+
 async function startCapture() {
+  if($('measureRepeatEnabled').checked && (! $('measureRepeatCount').reportValidity() || ! $('measureEchoWaitMs').reportValidity()))return;
   try {
+    measureRepeatBusy=true;
+    updateMeasureRepeatControls();
+    measureRepeatPreviewKey='';
+    $('measureRepeatProgress').hidden=!$('measureRepeatEnabled').checked;
+    $('measureRepeatProgress').textContent='准备重复测量…';
     ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn", "stopBtn", "sweepStopBtn", "lcrStopBtn", "bigLcrStopBtn", "linearityStopBtn"].forEach((id) => setDisabled(id, true));
     latestResult = null;
     $("emptyState").style.display = "flex";
-    const reply = await api("/api/capture", { method: "POST", body: JSON.stringify(buildPayload()) });
+    const reply = await api("/api/capture", { method: "POST", body: JSON.stringify({...buildPayload(),repeat:{enabled:$('measureRepeatEnabled').checked,count:number('measureRepeatCount'),echo_wait_s:number('measureEchoWaitMs')/1000}}) });
     setDisabled("stopBtn", false);
     setEvent(`采集任务 #${reply.capture_id} 已启动，正在等待触发。`, "running");
+    clearInterval(polling);
     polling = setInterval(pollStatus, 350);
   } catch (error) {
+    measureRepeatBusy=false;
+    updateMeasureRepeatControls();
     ["captureBtn", "sweepBtn", "lcrStartBtn", "lcrCalibrateBtn", "bigLcrStartBtn", "linearityStartBtn"].forEach((id) => setDisabled(id, false));
     setDisabled("stopBtn", true);
     setEvent(error.message, "error");
@@ -1185,6 +1217,21 @@ async function pollStatus() {
     updateTripAlarm(status);
     const running = ["running", "paused"].includes(status.state);
     if (running && !polling) polling = setInterval(pollStatus, 350);
+    measureRepeatBusy=running;
+    updateMeasureRepeatControls();
+    if(status.task_kind==='capture' && status.progress?.total) {
+      const p=status.progress, label=$('measureRepeatProgress');
+      label.hidden=false;
+      label.textContent=`${p.completed}/${p.total} 次 · ${p.phase==='waiting'?'等待回波消失 '+Number(p.wait_remaining_s).toFixed(2)+' s':({capturing:'正在采集',saved:'已保存',complete:'测量完成',stopped:'已停止',error:'运行异常'})[p.phase]||p.phase}`;
+      label.title=p.output_dir||'';
+      const key=status.capture_id+':'+p.completed;
+      if(p.completed>0 && key!==measureRepeatPreviewKey) {
+        measureRepeatPreviewKey=key;
+        const frame=await api('/api/result/display',{method:'POST',body:JSON.stringify({filter:measureFilterPayload(),max_points:6000})});
+        if(key===measureRepeatPreviewKey) {latestResult=frame;updateResult(frame);setDisabled('saveNpz',false);setDisabled('saveCsv',false);}
+      }
+    }
+
     setDisabled("stopBtn", !(running && status.task_kind === "capture"));
     setDisabled("sweepStopBtn", !(running && status.task_kind === "sweep"));
     setDisabled("lcrStopBtn", !(running && ["lcr", "lcr_calibration"].includes(status.task_kind)));

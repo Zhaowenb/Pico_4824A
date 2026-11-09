@@ -38,6 +38,13 @@
             <label>触发位置 <span>%记录长度</span><input id="triggerPositionPercent" type="number" value="10" min="0" max="99.999" step="0.1" /></label>
           </div>
           <div id="capturePlanSummary" class="analysis-meta">20 MS/s × 10000 μs = 200000 点/通道；触发前10%，触发后90%</div>
+          <div class="subhead"><label class="switch-label"><input id="measureRepeatEnabled" type="checkbox" /><span class="switch"></span>重复测量</label><small>逐次保存原始 NPZ</small></div>
+          <div class="form-grid">
+            <label>测量次数<input id="measureRepeatCount" type="number" value="5" min="1" max="10000" step="1" disabled /></label>
+            <label>回波消失等待 <span>ms</span><input id="measureEchoWaitMs" type="number" value="100" min="0" max="3600000" step="1" disabled /></label>
+          </div>
+          <small id="measureRepeatHint" class="progress-text">关闭时执行单次采集；等待从本次采集结束后计时。</small>
+          <div id="measureRepeatProgress" class="analysis-meta" role="status" hidden></div>
           <div class="subhead"><span>同步输入通道 A–H</span><small>每通道可独立启用和设置量程</small></div>
           <div id="channels" class="channel-grid"></div>
         </section>
