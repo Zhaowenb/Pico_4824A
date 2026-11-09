@@ -40,8 +40,13 @@ require('fs').mkdirSync('.test-tmp',{recursive:true});
  await page.waitForSelector('.wg-fluid-shell',{state:'detached'});
  await page.mouse.move(box.x+box.width*.25,box.y+box.height/16);await page.waitForTimeout(230);
  await page.screenshot({path:'.test-tmp/instrument-motion-light.png'});
- const styles=await stage.evaluate(n=>({border:getComputedStyle(n,'::before').animationName,aura:getComputedStyle(n.parentElement,'::after').animationName}));
- if(styles.border!=='wg-orbit'||styles.aura!=='wg-stage-aura')throw Error('stage motion missing '+JSON.stringify(styles));
+ const styles=await stage.evaluate(n=>({border:getComputedStyle(n,'::before').animationName,aura:getComputedStyle(n).animationName}));
+ if(styles.border!=='wg-orbit'||styles.aura!=='wg-stage-backlight')throw Error('stage motion missing '+JSON.stringify(styles));
+ const lightBefore=await stage.evaluate(n=>({angle:getComputedStyle(n,'::before').getPropertyValue('--wg-orbit'),shadow:getComputedStyle(n).boxShadow}));
+ await page.waitForTimeout(300);
+ const lightAfter=await stage.evaluate(n=>({angle:getComputedStyle(n,'::before').getPropertyValue('--wg-orbit'),shadow:getComputedStyle(n).boxShadow}));
+ if(lightBefore.angle===lightAfter.angle||lightBefore.shadow===lightAfter.shadow||lightAfter.shadow==='none')throw Error('stage effects are not actually changing');
+
  await page.evaluate(()=>WaveGuardUI.appearance({theme:'dark'}));await page.waitForTimeout(180);await page.screenshot({path:'.test-tmp/instrument-motion-dark.png'});
  const after=await page.evaluate(()=>JSON.stringify(latestResult));
  if(before!==after)throw Error('presentation changed captured arrays');

@@ -146,12 +146,35 @@ button:active:not(:disabled) {transform:none;}
 .scope-cursor-strip[hidden] {display:none;}.scope-cursor-strip>span {display:inline-flex;align-items:baseline;gap:6px;}.scope-cursor-strip strong {font-size:12px;font-weight:500;color:var(--wg-stage-text);}.scope-cursor-strip small {font:10px Consolas,monospace;}
 #scopeCanvas {touch-action:pan-y;cursor:crosshair;}#scopeCanvas.dragging {cursor:grabbing;}#scopeCanvas:focus-visible {outline:1px solid var(--wg-signal-hi);outline-offset:-1px;}
 @property --wg-orbit {syntax:'<angle>';initial-value:0deg;inherits:false;}
-.wg-stage[data-wg-stage=measure]::before {border:0;padding:1px;opacity:.45;background:conic-gradient(from var(--wg-orbit),transparent 0deg 230deg,color-mix(in srgb,var(--wg-signal) 26%,transparent) 270deg,var(--wg-signal-hi) 306deg,transparent 335deg);mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude;animation:wg-orbit 22s linear infinite;}
-.wg-main:has(>.wg-stage[data-wg-stage=measure]:not([hidden])) {position:relative;isolation:isolate;}
-.wg-main:has(>.wg-stage[data-wg-stage=measure]:not([hidden]))::after {content:'';position:absolute;left:8%;right:8%;bottom:25px;height:55px;background:radial-gradient(ellipse at center,color-mix(in srgb,var(--wg-signal) 65%,transparent),transparent 72%);filter:blur(22px);opacity:.13;pointer-events:none;z-index:-1;animation:wg-stage-aura 7.8s ease-in-out -1.6s infinite;}
+/* Visible moving edge; the data surface and waveform stay completely still. */
+.wg-stage[data-wg-stage=measure]::before {
+  border:0;padding:2px;opacity:.96;
+  background:conic-gradient(from var(--wg-orbit),transparent 0deg 35deg,color-mix(in srgb,var(--wg-signal) 32%,transparent) 64deg,var(--wg-signal) 92deg,var(--wg-signal-hi) 112deg,transparent 146deg 215deg,color-mix(in srgb,var(--wg-signal) 38%,transparent) 254deg,var(--wg-signal-hi) 286deg,transparent 324deg 360deg);
+  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude;
+  animation:wg-orbit 9s linear infinite;
+}
+/* Own box shadows live outside the stage's clipping boundary and follow its
+   actual size. No negative-z halo hidden behind the chart; no blur on data. */
+.wg-stage[data-wg-stage=measure] {
+  --wg-glow-low:color-mix(in srgb,var(--wg-signal) 32%,transparent);
+  --wg-glow-near:color-mix(in srgb,var(--wg-signal) 68%,transparent);
+  --wg-glow-far:color-mix(in srgb,var(--wg-signal) 38%,transparent);
+  animation:wg-stage-backlight 5.8s ease-in-out -1.1s infinite;
+}
+body[data-wg-theme=dark] .wg-stage[data-wg-stage=measure] {
+  --wg-glow-low:color-mix(in srgb,var(--wg-signal) 24%,transparent);
+  --wg-glow-near:color-mix(in srgb,var(--wg-signal) 52%,transparent);
+  --wg-glow-far:color-mix(in srgb,var(--wg-signal) 28%,transparent);
+}
 @keyframes wg-orbit {to {--wg-orbit:360deg;}}
-@keyframes wg-stage-aura {0%,100% {opacity:.08;filter:blur(22px);transform:scaleX(.94) translateY(1px);}50% {opacity:.18;filter:blur(28px);transform:scaleX(1.025) translateY(4px);}}
-@media(prefers-reduced-motion:reduce){.wg-stage[data-wg-stage=measure]::before {animation:none;opacity:.15;}.wg-main:has(>.wg-stage[data-wg-stage=measure]:not([hidden]))::after {animation:none;opacity:.06;}}
+@keyframes wg-stage-backlight {
+  0%,100% {box-shadow:0 12px 15px -10px var(--wg-glow-low),0 24px 30px -17px var(--wg-glow-low);}
+  50% {box-shadow:0 17px 23px -8px var(--wg-glow-near),0 31px 44px -16px var(--wg-glow-far);}
+}
+@media(prefers-reduced-motion:reduce){
+  .wg-stage[data-wg-stage=measure]::before {animation:none;opacity:.8;}
+  .wg-stage[data-wg-stage=measure] {animation:none;box-shadow:0 14px 22px -10px var(--wg-glow-low),0 26px 36px -18px var(--wg-glow-low);}
+}
 
 /* Persistent capsule anchor: opening never removes the user's close control. */
 .wg-stage-bar .wg-parameter-button[aria-expanded=true] {background:color-mix(in srgb,var(--wg-signal) 14%,var(--wg-stage-2));border-color:color-mix(in srgb,var(--wg-signal) 65%,var(--wg-stage-line));color:var(--wg-signal-hi);}
