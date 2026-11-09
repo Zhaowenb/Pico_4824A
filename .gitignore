@@ -26,3 +26,5 @@ data/analysis_exports/
 /configs/software-updates.json
 data/software_updates/
 data/**/exports/
+
+/configs/data-locations.json

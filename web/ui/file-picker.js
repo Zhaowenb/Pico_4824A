@@ -2,7 +2,7 @@
 (() => {
   if(!document.querySelector('.wg-workstation'))return;
   const ui=WaveGuardUI,dialog=document.createElement('dialog');dialog.className='wg-file-browser';
-  dialog.innerHTML=`<header class="wg-file-heading"><div><small>LOCAL DATA</small><h2>选择数据</h2></div><button type="button" class="wg-icon-button" aria-label="关闭文件选择">×</button></header><div class="wg-file-location"><button type="button" data-up aria-label="返回上级目录">↑</button><input type="text" aria-label="目录路径"><button type="button" data-go>前往</button></div><div class="wg-file-body"><nav aria-label="数据位置"></nav><section><input type="search" placeholder="搜索当前目录" aria-label="搜索当前目录"><div class="wg-file-list" role="listbox" aria-label="文件和文件夹"></div></section></div><footer><span role="status"></span><button type="button" data-confirm>选择</button></footer>`;
+  dialog.innerHTML=`<header class="wg-file-heading"><div><small>LOCAL DATA</small><h2>选择数据</h2></div><button type="button" class="wg-icon-button" aria-label="关闭文件选择">×</button></header><div class="wg-file-location"><button type="button" data-up aria-label="返回上级目录">↑</button><input type="text" aria-label="目录路径"><button type="button" data-go>前往</button></div><div class="wg-file-body"><nav aria-label="数据位置"></nav><section><input type="search" placeholder="搜索当前目录" aria-label="搜索当前目录"><div class="wg-file-list" role="listbox" aria-label="文件和文件夹"></div></section></div><footer><span role="status"></span><button type="button" data-external>其他位置 / U盘</button><button type="button" data-confirm>选择</button></footer>`;
   document.body.append(dialog);
   const pathInput=dialog.querySelector('[aria-label="目录路径"]'),search=dialog.querySelector('input[type=search]'),list=dialog.querySelector('.wg-file-list'),status=dialog.querySelector('[role=status]'),confirm=dialog.querySelector('[data-confirm]');
   let target=null,kind='file',directory='',parent=null,selected=null,entries=[],request=0,returnFocus=null;
@@ -15,12 +15,25 @@
   }
   async function browse(path){
     const id=++request;confirm.disabled=true;status.textContent='正在读取目录…';dialog.setAttribute('aria-busy','true');
-    try{const response=await fetch('/api/files/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})}),data=await response.json();if(id!==request)return;if(!response.ok)throw new Error(data.error||'目录读取失败');directory=data.path;parent=data.parent;entries=data.entries;selected=null;pathInput.value=directory;search.value='';dialog.querySelector('[data-up]').disabled=!parent;const nav=dialog.querySelector('.wg-file-body nav');nav.replaceChildren();for(const root of data.roots){const button=ui.el('button','',root.name);button.type='button';button.onclick=()=>void browse(root.path);nav.append(button);}render();ui.transition(list);}
+    try{const response=await fetch('/api/files/list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})}),data=await response.json();if(id!==request)return;if(!response.ok)throw new Error(data.error||'目录读取失败');directory=data.path;parent=data.parent;entries=data.entries;selected=null;pathInput.value=directory;search.value='';dialog.querySelector('[data-up]').disabled=!parent;const nav=dialog.querySelector('.wg-file-body nav');nav.replaceChildren();for(const root of data.roots){const button=ui.el('button','',root.name);button.type='button';button.title=root.path;button.onclick=()=>void browse(root.path);nav.append(button);}render();ui.transition(list);}
     catch(error){if(id===request){list.replaceChildren();status.textContent=error.message;confirm.disabled=true;}}
     finally{if(id===request)dialog.removeAttribute('aria-busy');}
   }
+  async function selectExternalLocation(){
+    const button=dialog.querySelector('[data-external]'),id=++request;
+    button.disabled=true;confirm.disabled=true;status.textContent='请在系统窗口中选择数据文件夹…';
+    try{
+      const response=await fetch('/api/files/select-directory',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}),data=await response.json();
+      if(!dialog.open||id!==request)return;
+      if(!response.ok)throw new Error(data.error||'无法选择数据位置');
+      if(data.cancelled){render();status.textContent='已取消选择';return;}
+      await browse(data.path);
+    }catch(error){if(dialog.open&&id===request)status.textContent=error.message;}
+    finally{button.disabled=false;}
+  }
+  dialog.querySelector('[data-external]').onclick=selectExternalLocation;
   function choose(){if(kind==='file'&&selected?.directory){void browse(selected.path);return;}const value=kind==='folder'?(selected?.directory?selected.path:directory):selected?.path;if(!value)return;target.value=value;target.dispatchEvent(new Event('input',{bubbles:true}));target.dispatchEvent(new Event('change',{bubbles:true}));dialog.close();}
-  function open(input,type='file',fallback=''){target=input;kind=type;returnFocus=document.activeElement;dialog.querySelector('h2').textContent=type==='folder'?'选择数据文件夹':'选择数据文件';confirm.textContent=type==='folder'?'选择文件夹':'选择文件';dialog.showModal();ui.transition(dialog,'panel');pathInput.value=input.value.trim()||'data';void browse(pathInput.value);}
+  function open(input,type='file',fallback=''){target=input;kind=type;returnFocus=document.activeElement;dialog.querySelector('h2').textContent=type==='folder'?'选择数据文件夹':'选择数据文件';confirm.textContent=type==='folder'?'选择文件夹':'选择文件';dialog.showModal();ui.transition(dialog,'panel');pathInput.value=input.value.trim()||fallback||'';void browse(pathInput.value);}
   dialog.querySelector('[aria-label="关闭文件选择"]').onclick=()=>dialog.close();dialog.querySelector('[data-up]').onclick=()=>void browse(parent);dialog.querySelector('[data-go]').onclick=()=>void browse(pathInput.value);pathInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();void browse(pathInput.value);}};search.oninput=render;confirm.onclick=choose;dialog.addEventListener('close',()=>{request++;returnFocus?.focus();});
   const targets=[['analysisPath','file',''],['archivePath','folder',''],['bigFolderDirectory','folder','data/lcr_big'],['linearityDirectory','folder','data/lcr_linearity'],['smallFolderDirectory','folder','data/lcr']];
   for(const [id,type,fallback] of targets){const input=document.getElementById(id);if(!input)continue;const row=ui.el('div','wg-path-picker'),button=ui.el('button','wg-path-button','选择');button.type='button';button.setAttribute('aria-label',type==='folder'?'选择数据文件夹':'选择数据文件');input.replaceWith(row);row.append(input,button);button.onclick=()=>open(input,type,fallback);}

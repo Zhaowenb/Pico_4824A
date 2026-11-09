@@ -232,6 +232,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start_web.ps1
 .\.venv\Scripts\python.exe -B -m pico4824a bias-scan --config configs/bias-scan.example.json --simulate
 ```
 
+## 选择其他文件夹与 U 盘数据
+
+单数据分析、参数数据分析、LCR 数据分析的“选择”窗口底部有 **其他位置 / U盘**：
+
+1. 点击该按钮，在系统文件夹窗口中选取这次要读取的数据位置。
+2. 回到网页后，进入其中的文件夹或选择 NPZ/CSV，再点击原有的读取／加载按钮。
+3. 可以反复选择不同文件夹、磁盘或 U 盘；选过的位置会显示为快捷入口，无需搬入项目。U 盘更换盘符后重新选一次即可。
+
+选择只开放数据读取，不改写所选原始文件。位置记录在本机 `configs/data-locations.json`，不上传 GitHub；结果导出仍保存在本项目的数据目录。
+
+**远程访问说明：**系统选择窗口打开在运行 Python 服务的电脑上。无桌面的 Linux/R76S 可创建 `configs/data-locations.json`，例如 `{"directories":["/mnt/实验数据","/media/pi"]}`；将实际的数据盘挂载位置加入其中，之后可从网页快捷入口浏览其子目录。Windows 也可手动配置，例如 `{"directories":["D:\\实验数据"]}`。保持该文件为本机配置，无需修改程序。示例结构见 `configs/data-locations.example.json`。
+
 ## 数据保存与换机迁移
 
 | 数据 | 项目内默认位置 |

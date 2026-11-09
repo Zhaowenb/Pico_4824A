@@ -1,16 +1,17 @@
 """Read-only file selection for the local scientific workstation."""
 from pathlib import Path
+from .data_locations import readable_roots, selected_directories
 
 
 def list_directory(supplied: str, project: Path) -> dict:
-    roots = [project.resolve()]
-    reference_data = project.with_name('Pico_4824A') / 'data'
-    if reference_data.is_dir():
-        roots.append(reference_data.resolve())
-    candidate = Path(supplied).expanduser() if supplied.strip() else project / "data"
+    roots = readable_roots(project)
+    supplied=supplied.strip()
+    if len(supplied)>1 and supplied[0]==supplied[-1] and supplied[0] in {'"',"'"}:supplied=supplied[1:-1]
+    default=project/'data' if (project/'data').is_dir() else project
+    candidate = Path(supplied).expanduser() if supplied else default
     path = (candidate if candidate.is_absolute() else project / candidate).resolve()
     if not any(path.is_relative_to(root) for root in roots):
-        raise ValueError('请选择工作目录或参考数据目录内的文件；此浏览器仅用于读取数据。')
+        raise ValueError('请点“其他位置 / U盘”，通过系统窗口选择该数据文件夹后再读取。')
     if path.is_file():
         path = path.parent
     if not path.is_dir():
@@ -33,6 +34,8 @@ def list_directory(supplied: str, project: Path) -> dict:
     entries.sort(key=lambda entry: (not entry['directory'], entry['name'].casefold()))
     parent = path.parent if any(path.parent.is_relative_to(root) for root in roots) else None
     return {'path': str(path), 'parent': str(parent) if parent else None, 'entries': entries,
-            'roots': [{'name': '工作目录', 'path': str(roots[0])},
+            'roots': [{'name': '工作目录', 'path': str(project.resolve())},
                       {'name': '采集数据', 'path': str((project / 'data').resolve())}] +
-                     ([{'name': '参考数据 · 只读', 'path': str(roots[1])}] if len(roots) > 1 else [])}
+                     [{'name':'外部数据 · '+(folder.name or folder.anchor), 'path':str(folder)} for folder in selected_directories(project)] +
+                     ([{'name':'参考数据 · 只读','path':str((project.with_name('Pico_4824A')/'data').resolve())}]
+                      if (project.with_name('Pico_4824A')/'data').is_dir() else [])}

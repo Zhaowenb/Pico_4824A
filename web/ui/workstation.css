@@ -179,3 +179,5 @@ body[data-wg-theme=dark] .wg-stage[data-wg-stage=measure] {
 /* Persistent capsule anchor: opening never removes the user's close control. */
 .wg-stage-bar .wg-parameter-button[aria-expanded=true] {background:color-mix(in srgb,var(--wg-signal) 14%,var(--wg-stage-2));border-color:color-mix(in srgb,var(--wg-signal) 65%,var(--wg-stage-line));color:var(--wg-signal-hi);}
 .workstation-settings-button[aria-expanded=true] {border-color:var(--wg-signal);color:var(--wg-signal);}
+
+.wg-file-browser [data-external] {flex:none;white-space:nowrap;color:var(--wg-signal);border-color:var(--wg-line-strong);}

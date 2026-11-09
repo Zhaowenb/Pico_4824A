@@ -1010,8 +1010,9 @@ class WebControlState(BiasScanWebMixin):
             if not folders:
                 raise ValueError(f"{mode} 数据目录中没有可分析的测量文件夹")
             directory = folders[0]
-        if not any(directory.is_relative_to(root) for root in allowed_roots):
-            raise ValueError("文件夹必须位于本项目对应的 data/lcr_big、data/lcr_linearity 或 data/lcr 目录内")
+        from .data_locations import is_readable_directory
+        if not any(directory.is_relative_to(root) for root in allowed_roots) and not is_readable_directory(directory, PROJECT_DIR):
+            raise ValueError("请先通过“其他位置 / U盘”选择该数据文件夹，再加载分析")
         if not directory.is_dir():
             raise ValueError("所选 LCR 文件夹不存在")
         return directory
@@ -1067,8 +1068,9 @@ class WebControlState(BiasScanWebMixin):
                 latest = self.big_lcr_result.directory if self.big_lcr_result else None
             folders = sorted((p.parent for p in root.glob('*/big_lcr_config.json')), key=lambda p:p.stat().st_mtime, reverse=True) if root.is_dir() else []
             directory = latest.resolve() if latest else (folders[0].resolve() if folders else root)
-        if not directory.is_relative_to(root):
-            raise ValueError("大信号线性度分析仅允许读取本项目 data/lcr_big 下的测量目录")
+        from .data_locations import is_readable_directory
+        if not directory.is_relative_to(root) and not is_readable_directory(directory, PROJECT_DIR):
+            raise ValueError("请先通过“其他位置 / U盘”选择该数据文件夹，再加载分析")
         return directory
 
     def big_lcr_linearity_payload(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -1458,6 +1460,9 @@ class PicoWebHandler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/awg-preview":
                 self._send_json(awg_preview_payload(payload))
+            elif path == "/api/files/select-directory":
+                from .native_data_picker import choose_data_directory
+                self._send_json(choose_data_directory(PROJECT_DIR))
             elif path == "/api/files/list":
                 self._send_json(list_directory(str(payload.get("path", "")), PROJECT_DIR))
             elif path == "/api/analysis/browse":
