@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ctypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 import os
 from pathlib import Path
@@ -41,6 +41,10 @@ class PicoError(RuntimeError):
     """Raised for PicoSDK or device failures."""
 
 
+class CaptureTimeout(PicoError):
+    """Block capture did not become ready within its configured timeout."""
+
+
 @dataclass(slots=True)
 class CaptureResult:
     time_s: np.ndarray
@@ -51,6 +55,7 @@ class CaptureResult:
     overflow_channels: tuple[str, ...]
     config: AcquisitionConfig
     simulated: bool = False
+    capture_info: dict[str, Any] = field(default_factory=dict)
 
     @property
     def samples(self) -> int:
@@ -523,6 +528,7 @@ class Pico4824A:
         self._configure_trigger(config, max_adc)
         self._verify_trigger_ready(config)
         trigger = config.trigger
+        armed_at = time.monotonic()
         run_status = self._ps.ps4000aRunBlock(
             self.handle,
             config.pre_trigger_samples,
@@ -560,11 +566,12 @@ class Pico4824A:
             )
             if time.monotonic() >= deadline:
                 self.stop()
-                raise PicoError(
+                raise CaptureTimeout(
                     "capture timed out; check trigger level/source and AWG loopback connection"
                 )
             time.sleep(0.001)
 
+        ready_wait_s = time.monotonic()-armed_at
         returned = ctypes.c_int32(total)
         overflow = ctypes.c_int16()
         self._check(
@@ -601,6 +608,8 @@ class Pico4824A:
             actual_sample_rate_hz=1e9 / interval_ns,
             overflow_channels=overflow_channels,
             config=config,
+            capture_info={'ready_wait_s':ready_wait_s, 'driver_trigger_status':'unavailable',
+                          'requested_samples':total, 'returned_samples':count},
         )
 
     def _simulate_capture(self, config: AcquisitionConfig) -> CaptureResult:

@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f2f3f5">
+  <title>WaveGuard — 导波检测</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --shell-bg: #f2f3f5;
+      --surface: #fbfcfd;
+      --ink: #111820;
+      --muted: #6d7781;
+      --stage: #0b1320;
+      --stage-2: #132235;
+      --signal: #2f73ff;
+      --signal-hi: #59a9ff;
+      --copper: #b27a3e;
+      --success: #3e8060;
+      --line: #dce1e6;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: "SF Pro Display", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      background: var(--shell-bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
+      user-select: none;
+    }
+    button { font: inherit; }
+    .studio {
+      position: fixed;
+      inset: var(--shell-inset, 0px);
+      overflow: hidden;
+      border: 1px solid rgba(17, 24, 32, var(--shell-border, 0));
+      border-radius: var(--shell-radius, 0px);
+      background: rgba(251, 252, 253, var(--shell-fill, 0));
+      box-shadow: 0 24px 90px rgba(23, 34, 47, var(--shell-shadow, 0));
+      isolation: isolate;
+    }
+    .field {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 50% 45%, rgba(255,255,255,.98), rgba(248,249,250,.93) 54%, rgba(242,243,245,.96) 100%);
+    }
+    .field::after {
+      content: "";
+      position: absolute;
+      inset: -5%;
+      pointer-events: none;
+      opacity: .62;
+      background: radial-gradient(ellipse at 50% 43%, rgba(89,169,255,.075), rgba(47,115,255,.026) 30%, transparent 64%);
+      animation: field-breath 5.2s cubic-bezier(.42,0,.58,1) infinite alternate;
+    }
+    @keyframes field-breath {
+      from { transform: scale(.91); opacity: .24; }
+      to { transform: scale(1.09); opacity: .72; }
+    }
+    #breathField {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: signal-breath 5.2s cubic-bezier(.42,0,.58,1) infinite;
+    }
+    @keyframes signal-breath {
+      0%, 100% { transform: scale(.86); opacity: .28; }
+      50% { transform: scale(1.14); opacity: .88; }
+    }
+    #brandGlyph {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: type-breath 5.2s cubic-bezier(.42,0,.58,1) infinite;
+    }
+    @keyframes type-breath {
+      0%, 100% { transform: scale(.974); }
+      50% { transform: scale(1.026); }
+    }
+    .studio.is-complete .field::after {
+      animation-name: settled-field-breath;
+      animation-duration: 11s;
+    }
+    @keyframes settled-field-breath {
+      from { transform: scale(.98); opacity: .045; }
+      to { transform: scale(1.025); opacity: .14; }
+    }
+    .studio.is-complete #breathField {
+      animation-name: settled-breath;
+      animation-duration: 10s;
+    }
+    @keyframes settled-breath {
+      0%, 100% { transform: scale(.96); opacity: .12; }
+      50% { transform: scale(1.035); opacity: .34; }
+    }
+    .studio.is-complete #brandGlyph { animation: none; }
+    @media (prefers-reduced-motion: reduce) {
+      #breathField, #brandGlyph { animation: none !important; }
+    }
+    .visual {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .film-ui {
+      position: absolute;
+      inset: 0;
+      opacity: var(--ui-reveal, 0);
+      pointer-events: none;
+      transition: none;
+    }
+    .brand,
+    .device-state,
+    .workspace-title,
+    .stage-toolbar,
+    .metric-rail,
+    .utility-rail { position: absolute; }
+    .brand {
+      top: 20px;
+      left: 58px;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      white-space: nowrap;
+    }
+    .brand-en {
+      font-family: "SF Pro Display", "Segoe UI", sans-serif;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: .16em;
+    }
+    .brand-product { color: var(--muted); font-size: 12px; letter-spacing: .05em; }
+    .device-state {
+      top: 19px;
+      right: 28px;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      color: #58636e;
+      font: 10px/1.2 var(--mono);
+      letter-spacing: .08em;
+      white-space: nowrap;
+    }
+    .state-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      vertical-align: 1px;
+    }
+    .state-demo { color: #4f5963; }
+    .workspace-title {
+      top: 78px;
+      left: 38px;
+      display: flex;
+      align-items: end;
+      gap: 14px;
+    }
+    .workspace-title h1 {
+      margin: 0;
+      font-size: clamp(21px, 2.1vw, 29px);
+      font-weight: 690;
+      letter-spacing: .035em;
+      line-height: 1.2;
+    }
+    .workspace-title h1 span {
+      margin-left: 8px;
+      color: #77818a;
+      font-weight: 420;
+    }
+    .workspace-subtitle {
+      padding-bottom: 2px;
+      color: #77818a;
+      font: 9px/1.4 var(--mono);
+      letter-spacing: .12em;
+    }
+    .stage-toolbar {
+      top: calc(19% + 20px);
+      left: 4.2%;
+      right: 4.2%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #c2cad2;
+      font: 10px/1.3 var(--mono);
+      letter-spacing: .08em;
+    }
+    .mode-tabs { display: flex; align-items: center; gap: 5px; }
+    .mode-tab {
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: #aab5c1;
+      cursor: pointer;
+      font-size: 10px;
+      letter-spacing: .03em;
+      transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+    }
+    .mode-tab:hover { color: white; }
+    .mode-tab[aria-pressed="true"] {
+      border-color: rgba(126, 182, 232, .24);
+      background: rgba(47, 115, 255, .13);
+      color: #e7f0ff;
+    }
+    .stage-meta { color: #8493a2; white-space: nowrap; }
+    .metric-rail {
+      right: 38px;
+      bottom: 60px;
+      left: 38px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr auto;
+      align-items: center;
+      min-height: 56px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+    }
+    .metric {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+    .metric + .metric { padding-left: 22px; border-left: 1px solid var(--line); }
+    .metric-label {
+      color: #7a858e;
+      font: 9px/1.2 var(--mono);
+      letter-spacing: .075em;
+      white-space: nowrap;
+    }
+    .metric-value {
+      color: #15202a;
+      font: 22px/1 var(--mono);
+      letter-spacing: -.055em;
+      white-space: nowrap;
+    }
+    .metric-unit { color: #65717c; font: 10px/1 var(--mono); }
+    .metric-note {
+      justify-self: end;
+      color: #63707b;
+      font: 9px/1.5 var(--mono);
+      letter-spacing: .06em;
+      text-align: right;
+    }
+    .utility-rail {
+      right: 28px;
+      bottom: 17px;
+      left: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #7b858e;
+      font: 9px/1.2 var(--mono);
+      letter-spacing: .055em;
+    }
+    .utility-left { display: flex; align-items: center; gap: 16px; }
+    .utility-left span + span::before {
+      content: "";
+      display: inline-block;
+      width: 3px;
+      height: 3px;
+      margin: 0 10px 2px 0;
+      border-radius: 50%;
+      background: #a7b0b8;
+    }
+    .replay-button {
+      padding: 7px 0 7px 12px;
+      border: 0;
+      border-left: 1px solid #d8dde2;
+      background: transparent;
+      color: #37434e;
+      cursor: pointer;
+      font: 9px/1 var(--mono);
+      letter-spacing: .065em;
+    }
+    .replay-button:hover { color: var(--signal); }
+    .film-control {
+      position: fixed;
+      z-index: 5;
+      top: 22px;
+      right: 26px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+    .film-control.visible { opacity: 1; pointer-events: auto; }
+    .film-control button {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid rgba(17,24,32,.14);
+      border-radius: 999px;
+      background: rgba(251,252,253,.68);
+      color: #59636d;
+      cursor: pointer;
+      font: 9px/1 var(--mono);
+      letter-spacing: .08em;
+      backdrop-filter: blur(12px);
+    }
+    .film-control button:hover { border-color: rgba(47,115,255,.42); color: #1f59d2; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
+    }
+    @media (max-width: 720px) {
+      .brand { top: 13px; left: 44px; gap: 8px; }
+      .brand-en { font-size: 11px; }
+      .brand-product { font-size: 10px; }
+      .device-state { top: 48px; right: 15px; gap: 8px; font-size: 8px; }
+      .workspace-title { top: 83px; left: 18px; gap: 7px; }
+      .workspace-title h1 { font-size: 18px; }
+      .workspace-title h1 span { margin-left: 3px; }
+      .workspace-subtitle { font-size: 7px; letter-spacing: .07em; }
+      .stage-toolbar { top: calc(19% + 13px); left: 5%; right: 5%; gap: 4px; font-size: 8px; }
+      .mode-tabs { gap: 1px; }
+      .mode-tab { min-height: 27px; padding: 0 7px; font-size: 9px; }
+      .stage-meta { font-size: 7px; letter-spacing: .025em; }
+      .metric-rail {
+        right: 16px;
+        bottom: 67px;
+        left: 16px;
+        grid-template-columns: 1fr 1fr 1fr;
+        min-height: 52px;
+      }
+      .metric { display: block; }
+      .metric + .metric { padding-left: 10px; }
+      .metric-label { display: block; margin-bottom: 5px; font-size: 7px; letter-spacing: .045em; }
+      .metric-value { font-size: 17px; }
+      .metric-unit { font-size: 8px; }
+      .metric-note { display: none; }
+      .utility-rail { right: 14px; bottom: 12px; left: 14px; font-size: 7px; }
+      .utility-left { gap: 5px; }
+      .utility-left span + span::before { margin-right: 4px; }
+      .replay-button { padding-left: 8px; font-size: 8px; }
+      .film-control { top: 12px; right: 12px; }
+      .film-control button { min-height: 30px; padding: 0 9px; font-size: 8px; }
+    }
+    @media (max-height: 650px) {
+      .workspace-title { top: 68px; }
+      .stage-toolbar { top: calc(18% + 10px); }
+      .metric-rail { bottom: 52px; }
+      .utility-rail { bottom: 9px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+      .field::after { animation: none; }
+      .mode-tab, .film-control { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="studio" id="studio" aria-label="WaveGuard 导波检测工作站演示">
+    <div class="field" aria-hidden="true"></div>
+    <svg class="visual" id="visual" role="img" aria-label="同一枚导波信号从激励、传播、反射到时频测量的连续演示">
+      <defs>
+        <pattern id="gridPattern" width="34" height="34" patternUnits="userSpaceOnUse">
+          <path d="M 34 0 L 0 0 0 34" fill="none" stroke="#25364a" stroke-width="1" opacity=".55"/>
+        </pattern>
+      </defs>
+      <rect id="stagePanel" x="0" y="0" width="1" height="1" rx="0" fill="#0b1320" opacity="0"/>
+      <rect id="plotGrid" x="0" y="0" width="1" height="1" fill="url(#gridPattern)" opacity="0"/>
+      <g id="breathingForm" aria-hidden="true">
+        <ellipse id="breathField" cx="0" cy="0" rx="0" ry="0" fill="#59a9ff" fill-opacity=".025" stroke="#2f73ff" stroke-opacity=".18" stroke-width="1"/>
+      </g>
+      <g id="heatmap" aria-hidden="true"></g>
+      <g id="camera">
+        <path id="axis" d="" fill="none" stroke="#65717c" stroke-width="1.25"/>
+        <path id="ticks" d="" fill="none" stroke="#8c969e" stroke-width="1"/>
+        <path id="frequencyAxis" d="" fill="none" stroke="#728398" stroke-width="1"/>
+        <g id="tickLabels"></g>
+        <text id="distanceUnit" x="0" y="0" fill="#747f88" font-size="10" font-family="SFMono-Regular,Consolas,monospace" letter-spacing="1.1" text-anchor="end">距离 · mm</text>
+        <text id="timeUnit" x="0" y="0" fill="#aebbc8" font-size="10" font-family="SFMono-Regular,Consolas,monospace" letter-spacing="1.2" text-anchor="end" opacity="0">时间 · μs</text>
+        <text id="frequencyUnit" x="0" y="0" fill="#8294a7" font-size="9" font-family="SFMono-Regular,Consolas,monospace" letter-spacing=".8" text-anchor="middle" opacity="0">频率 / kHz</text>
+        <text id="txLabel" x="0" y="0" fill="#626d77" font-size="10" font-family="SFMono-Regular,Consolas,monospace" letter-spacing="1.2" text-anchor="middle">AWG · TX</text>
+        <text id="rxLabel" x="0" y="0" fill="#626d77" font-size="10" font-family="SFMono-Regular,Consolas,monospace" letter-spacing="1.2" text-anchor="middle">ADC · RX</text>
+        <path id="propagationTail" d="" fill="none" stroke="#9da8b1" stroke-width="1" stroke-dasharray="2 6" opacity="0"/>
+        <path id="defectMark" d="" fill="none" stroke="#b27a3e" stroke-width="1.5" stroke-linecap="round"/>
+        <circle id="defectPoint" cx="0" cy="0" r="3.2" fill="#b27a3e"/>
+        <circle id="txPulse" cx="0" cy="0" r="4" fill="none" stroke="#2f73ff" stroke-width="1.2" opacity="0"/>
+        <circle id="rxPulse" cx="0" cy="0" r="4" fill="none" stroke="#2f73ff" stroke-width="1.2" opacity="0"/>
+        <path id="transmitSignal" d="" fill="none" stroke="#59a9ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" opacity="0"/>
+        <path id="signalPath" d="" fill="none" stroke="#2f73ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text id="brandGlyph" x="0" y="0" fill="#111820" font-family="SF Pro Display,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="200" font-weight="690" text-anchor="middle" letter-spacing=".01em">导波</text>
+      <text id="stateLine" x="0" y="0" fill="#737d86" font-family="SFMono-Regular,Consolas,monospace" font-size="10" text-anchor="middle" letter-spacing="1.2">系统武装 · H 通道硬件触发</text>
+      <text id="caption" x="0" y="0" fill="#59646e" font-family="SF Pro Display,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif" font-size="14" text-anchor="middle" letter-spacing=".055em">采集卡先行武装，触发定义时间零点</text>
+      <g id="cinemaMetrics" opacity="0">
+        <text id="cinemaMetricLabel" x="0" y="0" fill="#77828c" font-family="SFMono-Regular,Consolas,monospace" font-size="8" text-anchor="middle" letter-spacing="1.05">回波证据 · 演示数据</text>
+        <text id="cinemaMetricValues" x="0" y="0" fill="#111820" font-family="SFMono-Regular,Consolas,monospace" font-size="15" text-anchor="middle" letter-spacing=".04em">TOF 462.0 μs　·　PEAK 0.384 V　·　SNR 38.6 dB</text>
+      </g>
+    </svg>
+    <div class="film-ui" id="filmUi">
+      <div class="brand">
+        <span class="brand-en">WAVEGUARD</span>
+        <span class="brand-product">导波检测</span>
+      </div>
+      <div class="device-state" aria-label="设备状态：离线演示">
+        <span><i class="state-dot"></i>PICOSCOPE 4824A</span>
+        <span>8 CH · 20 MS/s</span>
+        <span class="state-demo">离线演示</span>
+      </div>
+      <div class="workspace-title">
+        <h1>导波检测<span>测量工作站</span></h1>
+        <div class="workspace-subtitle">LIVE CAPTURE　/　示例信号</div>
+      </div>
+      <div class="stage-toolbar">
+        <div class="mode-tabs" role="group" aria-label="信号显示模式">
+          <button class="mode-tab" type="button" data-mode="wave" aria-pressed="false">波形</button>
+          <button class="mode-tab" type="button" data-mode="fft" aria-pressed="false">频谱</button>
+          <button class="mode-tab" type="button" data-mode="tf" aria-pressed="true">时频</button>
+        </div>
+        <span class="stage-meta" id="stageMeta">8 通道同步 · 硬件触发 H</span>
+      </div>
+      <div class="metric-rail" aria-label="模拟测量结果">
+        <div class="metric">
+          <span class="metric-label">往返时间 / TOF</span>
+          <span class="metric-value">462.0</span><span class="metric-unit">μs</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">峰值 / PEAK</span>
+          <span class="metric-value">0.384</span><span class="metric-unit">V</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">信噪比 / SNR</span>
+          <span class="metric-value">38.6</span><span class="metric-unit">dB</span>
+        </div>
+        <div class="metric-note">模拟结果<br>不代表真实设备采集</div>
+      </div>
+      <div class="utility-rail">
+        <div class="utility-left">
+          <span>AWG　100.0 kHz · 5 周期</span>
+          <span>ADC ARMED → H TRIGGER → 8CH</span>
+        </div>
+        <button class="replay-button" id="replay" type="button">重播信号路径 ↗</button>
+      </div>
+    </div>
+  </main>
+  <div class="film-control visible" id="filmControl" aria-label="电影演示控制">
+    <button id="skip" type="button">跳至工作站</button>
+  </div>
+  <div class="sr-only" id="announcement" aria-live="polite">WaveGuard 信号路径演示正在开始。</div>
+  <script>
+    (function () {
+      "use strict";
+      const duration = 7800;
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const studio = document.getElementById("studio");
+      const svg = document.getElementById("visual");
+      const camera = document.getElementById("camera");
+      const signal = document.getElementById("signalPath");
+      const transmitSignal = document.getElementById("transmitSignal");
+      const stagePanel = document.getElementById("stagePanel");
+      const plotGrid = document.getElementById("plotGrid");
+      const heatmap = document.getElementById("heatmap");
+      const stateLine = document.getElementById("stateLine");
+      const caption = document.getElementById("caption");
+      const brandGlyph = document.getElementById("brandGlyph");
+      const cinemaMetrics = document.getElementById("cinemaMetrics");
+      const breathingForm = document.getElementById("breathingForm");
+      const breathField = document.getElementById("breathField");
+      const filmUi = document.getElementById("filmUi");
+      const filmControl = document.getElementById("filmControl");
+      const announcement = document.getElementById("announcement");
+      const axis = document.getElementById("axis");
+      const ticks = document.getElementById("ticks");
+      const frequencyAxis = document.getElementById("frequencyAxis");
+      const tickLabels = document.getElementById("tickLabels");
+      const distanceUnit = document.getElementById("distanceUnit");
+      const timeUnit = document.getElementById("timeUnit");
+      const frequencyUnit = document.getElementById("frequencyUnit");
+      const txLabel = document.getElementById("txLabel");
+      const rxLabel = document.getElementById("rxLabel");
+      const defectMark = document.getElementById("defectMark");
+      const defectPoint = document.getElementById("defectPoint");
+      const txPulse = document.getElementById("txPulse");
+      const rxPulse = document.getElementById("rxPulse");
+      const propagationTail = document.getElementById("propagationTail");
+      const tabButtons = Array.from(document.querySelectorAll(".mode-tab"));
+      let width = 0;
+      let height = 0;
+      let elapsed = 0;
+      let frameId = 0;
+      let startedAt = 0;
+      let previousFrame = 0;
+      let cameraFocus = 0;
+      let lastLabel = "";
+      let activeMode = "tf";
+      let modeFrom = "tf";
+      let modeTo = "tf";
+      let modeStartedAt = 0;
+      let modeAnimating = false;
+      let reducedAnnounced = false;
+
+      const clamp = function (value, lo, hi) { return Math.max(lo, Math.min(hi, value)); };
+      const mix = function (a, b, t) { return a + (b - a) * t; };
+      const smooth = function (a, b, value) {
+        const t = clamp((value - a) / (b - a), 0, 1);
+        return t * t * (3 - 2 * t);
+      };
+      const bell = function (x, center, spread) {
+        const v = (x - center) / spread;
+        return Math.exp(-v * v);
+      };
+      const pathFrom = function (points) {
+        return points.map(function (p, i) {
+          return (i ? "L" : "M") + p[0].toFixed(2) + " " + p[1].toFixed(2);
+        }).join(" ");
+      };
+      const lerpPoints = function (a, b, amount) {
+        return a.map(function (point, i) {
+          return [mix(point[0], b[i][0], amount), mix(point[1], b[i][1], amount)];
+        });
+      };
+      const labelRows = [];
+      for (let i = 0; i <= 6; i += 1) {
+        const mm = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        const us = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        mm.setAttribute("fill", "#77828b");
+        mm.setAttribute("font-size", "9");
+        mm.setAttribute("font-family", "SFMono-Regular,Consolas,monospace");
+        mm.setAttribute("text-anchor", "middle");
+        us.setAttribute("fill", "#aebbc8");
+        us.setAttribute("font-size", "9");
+        us.setAttribute("font-family", "SFMono-Regular,Consolas,monospace");
+        us.setAttribute("text-anchor", "middle");
+        mm.textContent = String(i * 250);
+        us.textContent = String(i * 100 - 200);
+        tickLabels.appendChild(mm);
+        tickLabels.appendChild(us);
+        labelRows.push({ mm: mm, us: us });
+      }
+      const heatCells = [];
+      for (let col = 0; col < 36; col += 1) {
+        for (let row = 0; row < 8; row += 1) {
+          const cell = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          cell.setAttribute("rx", "1.5");
+          cell.setAttribute("fill", "#2f73ff");
+          heatmap.appendChild(cell);
+          heatCells.push({ node: cell, col: col, row: row });
+        }
+      }
+
+      function geometry() {
+        width = Math.max(1, studio.clientWidth);
+        height = Math.max(1, studio.clientHeight);
+        svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+        const axisY = height * .565;
+        const plotBase = height * .61;
+        const plotLeft = width * .09;
+        const plotRight = width * .91;
+        const axisStart = width * .15;
+        const axisEnd = width * 1.19;
+        const defectX = width * 1.055;
+        const rxX = width * .15;
+        const packetWidth = Math.max(104, width * .145);
+        cameraFocus = cameraFocus || width * .54;
+        return {
+          axisY: axisY, plotBase: plotBase, plotLeft: plotLeft, plotRight: plotRight,
+          plotWidth: plotRight - plotLeft, axisStart: axisStart, axisEnd: axisEnd,
+          defectX: defectX, txX: axisStart, rxX: rxX, packetWidth: packetWidth
+        };
+      }
+      let g = geometry();
+
+      function packetPoints(center, amplitude, packetWidth) {
+        const points = [];
+        for (let i = 0; i <= 160; i += 1) {
+          const t = i / 160;
+          const envelope = Math.pow(Math.sin(Math.PI * t), 2);
+          const carrier = Math.sin(t * Math.PI * 10 + .36) * amplitude * envelope;
+          points.push([center + (t - .5) * packetWidth, g.axisY - carrier]);
+        }
+        return points;
+      }
+      function wavePoints() {
+        const points = [];
+        for (let i = 0; i <= 160; i += 1) {
+          const t = i / 160;
+          const x = g.plotLeft + t * g.plotWidth;
+          const carrierA = Math.sin((t - .245) * Math.PI * 90 + Math.PI / 2) * bell(t, .245, .044) * 20;
+          const carrierB = Math.sin((t - .735) * Math.PI * 92 + Math.PI / 2) * bell(t, .735, .048) * 34;
+          const ring = Math.sin((t - .58) * Math.PI * 38) * bell(t, .58, .12) * 2.2;
+          points.push([x, g.plotBase - carrierA - carrierB - ring]);
+        }
+        return points;
+      }
+      function fftPoints() {
+        const points = [];
+        for (let i = 0; i <= 160; i += 1) {
+          const t = i / 160;
+          const x = g.plotLeft + t * g.plotWidth;
+          const value = bell(t, .36, .075) * 116 + bell(t, .49, .105) * 67 + bell(t, .72, .052) * 21;
+          const ripple = Math.sin(t * Math.PI * 28) * bell(t, .48, .28) * 2.5;
+          points.push([x, g.plotBase - value - ripple]);
+        }
+        return points;
+      }
+      function tfPoints() {
+        const points = [];
+        for (let i = 0; i <= 160; i += 1) {
+          const t = i / 160;
+          const x = g.plotLeft + t * g.plotWidth;
+          const envelope = bell(t, .245, .052) + bell(t, .735, .058) * .9;
+          const ridge = Math.sin(t * Math.PI * 12) * 34 * envelope;
+          const center = g.height * .455 - (envelope * 30) + ridge;
+          points.push([x, center]);
+        }
+        return points;
+      }
+      function updateLabel(line, detail) {
+        const value = line + "|" + detail;
+        if (value === lastLabel) return;
+        lastLabel = value;
+        stateLine.textContent = line;
+        caption.textContent = detail;
+      }
+      function setOpacity(element, value) { element.setAttribute("opacity", String(clamp(value, 0, 1))); }
+    function setShell(surface, uiReveal) {
+        const inset = 18 * surface;
+        const radius = 0 + 20 * surface;
+        studio.style.setProperty("--shell-inset", inset.toFixed(2) + "px");
+        studio.style.setProperty("--shell-radius", radius.toFixed(2) + "px");
+        studio.style.setProperty("--shell-fill", String(surface));
+        studio.style.setProperty("--shell-border", String(surface * .08));
+        studio.style.setProperty("--shell-shadow", String(surface * .12));
+        filmUi.style.setProperty("--ui-reveal", String(uiReveal));
+        filmUi.style.pointerEvents = uiReveal > .92 ? "auto" : "none";
+      }
+      function makeTickGeometry(morph) {
+        let d = "";
+        const labels = ["0", "250", "500", "750", "1000", "1250", "1500"];
+        const times = ["−200", "−100", "0", "100", "200", "300", "400"];
+        for (let i = 0; i <= 6; i += 1) {
+          const ratio = i / 6;
+          const physicalX = g.axisStart + ratio * (g.axisEnd - g.axisStart);
+          const targetX = g.plotLeft + ratio * g.plotWidth;
+          const x = mix(physicalX, targetX, morph);
+          const y = mix(g.axisY, g.plotBase, morph);
+          const len = mix(8, 8, morph);
+          d += "M" + x.toFixed(2) + " " + (y - len / 2).toFixed(2) + "v" + len.toFixed(2);
+          const row = labelRows[i];
+          row.mm.setAttribute("x", x.toFixed(2));
+          row.mm.setAttribute("y", (y + 24).toFixed(2));
+          row.us.setAttribute("x", x.toFixed(2));
+          row.us.setAttribute("y", (y + 24).toFixed(2));
+          row.mm.textContent = labels[i];
+          row.us.textContent = times[i];
+          row.mm.setAttribute("opacity", String(1 - morph));
+          row.us.setAttribute("opacity", String(morph));
+        }
+        ticks.setAttribute("d", d);
+        const x0 = mix(g.axisStart, g.plotLeft, morph);
+        const x1 = mix(g.axisEnd, g.plotRight, morph);
+        const y = mix(g.axisY, g.plotBase, morph);
+        axis.setAttribute("d", "M" + x0.toFixed(2) + " " + y.toFixed(2) + "H" + x1.toFixed(2));
+        let frequencyTicks = "M" + g.plotLeft.toFixed(2) + " " + g.plotBase.toFixed(2) +
+          "V" + (g.height * .32).toFixed(2);
+        for (let i = 1; i <= 4; i += 1) {
+          const tickY = mix(g.plotBase, g.height * .32, i / 5);
+          frequencyTicks += "M" + (g.plotLeft - 4).toFixed(2) + " " + tickY.toFixed(2) +
+            "h8";
+        }
+        frequencyAxis.setAttribute("d", frequencyTicks);
+        const unitX = mix(g.axisEnd + 7, g.plotRight, morph);
+        const unitY = y + 43;
+        distanceUnit.setAttribute("x", unitX.toFixed(2));
+        distanceUnit.setAttribute("y", unitY.toFixed(2));
+        timeUnit.setAttribute("x", unitX.toFixed(2));
+        timeUnit.setAttribute("y", unitY.toFixed(2));
+        distanceUnit.setAttribute("opacity", String(1 - morph));
+        timeUnit.setAttribute("opacity", String(morph));
+        frequencyUnit.setAttribute("x", (g.plotLeft + 10).toFixed(2));
+        frequencyUnit.setAttribute("y", (g.height * .30).toFixed(2));
+      }
+      function updateHeatmap(amount) {
+        const x0 = g.plotLeft;
+        const plotTop = g.height * .32;
+        const plotH = g.plotBase - plotTop;
+        const colW = g.plotWidth / 38;
+        heatCells.forEach(function (item) {
+          const t = (item.col + .5) / 36;
+          const envelope = bell(t, .245, .065) + bell(t, .735, .07) * .88;
+          const ridgeRow = 2.3 + envelope * 1.55 + Math.sin(t * Math.PI * 8) * .45;
+          const strength = Math.exp(-Math.pow((item.row - ridgeRow) / 1.6, 2)) * envelope;
+          const x = x0 + item.col * (g.plotWidth / 36) + 1;
+          const y = plotTop + item.row * (plotH / 8) + 1;
+          item.node.setAttribute("x", x.toFixed(2));
+          item.node.setAttribute("y", y.toFixed(2));
+          item.node.setAttribute("width", Math.max(1, colW - 2).toFixed(2));
+          item.node.setAttribute("height", Math.max(1, plotH / 8 - 2).toFixed(2));
+          item.node.setAttribute("fill-opacity", String(amount * (.08 + strength * .43)));
+        });
+      }
+      function desiredModeShape(mode) {
+        if (mode === "wave") return wavePoints();
+        if (mode === "fft") return fftPoints();
+        return tfPoints();
+      }
+      function showTab(mode) {
+        activeMode = mode;
+        tabButtons.forEach(function (button) {
+          button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+        });
+        const meta = document.getElementById("stageMeta");
+        meta.textContent = mode === "wave" ? "时域波形 · 8 通道同步" :
+          mode === "fft" ? "频谱分析 · Hann 窗" : "时频分析 · 回波能量分布";
+      }
+      function render(timeMs, advanceCamera, frameDelta) {
+        elapsed = clamp(timeMs, 0, duration);
+        const seconds = elapsed / 1000;
+        const form = smooth(.68, 1.74, seconds);
+        const forward = smooth(1.66, 3.55, seconds);
+        const returnProgress = smooth(3.88, 5.08, seconds);
+        const holdImpact = seconds >= 3.55 && seconds < 3.90;
+        const impactPulse = Math.exp(-Math.pow((seconds - 3.68) / .16, 2));
+        const firePulse = smooth(1.55, 1.69, seconds) * (1 - smooth(1.88, 2.12, seconds));
+        const receivePulse = smooth(4.94, 5.08, seconds) * (1 - smooth(5.24, 5.43, seconds));
+        const spaceToWave = smooth(4.76, 5.82, seconds);
+        const waveToFft = smooth(5.62, 6.19, seconds);
+        const fftToTf = smooth(6.12, 6.73, seconds);
+        const surface = smooth(6.60, 7.66, seconds);
+        const uiReveal = smooth(6.91, 7.72, seconds);
+        const metricIn = smooth(5.20, 5.88, seconds);
+        breathField.setAttribute("cx", (width * .5).toFixed(2));
+        breathField.setAttribute("cy", (height * .37).toFixed(2));
+        breathField.setAttribute("rx", (width * .275).toFixed(2));
+        breathField.setAttribute("ry", (height * .185).toFixed(2));
+        setOpacity(breathingForm, 1 - surface);
+        const rxX = g.rxX;
+        let center = g.txX;
+        if (seconds < 3.55) center = mix(g.txX, g.defectX, forward);
+        else if (holdImpact) center = g.defectX;
+        else center = mix(g.defectX, rxX, returnProgress);
+
+        const amplitude = 24 * form * (1 - .2 * impactPulse);
+        const split = smooth(3.54, 3.82, seconds) * (1 - smooth(4.12, 4.48, seconds));
+        const tx = g.txX;
+        const defect = g.defectX;
+        const transmissionTravel = smooth(3.60, 4.25, seconds);
+        const transmissionCenter = mix(defect, g.axisEnd, transmissionTravel);
+        const plotMorph = spaceToWave;
+        const wave = wavePoints();
+        const fft = fftPoints();
+        const tf = tfPoints();
+        const physical = packetPoints(center, amplitude, g.packetWidth * mix(.12, 1, form));
+        let targetShape = lerpPoints(physical, wave, plotMorph);
+        targetShape = lerpPoints(targetShape, fft, waveToFft);
+        targetShape = lerpPoints(targetShape, tf, fftToTf);
+
+        if (elapsed >= duration && modeAnimating) {
+          const modeT = smooth(0, 360, performance.now() - modeStartedAt);
+          targetShape = lerpPoints(desiredModeShape(modeFrom), desiredModeShape(modeTo), modeT);
+          if (modeT >= 1) {
+            modeAnimating = false;
+            showTab(modeTo);
+          }
+        }
+        signal.setAttribute("d", pathFrom(targetShape));
+        const transmission = packetPoints(transmissionCenter, amplitude * .48, g.packetWidth * .72);
+        transmitSignal.setAttribute("d", pathFrom(transmission));
+        setOpacity(transmitSignal, split * (1 - spaceToWave) * .58);
+        signal.setAttribute("stroke-width", String(mix(2.1, 2.55, surface)));
+
+        const morph = spaceToWave;
+        const stageX = mix(width * .5, width * .02, surface);
+        const stageY = mix(g.plotBase, height * .18, surface);
+        const stageW = mix(1, width * .96, surface);
+        const stageH = mix(1, height * .62, surface);
+        stagePanel.setAttribute("x", stageX.toFixed(2));
+        stagePanel.setAttribute("y", stageY.toFixed(2));
+        stagePanel.setAttribute("width", stageW.toFixed(2));
+        stagePanel.setAttribute("height", stageH.toFixed(2));
+        stagePanel.setAttribute("rx", (surface * 20).toFixed(2));
+        setOpacity(stagePanel, surface);
+        plotGrid.setAttribute("x", (width * .02).toFixed(2));
+        plotGrid.setAttribute("y", (height * .18).toFixed(2));
+        plotGrid.setAttribute("width", (width * .96).toFixed(2));
+        plotGrid.setAttribute("height", (height * .62).toFixed(2));
+        setOpacity(plotGrid, surface * .68);
+        const cameraBlend = morph;
+        const desiredFocus = Math.max(width * .54, center);
+        if (advanceCamera && elapsed < 6000) {
+          const dt = clamp(frameDelta || 16, 0, 40);
+          const followRate = 1 - Math.exp(-dt / 190);
+          cameraFocus += (desiredFocus - cameraFocus) * followRate;
+        } else if (elapsed >= duration) {
+          cameraFocus = width * .54;
+        }
+        const zoom = 1 + impactPulse * .026;
+        let camScale = mix(zoom, 1, cameraBlend);
+        let camX = width * .52 - cameraFocus * zoom;
+        let camY = height * .52 - g.axisY * zoom;
+        camX = mix(camX, 0, cameraBlend);
+        camY = mix(camY, 0, cameraBlend);
+        camera.setAttribute("transform", "matrix(" + camScale.toFixed(4) + ",0,0," + camScale.toFixed(4) + "," +
+          camX.toFixed(2) + "," + camY.toFixed(2) + ")");
+
+        makeTickGeometry(morph);
+        const axisVisible = 1 - surface * .12;
+        setOpacity(axis, axisVisible);
+        setOpacity(ticks, axisVisible);
+        setOpacity(tickLabels, axisVisible);
+        setOpacity(distanceUnit, 1 - morph);
+        setOpacity(timeUnit, morph);
+        setOpacity(frequencyUnit, waveToFft * .75 + fftToTf * .25);
+        setOpacity(frequencyAxis, waveToFft * .75 + fftToTf * .25);
+        const physicalOpacity = 1 - morph;
+        setOpacity(txLabel, physicalOpacity * form);
+        setOpacity(rxLabel, physicalOpacity * form);
+        txLabel.setAttribute("x", g.txX.toFixed(2));
+        rxLabel.setAttribute("x", g.rxX.toFixed(2));
+        txLabel.setAttribute("y", (g.axisY - 26).toFixed(2));
+        rxLabel.setAttribute("y", (g.axisY + 42).toFixed(2));
+        txPulse.setAttribute("cx", g.txX.toFixed(2));
+        txPulse.setAttribute("cy", g.axisY.toFixed(2));
+        txPulse.setAttribute("r", (4 + firePulse * 13).toFixed(2));
+        setOpacity(txPulse, firePulse * physicalOpacity);
+        rxPulse.setAttribute("cx", g.rxX.toFixed(2));
+        rxPulse.setAttribute("cy", g.axisY.toFixed(2));
+        rxPulse.setAttribute("r", (4 + receivePulse * 11).toFixed(2));
+        setOpacity(rxPulse, receivePulse * physicalOpacity);
+        const impactX = mix(defect, g.plotLeft + g.plotWidth * .735, morph);
+        const impactY = mix(g.axisY, g.plotBase, morph);
+        defectPoint.setAttribute("cx", impactX.toFixed(2));
+        defectPoint.setAttribute("cy", impactY.toFixed(2));
+        defectPoint.setAttribute("fill", impactPulse > .12 ? "#b27a3e" : "#7c8791");
+        defectMark.setAttribute("stroke", impactPulse > .12 ? "#b27a3e" : "#87929b");
+        setOpacity(defectPoint, physicalOpacity * (form * .12 + impactPulse * .88));
+        const markX = g.defectX;
+        defectMark.setAttribute("d", "M" + (markX - 4).toFixed(2) + " " + (g.axisY - 8).toFixed(2) +
+          "L" + markX.toFixed(2) + " " + (g.axisY - 3).toFixed(2) +
+          "L" + (markX - 2).toFixed(2) + " " + g.axisY.toFixed(2) +
+          "L" + (markX + 3).toFixed(2) + " " + (g.axisY + 6).toFixed(2));
+        setOpacity(defectMark, physicalOpacity * (form * .08 + impactPulse * .92));
+        propagationTail.setAttribute("d", "M" + g.txX.toFixed(2) + " " + g.axisY.toFixed(2) + "H" +
+          Math.max(g.txX, center - g.packetWidth * .55).toFixed(2));
+        setOpacity(propagationTail, smooth(1.7, 2.2, seconds) * (1 - morph) * .6);
+
+        updateHeatmap(fftToTf * surface);
+        frequencyUnit.setAttribute("opacity", String(clamp((waveToFft * .65 + fftToTf * .55) * (surface ? 1 : .65))));
+
+        const glyphReveal = smooth(6.52, 7.58, seconds);
+        brandGlyph.setAttribute("x", mix(width * .5, 36, glyphReveal).toFixed(2));
+        brandGlyph.setAttribute("y", mix(height * .37, 36, glyphReveal).toFixed(2));
+        brandGlyph.setAttribute("font-size", mix(Math.min(width * .19, 236), 20, glyphReveal).toFixed(2));
+        setOpacity(brandGlyph, mix(.94, .9, glyphReveal));
+        const introOpacity = 1 - smooth(6.48, 7.18, seconds);
+        stateLine.setAttribute("x", (width * .5).toFixed(2));
+        stateLine.setAttribute("y", (height * .2).toFixed(2));
+        setOpacity(stateLine, introOpacity * (1 - uiReveal * .25));
+        caption.setAttribute("x", (width * .5).toFixed(2));
+        caption.setAttribute("y", (height * .77).toFixed(2));
+        caption.setAttribute("font-size", Math.max(11, Math.min(14, width * .012)).toFixed(2));
+        setOpacity(caption, introOpacity);
+        cinemaMetrics.setAttribute("transform", "translate(0,0)");
+        const metricY = height * .87;
+        document.getElementById("cinemaMetricLabel").setAttribute("x", (width * .5).toFixed(2));
+        document.getElementById("cinemaMetricLabel").setAttribute("y", (metricY - 21).toFixed(2));
+        document.getElementById("cinemaMetricValues").setAttribute("x", (width * .5).toFixed(2));
+        document.getElementById("cinemaMetricValues").setAttribute("y", metricY.toFixed(2));
+        setOpacity(cinemaMetrics, metricIn * (1 - uiReveal));
+        setShell(surface, uiReveal);
+        studio.classList.toggle("is-complete", elapsed >= duration);
+
+        if (seconds < .52) updateLabel("系统武装 · H 通道硬件触发", "ADC 先进入采集状态，等待硬件定义 t = 0");
+        else if (seconds < 1.72) updateLabel("汉宁窗激励 · 100 kHz", "五周期波包从安静基线中形成");
+        else if (seconds < 3.55) updateLabel("TX 发射 · 导波传播", "镜头跟随同一枚信号沿试件前行");
+        else if (seconds < 3.9) updateLabel("缺陷交互 · 能量分裂", "透射继续向前，反射从同一波包折返");
+        else if (seconds < 5.14) updateLabel("RX 接收 · 硬件触发采集", "空间距离正在连续变成时间刻度");
+        else if (seconds < 6.2) updateLabel("示波器波形 · TOF 462.0 μs", "同一枚回波展开为可测量的时域信号");
+        else if (seconds < 6.75) updateLabel("频谱 → 时频", "信号进入数学空间，仍沿同一条轴延展");
+        else updateLabel("WaveGuard 测量工作站", "模拟演示数据 · 设备离线");
+        if (elapsed >= duration) {
+          filmControl.classList.remove("visible");
+          filmControl.innerHTML = '<button id="skip" type="button" aria-hidden="true" tabindex="-1">演示完成</button>';
+          announcement.textContent = "WaveGuard 测量工作站已显示。当前为离线模拟演示数据。";
+          showTab(activeMode);
+        }
+      }
+      function finish() {
+        if (frameId) cancelAnimationFrame(frameId);
+        frameId = 0;
+        elapsed = duration;
+        cameraFocus = width * .54;
+        render(duration, false, 0);
+        filmControl.classList.remove("visible");
+        filmControl.innerHTML = '<button id="skip" type="button" aria-hidden="true" tabindex="-1">演示完成</button>';
+      }
+      function play() {
+        if (frameId) cancelAnimationFrame(frameId);
+        frameId = 0;
+        elapsed = 0;
+        studio.classList.remove("is-complete");
+        startedAt = 0;
+        previousFrame = 0;
+        cameraFocus = width * .54;
+        modeAnimating = false;
+        activeMode = "tf";
+        showTab("tf");
+        filmControl.innerHTML = '<button id="skip" type="button">跳至工作站</button>';
+        document.getElementById("skip").addEventListener("click", finish);
+        filmControl.classList.add("visible");
+        render(0, false, 0);
+        announcement.textContent = "WaveGuard 连续信号演示开始。";
+        if (reduced.matches) {
+          if (!reducedAnnounced) {
+            announcement.textContent = "系统已启用减少动态效果，直接显示工作站。";
+            reducedAnnounced = true;
+          }
+          finish();
+          return;
+        }
+        frameId = requestAnimationFrame(tick);
+      }
+      function tick(now) {
+        if (!startedAt) startedAt = now;
+        const dt = previousFrame ? now - previousFrame : 16;
+        previousFrame = now;
+        const t = Math.min(duration, now - startedAt);
+        render(t, true, dt);
+        if (t >= duration) {
+          frameId = 0;
+          return;
+        }
+        frameId = requestAnimationFrame(tick);
+      }
+      function chooseMode(mode) {
+        if (mode === activeMode && !modeAnimating) return;
+        modeFrom = modeAnimating ? modeTo : activeMode;
+        modeTo = mode;
+        modeStartedAt = performance.now();
+        modeAnimating = !reduced.matches;
+        if (reduced.matches) {
+          modeAnimating = false;
+          activeMode = mode;
+          showTab(mode);
+          render(duration, false, 0);
+          return;
+        }
+        activeMode = mode;
+        showTab(mode);
+        if (!frameId) {
+          const modeTick = function () {
+            render(duration, false, 0);
+            if (modeAnimating) requestAnimationFrame(modeTick);
+          };
+          requestAnimationFrame(modeTick);
+        }
+      }
+      document.getElementById("skip").addEventListener("click", finish);
+      document.getElementById("replay").addEventListener("click", play);
+      tabButtons.forEach(function (button) {
+        button.addEventListener("click", function () { chooseMode(button.dataset.mode); });
+      });
+      window.addEventListener("resize", function () {
+        const oldW = width;
+        const oldH = height;
+        g = geometry();
+        if (oldW && oldH && cameraFocus) cameraFocus = width * .54;
+        render(elapsed, false, 0);
+      }, { passive: true });
+      if (typeof reduced.addEventListener === "function") {
+        reduced.addEventListener("change", function (event) {
+          if (event.matches) finish();
+        });
+      } else if (typeof reduced.addListener === "function") {
+        reduced.addListener(function (event) {
+          if (event.matches) finish();
+        });
+      }
+      g = geometry();
+      if (reduced.matches) {
+        finish();
+      } else {
+        render(0, false, 0);
+        frameId = requestAnimationFrame(tick);
+      }
+    })();
+  </script>
+</body>
+</html>

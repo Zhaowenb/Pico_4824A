@@ -1,0 +1,43 @@
+const {chromium}=require(process.env.WAVEGUARD_PLAYWRIGHT_MODULE);
+require('fs').mkdirSync('.test-tmp',{recursive:true});
+(async()=>{
+ const browser=await chromium.launch({headless:true,channel:'msedge'});
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.goto((process.env.WAVEGUARD_BASE_URL||'http://127.0.0.1:4824')+'/measure');
+  const stage=page.locator('[data-wg-stage="measure"]'),button=stage.locator('.wg-parameter-button'),panel=stage.locator('.wg-inspector');
+  await button.click();await page.waitForTimeout(110);
+  const anchor=await button.evaluate(n=>{const r=n.getBoundingClientRect();return {opacity:getComputedStyle(n).opacity,hit:n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)),expanded:n.getAttribute('aria-expanded')};});
+  if(anchor.opacity!=='1'||!anchor.hit||anchor.expanded!=='true')throw Error('anchor disappeared '+JSON.stringify(anchor));
+  await button.click({force:true});
+  if(await button.getAttribute('aria-expanded')!=='false')throw Error('second click did not close');
+  await page.waitForSelector('.wg-fluid-shell',{state:'detached'});
+  if(await panel.isVisible())throw Error('panel remained after close');
+  await button.click();await page.waitForSelector('.wg-fluid-shell',{state:'detached'});
+  await panel.evaluate(n=>n.scrollTop=180);
+  const scroll=await panel.evaluate(n=>n.scrollTop);
+  await button.click({force:true});
+  const ghostScroll=await page.locator('.wg-fluid-content').evaluate(n=>n.scrollTop);
+  if(Math.abs(ghostScroll-scroll)>1)throw Error('close scroll jumped '+ghostScroll+' != '+scroll);
+  await page.waitForTimeout(130);await page.screenshot({path:'.test-tmp/anchored-panel-closing.png'});
+  await page.waitForSelector('.wg-fluid-shell',{state:'detached'});
+  await button.click();await page.waitForSelector('.wg-fluid-shell',{state:'detached'});
+  if(Math.abs(await panel.evaluate(n=>n.scrollTop)-scroll)>1)throw Error('reopen lost scroll');
+  await panel.evaluate(n=>n.scrollTop=0);await page.screenshot({path:'.test-tmp/anchored-panel-open.png'});
+  await button.click({force:true});await button.click({force:true});await button.click({force:true});
+  await page.waitForSelector('.wg-fluid-shell',{state:'detached'});
+  if(await button.getAttribute('aria-expanded')!=='false')throw Error('rapid toggle state wrong');
+  await button.click();await page.setViewportSize({width:1366,height:768});
+  await page.waitForSelector('.wg-fluid-shell',{state:'detached'});
+  if(!await panel.isVisible())throw Error('resize lost panel');
+  await page.emulateMedia({reducedMotion:'reduce'});await button.click();await button.click();
+  if(await page.locator('.wg-fluid-shell').count())throw Error('reduced motion left overlay');
+  await button.click();
+  const gear=page.locator('#workstationSettingsButton');await gear.click();
+  if(!await gear.isVisible()||await gear.getAttribute('aria-expanded')!=='true')throw Error('settings anchor disappeared');
+  await gear.click();if(await page.locator('#workstationAppearanceSettings').isVisible())throw Error('settings second click failed');
+  if(errors.length)throw Error(errors.join('\n'));
+  console.log(JSON.stringify({anchor,scrollPreserved:scroll,ghostScroll,rapidToggle:true,resize:true,reducedMotion:true,settingsToggle:true,errors}));
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1});

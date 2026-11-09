@@ -15,6 +15,7 @@ import numpy as np
 
 from .config import AcquisitionConfig
 from .device import CaptureResult, Pico4824A
+from .storage_naming import session_directory
 from .storage import save_npz
 
 
@@ -636,8 +637,7 @@ def execute_sweep(
             f"{sweep.reflection_delay_min_us:g} µs 的端面反射搜索；请增加触发后点数"
         )
 
-    stamp = datetime.now().strftime("sweep_%Y%m%d_%H%M%S_%f")
-    directory = output_root / stamp
+    directory = session_directory(output_root, "sweep", simulated=getattr(device, "simulate", False))
     raw_dir = directory / "raw"
     raw_dir.mkdir(parents=True, exist_ok=False)
     (directory / "sweep_config.json").write_text(
@@ -689,7 +689,7 @@ def execute_sweep(
                     _write_csv(directory / "summary.csv", summary)
                     return SweepOutcome(directory, run_rows, summary, stopped=True)
                 raise
-            file_name = f"f{frequency_hz:010.3f}_c{cycles:04d}_r{repeat:03d}.npz"
+            file_name = f"频率{frequency_hz/1000:g}kHz__{cycles}周期__重复{repeat:02d}.npz"
             npz_path = save_npz(result, raw_dir / file_name)
             row: dict[str, Any] = {
                 "run_index": run_index,

@@ -10,14 +10,15 @@ import numpy as np
 
 from .device import CaptureResult
 from .config import AcquisitionConfig, CHANNEL_NAMES
+from .storage_naming import output_path, preferences
 
 
 def default_stem() -> str:
-    return datetime.now().strftime("capture_%Y%m%d_%H%M%S")
+    return preferences()['capture'] + datetime.now().strftime("__%Y-%m-%d_%H-%M-%S_%f")
 
 
 def save_npz(result: CaptureResult, path: str | Path) -> Path:
-    target = Path(path)
+    target = output_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     metadata = {
         "sample_interval_s": result.sample_interval_s,
@@ -25,6 +26,7 @@ def save_npz(result: CaptureResult, path: str | Path) -> Path:
         "actual_sample_rate_hz": result.actual_sample_rate_hz,
         "overflow_channels": result.overflow_channels,
         "simulated": result.simulated,
+        "capture_info": getattr(result, "capture_info", {}),
         "config": result.config.to_dict(),
     }
     arrays = {"time_s": result.time_s, **{f"ch_{k}_v": v for k, v in result.volts.items()}}
@@ -54,11 +56,12 @@ def load_npz(path: str | Path) -> CaptureResult:
         overflow_channels=tuple(metadata.get("overflow_channels", ())),
         config=AcquisitionConfig.from_dict(metadata["config"]),
         simulated=bool(metadata.get("simulated", False)),
+        capture_info=dict(metadata.get("capture_info", {})),
     )
 
 
 def save_csv(result: CaptureResult, path: str | Path) -> Path:
-    target = Path(path)
+    target = output_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     names = tuple(result.volts)
     matrix = np.column_stack([result.time_s, *(result.volts[name] for name in names)])
@@ -73,6 +76,7 @@ def save_csv(result: CaptureResult, path: str | Path) -> Path:
                 "actual_sample_rate_hz": result.actual_sample_rate_hz,
                 "overflow_channels": result.overflow_channels,
                 "simulated": result.simulated,
+                "capture_info": getattr(result, "capture_info", {}),
                 "config": result.config.to_dict(),
             },
             ensure_ascii=False,

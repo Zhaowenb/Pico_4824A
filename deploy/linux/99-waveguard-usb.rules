@@ -1,0 +1,3 @@
+# Instrument USB permissions; no general world-writable USB rule.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0ce9", MODE="0660", GROUP="pi"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="2ec7", MODE="0660", GROUP="pi"

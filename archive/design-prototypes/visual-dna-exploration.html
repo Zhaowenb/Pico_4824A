@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>WaveGuard Studio — Visual DNA Exploration</title>
+<style>
+:root{font-family:"Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;color:#18242b;background:#e9edef;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;--mono:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px;background:#e9edef;color:#1a272e}
+button{font:inherit}
+.frame{width:min(1680px,100%);margin:auto;padding:20px clamp(14px,2.2vw,36px) 36px}
+.topline{height:48px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #cdd5d9;font-size:12px;color:#617078}
+.brand{display:flex;align-items:center;gap:11px;color:#263740;font-weight:650;letter-spacing:-.02em}.brand-mark{width:24px;height:24px;border:1.5px solid currentColor;border-radius:50%;display:grid;place-items:center;position:relative}.brand-mark:before{content:"";width:12px;height:5px;border-top:1.5px solid #458d9f;border-radius:50%;transform:rotate(-28deg)}.brand small{font:10px var(--mono);letter-spacing:.12em;color:#748188}
+.privacy{display:flex;align-items:center;gap:8px;font:10px var(--mono);letter-spacing:.1em}.privacy i{width:6px;height:6px;border-radius:50%;background:#c28e4c;display:block}
+.top-actions{display:flex;gap:8px;align-items:center}
+.icon-button{border:1px solid #cdd5d9;background:transparent;color:inherit;border-radius:5px;padding:7px 10px;font-size:11px;cursor:pointer;transition:background .2s,border-color .2s}
+.icon-button:hover{background:#fff;border-color:#9eaeb5}
+.intro{padding:28px 0 20px;display:grid;grid-template-columns:minmax(250px,1fr) auto;align-items:end;gap:22px}
+.eyebrow{font:10px var(--mono);letter-spacing:.16em;text-transform:uppercase;opacity:.58}
+.intro h1{font-size:clamp(24px,3vw,38px);line-height:1.16;letter-spacing:-.045em;margin:8px 0 0;font-weight:720}
+.intro p{margin:8px 0 0;color:#6b7a82;font-size:13px;line-height:1.6}
+.switches{display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.selector{display:flex;padding:3px;border:1px solid #cbd3d7;border-radius:7px;background:#e2e7e9;gap:3px}
+.selector button{border:0;border-radius:4px;padding:8px 12px;background:transparent;color:#718087;font-size:11px;cursor:pointer;white-space:nowrap;transition:all .2s}
+.selector button[aria-pressed=true]{background:#fff;color:#21333b;box-shadow:0 1px 4px #17242b18}
+.route button{font-family:var(--mono);font-size:10px;letter-spacing:.05em}
+.direction-keys{display:flex;gap:5px;margin-bottom:24px}
+.direction-keys button{background:transparent;border:0;border-bottom:1px solid transparent;padding:9px 12px;color:#77848a;cursor:pointer;font-size:12px;transition:color .2s,border .2s}
+.direction-keys button[aria-pressed=true]{color:#20323a;border-color:#284550;font-weight:650}
+.direction-keys b{font:10px var(--mono);opacity:.65;margin-right:8px}
+.review-grid{display:grid;grid-template-columns:minmax(0,1fr) 306px;gap:18px;align-items:start}
+.artboard{--bg:#f7f8f6;--ink:#1d2c33;--muted:#718087;--line:#dbe2e3;--accent:#27788b;--accent2:#a77645;--surface:#f0f3f1;--soft:#e5edeb;background:var(--bg);color:var(--ink);border:1px solid #cfd7d9;border-radius:8px;overflow:hidden;min-width:0;box-shadow:0 12px 38px #263b4411;transition:background .3s,color .3s}
+.artboard[data-direction="B"]{--bg:#11191e;--ink:#e8eeed;--muted:#91a1a4;--line:#354146;--accent:#90ced1;--accent2:#efa66c;--surface:#172126;--soft:#202c30;border-color:#29363b}
+.artboard[data-direction="C"]{--bg:#111a18;--ink:#e0e9e2;--muted:#94a69c;--line:#33433b;--accent:#a7d7a7;--accent2:#69c6bc;--surface:#18231f;--soft:#213029;border-color:#2a3b33}
+.app-head{height:58px;padding:0 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px}
+.app-id{display:flex;align-items:center;gap:10px;font-weight:650;font-size:13px;letter-spacing:-.02em}.app-id em{font-style:normal;font:9px var(--mono);letter-spacing:.12em;color:var(--muted);border-left:1px solid var(--line);padding-left:10px}
+.device-state{display:flex;align-items:center;gap:9px;font:9px var(--mono);letter-spacing:.04em;color:var(--muted)}.device-state .dot{width:7px;height:7px;background:#c88c57;border-radius:50%;box-shadow:0 0 0 3px color-mix(in srgb,#c88c57 13%,transparent)}
+.review-badge{font:9px var(--mono);letter-spacing:.08em;color:var(--accent);padding:6px 8px;border:1px solid var(--line);border-radius:3px}
+.view{display:none}.view.active{display:block}
+.view-kicker{font:9px var(--mono);letter-spacing:.13em;color:var(--muted);text-transform:uppercase}
+.section-title{font-size:20px;font-weight:650;letter-spacing:-.035em;margin:6px 0 0}
+.small-copy{font-size:11px;line-height:1.65;color:var(--muted)}
+.sample-tag{display:inline-flex;align-items:center;gap:6px;font:9px var(--mono);letter-spacing:.025em;color:var(--muted)}
+.sample-tag:before{content:"";display:inline-block;width:5px;height:5px;background:var(--accent2);border-radius:50%}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.micro-label{font-size:10px;letter-spacing:.045em;color:var(--muted)}
+.mono-label{font:9px var(--mono);letter-spacing:.065em;color:var(--muted)}
+.wave-svg{width:100%;height:auto;display:block;overflow:visible}
+.gridline{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.axis-text{fill:var(--muted);font:10px var(--mono)}
+.signal{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.signal-soft{fill:none;stroke:var(--accent);stroke-width:1;opacity:.23;vector-effect:non-scaling-stroke}
+.signal-amber{fill:none;stroke:var(--accent2);stroke-width:1.7;vector-effect:non-scaling-stroke}
+.precision-overview{padding:27px 28px 28px}
+.precision-heading{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:22px}
+.precision-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(190px,.75fr);gap:28px;align-items:start}
+.instrument-plate{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:15px 0 12px}
+.plate-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.channel-list{display:grid;gap:0}
+.channel-row{display:grid;grid-template-columns:38px 1fr 80px;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line);min-height:48px}
+.channel-mark{font:10px var(--mono);color:var(--accent);display:flex;align-items:center;gap:7px}.channel-mark i{display:block;width:6px;height:6px;border-radius:50%;background:currentColor}
+.channel-track{height:24px;min-width:0}.channel-track svg{height:100%;width:100%}
+.channel-value{text-align:right;font:10px var(--mono);color:var(--muted)}
+.precision-inspector{padding-top:4px}
+.spec-list{margin:15px 0 0;border-top:1px solid var(--line)}
+.spec{padding:11px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;gap:12px}.spec strong{font:11px var(--mono);font-weight:500}.spec span{font-size:10px;color:var(--muted)}
+.plain-action{border:1px solid var(--line);background:transparent;color:var(--ink);padding:10px 13px;border-radius:3px;font-size:10px;letter-spacing:.025em;cursor:pointer;transition:background .2s,border-color .2s}
+.plain-action:hover{background:var(--soft);border-color:var(--accent)}
+.precision-measure{padding:24px 28px 28px}
+.measure-head{display:flex;justify-content:space-between;align-items:end;gap:20px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.precision-measure-grid{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:26px;margin-top:18px}
+.channel-controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:13px}
+.channel-toggle{font:9px var(--mono);border:1px solid var(--line);color:var(--muted);background:transparent;border-radius:3px;padding:6px 8px;cursor:pointer}
+.channel-toggle.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.precision-chart{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 0 6px}
+.measure-inspector{border-left:1px solid var(--line);padding-left:20px}
+.inspector-group{padding:0 0 14px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+.inspector-group h3{font:9px var(--mono);letter-spacing:.1em;color:var(--muted);font-weight:500;margin:0 0 10px}
+.inspect-line{display:flex;justify-content:space-between;gap:8px;font-size:10px;margin:8px 0;color:var(--muted)}
+.inspect-line strong{color:var(--ink);font:10px var(--mono);font-weight:500}
+.wave-summary{display:flex;gap:24px;flex-wrap:wrap;padding:14px 0 0}
+.readout{display:flex;align-items:baseline;gap:7px}.readout b{font:16px var(--mono);font-weight:450;letter-spacing:-.04em}.readout span{font-size:9px;color:var(--muted)}
+.cinema-overview{min-height:555px;padding:33px clamp(22px,4vw,56px) 26px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.cinema-title{position:relative;z-index:1;max-width:860px;font-size:clamp(48px,8.7vw,116px);line-height:.92;letter-spacing:-.09em;font-weight:720;margin:40px 0 12px}
+.cinema-title .light{display:block;color:var(--muted);font-weight:380;margin-left:clamp(22px,8vw,120px)}
+.cinema-meta{display:flex;justify-content:space-between;gap:18px;align-items:end;margin-top:auto;position:relative;z-index:2}
+.cinema-meta p{max-width:330px;font-size:12px;line-height:1.75;color:var(--muted);margin:0}
+.hero-rail{position:absolute;left:7%;right:5%;top:48%;height:110px;opacity:.8}
+.hero-rail .rail-line{stroke:var(--line);stroke-width:1}
+.hero-rail .rail-signal{stroke:var(--accent);stroke-width:2;fill:none;stroke-linecap:round}
+.hero-rail .defect{stroke:var(--accent2);stroke-width:2}
+.start-button{border:1px solid var(--accent);background:var(--accent);color:#11191e;font:10px var(--mono);letter-spacing:.08em;padding:13px 17px;cursor:pointer;border-radius:2px;transition:transform .2s,filter .2s}
+.start-button:hover{transform:translateY(-2px);filter:brightness(1.1)}
+.cinema-measure{padding:24px clamp(20px,3.8vw,52px) 30px;min-height:560px;position:relative}
+.shot-header{display:flex;justify-content:space-between;align-items:center;gap:15px}
+.shot-note{margin-top:6px;font-size:11px;color:var(--muted)}
+.shot-scene{height:335px;position:relative;margin:22px 0 14px;overflow:hidden;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:linear-gradient(180deg,transparent, color-mix(in srgb,var(--accent) 2%,transparent))}
+.shot-world{height:100%;width:100%;transform-origin:50% 50%;transition:filter .4s}
+.shot-svg{width:100%;height:100%;display:block}
+.specimen-line{stroke:#647379;stroke-width:1.2;opacity:.52}
+.specimen-center{stroke:#74858a;stroke-dasharray:2 7;stroke-width:1;opacity:.43}
+.distance-tick{stroke:#647379;stroke-width:1;opacity:.55}
+.path-line{stroke:var(--line);stroke-width:1;stroke-dasharray:4 8;fill:none}
+.packet{fill:var(--accent);filter:drop-shadow(0 0 8px color-mix(in srgb,var(--accent) 48%,transparent))}
+.packet-core{fill:#eff8f5}
+.reflection{fill:var(--accent2);filter:drop-shadow(0 0 8px color-mix(in srgb,var(--accent2) 38%,transparent))}
+.defect-node{fill:var(--bg);stroke:var(--accent2);stroke-width:2}
+.rx-node,.tx-node{fill:var(--bg);stroke:var(--accent);stroke-width:1.7}
+.scene-caption{font:10px var(--mono);letter-spacing:.05em;fill:var(--muted)}
+.shot-wave{opacity:0;transform:translateY(12px)}
+.shot-scene.is-settled .shot-wave{opacity:1;transform:translateY(0)}
+.shot-scene.is-settled .physical-scene{opacity:0}
+.physical-scene{}
+.shot-scene.is-running .shot-world{will-change:transform}
+.shot-caption{display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:10px;color:var(--muted)}
+.phase-label{color:var(--accent);font:10px var(--mono);letter-spacing:.08em}
+.shot-controls{display:flex;gap:8px;align-items:center}
+.cinema-foot{border-top:1px solid var(--line);padding-top:16px;display:flex;justify-content:space-between;align-items:center;gap:15px}
+.text-button{color:var(--muted);font-size:10px;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;background:none;border:0;cursor:pointer}
+.sample-limit{font-size:9px;color:var(--muted)}
+.living-overview{padding:25px 28px 28px}
+.living-head{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:19px}
+.living-body{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:25px}
+.signal-stack{border-top:1px solid var(--line)}
+.signal-lane{padding:12px 0 10px;border-bottom:1px solid var(--line)}
+.lane-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.lane-head strong{font:10px var(--mono);font-weight:500;color:var(--accent)}
+.lane-head span{font:9px var(--mono);color:var(--muted)}
+.lane-plot{height:80px}
+.lane-plot svg{width:100%;height:100%}
+.time-lock{stroke:var(--line);stroke-width:1;stroke-dasharray:3 6;opacity:.7}
+.tf-grid{fill:var(--accent);opacity:.1}
+.tf-hot{fill:var(--accent2);opacity:.48}
+.living-aside{padding-left:17px;border-left:1px solid var(--line)}
+.living-aside .spec-list{margin-top:13px}
+.living-measure{padding:25px 28px 28px}
+.living-measure-grid{display:grid;grid-template-columns:minmax(0,1fr) 205px;gap:26px;margin-top:19px}
+.living-main-signal{border-top:1px solid var(--line);padding-top:11px}
+.living-main-signal .lane-plot{height:202px}
+.subsignal{border-top:1px solid var(--line);padding:10px 0 2px;margin-top:12px}
+.subsignal .lane-plot{height:66px}
+.filter-switch{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted);cursor:pointer}
+.switch{width:27px;height:15px;border-radius:12px;background:var(--line);padding:2px;transition:background .2s}
+.switch:after{content:"";width:11px;height:11px;background:var(--bg);border-radius:50%;display:block;transition:transform .2s}
+.filter-switch[aria-checked=true] .switch{background:var(--accent)}.filter-switch[aria-checked=true] .switch:after{transform:translateX(12px)}
+.direction-notes{position:sticky;top:16px;background:#f6f8f7;border:1px solid #d4dcde;border-radius:7px;padding:18px 18px 16px;color:#25343a}
+.notes-top{display:flex;justify-content:space-between;align-items:center;padding-bottom:13px;border-bottom:1px solid #dde3e4}
+.notes-top h2{font-size:14px;letter-spacing:-.02em;margin:0;font-weight:680}.direction-code{font:10px var(--mono);color:#6c7c82}
+.note-block{padding:13px 0;border-bottom:1px solid #e0e5e5}
+.note-block:last-child{border-bottom:0;padding-bottom:0}
+.note-label{font:9px var(--mono);letter-spacing:.1em;color:#7e8b8f;text-transform:uppercase;margin-bottom:6px}
+.note-text{font-size:11px;line-height:1.65;color:#33454b}
+.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pros-cons ul{list-style:none;padding:0;margin:5px 0 0}.pros-cons li{font-size:10px;line-height:1.5;padding:3px 0;color:#536268}
+.pros-cons .yes{color:#367a69}.pros-cons .no{color:#9c6e4f}
+.score-list{display:grid;grid-template-columns:1fr auto;gap:5px 8px;font-size:9px;color:#617077}
+.score-list b{font:9px var(--mono);font-weight:500;color:#2a4e58}
+.score-title{display:flex;justify-content:space-between;margin-bottom:8px}
+.score-title strong{font:9px var(--mono);font-weight:500;color:#304b53}
+.snapshot{font:9px var(--mono);line-height:1.65;color:#718087}
+.app-footer{border-top:1px solid var(--line);padding:12px 22px;display:flex;justify-content:space-between;gap:14px;color:var(--muted);font-size:9px;line-height:1.55}
+.app-footer strong{font-weight:500;color:var(--ink)}
+.dir-pane{display:none}.dir-pane.active{display:block}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:1050px){.review-grid{grid-template-columns:minmax(0,1fr) 270px;gap:12px}.direction-notes{padding:15px}.precision-layout{grid-template-columns:minmax(0,1.5fr) minmax(170px,.8fr)}}
+@media(max-width:800px){.frame{padding:12px 12px 24px}.intro{grid-template-columns:1fr;align-items:start;padding-top:22px}.switches{justify-content:flex-start}.review-grid{grid-template-columns:1fr}.direction-notes{position:static}.artboard{min-height:0}.precision-layout,.precision-measure-grid,.living-body,.living-measure-grid{grid-template-columns:1fr}.precision-inspector,.living-aside{border-left:0;border-top:1px solid var(--line);padding:16px 0 0}.measure-inspector{border-left:0;border-top:1px solid var(--line);padding:16px 0 0}.shot-scene{height:290px}.cinema-overview{min-height:505px}.cinema-title{margin-top:38px}.living-aside .spec-list{max-width:420px}}
+@media(max-width:540px){.topline{height:43px}.privacy{font-size:8px}.top-actions .icon-button{font-size:10px;padding:6px 7px}.intro p{font-size:12px}.selector button{padding:7px 9px;font-size:10px}.direction-keys{margin-bottom:15px;gap:0}.direction-keys button{padding:8px 9px;font-size:10px}.direction-keys b{margin-right:5px}.app-head{padding:0 13px;height:51px}.app-id{font-size:11px}.app-id em{font-size:8px;padding-left:7px}.review-badge{font-size:8px}.precision-overview,.precision-measure,.living-overview,.living-measure{padding:19px 15px}.precision-heading,.measure-head,.living-head{align-items:start}.section-title{font-size:18px}.channel-row{grid-template-columns:32px 1fr 60px;gap:7px}.cinema-overview{padding:23px 17px;min-height:465px}.cinema-title{font-size:clamp(45px,13vw,72px);margin-top:35px}.hero-rail{top:48%;left:1%;right:0}.cinema-meta{align-items:start;flex-direction:column}.cinema-meta p{max-width:280px}.cinema-measure{padding:19px 15px 21px}.shot-scene{height:250px;margin:16px 0 12px}.shot-caption{align-items:flex-start;flex-direction:column}.cinema-foot{align-items:start;flex-direction:column}.living-body{gap:13px}.lane-plot{height:70px}.living-main-signal .lane-plot{height:160px}.app-footer{padding:11px 14px;flex-direction:column}.precision-measure-grid{gap:16px}.wave-summary{gap:14px}.readout b{font-size:14px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div class="frame">
+  <header class="topline">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>WaveGuard Studio</span><small>VISUAL DNA</small></div>
+    <div class="top-actions">
+      <span class="privacy"><i></i>本地视觉评审 · 不连接设备</span>
+      <button class="icon-button" id="reduceMotion" type="button" aria-pressed="false" title="减少动态效果">减少动态</button>
+    </div>
+  </header>
+  <section class="intro">
+    <div><div class="eyebrow">仪器视觉方向探索 · 第一轮</div><h1>让信号成为界面的主角。</h1><p>同一组真实功能语义，三种截然不同的 WaveGuard 视觉 DNA。</p></div>
+    <div class="switches">
+      <div class="selector route" role="group" aria-label="选择预览路由"><button type="button" data-route="overview" aria-pressed="true">/ 总览</button><button type="button" data-route="measure" aria-pressed="false">/measure 实时采集</button></div>
+    </div>
+  </section>
+  <nav class="direction-keys" aria-label="选择视觉方向">
+    <button type="button" data-pick="A" aria-pressed="true"><b>A</b>空间精密仪器</button>
+    <button type="button" data-pick="B" aria-pressed="false"><b>B</b>电影化科学工作站</button>
+    <button type="button" data-pick="C" aria-pressed="false"><b>C</b>信号生命实验室</button>
+  </nav>
+  <main class="review-grid">
+    <section class="artboard" id="artboard" data-direction="A" aria-label="WaveGuard 方向预览画板">
+      <div class="app-head">
+        <div class="app-id"><span>WaveGuard</span><em>PICOSCOPE 4824A</em></div>
+        <div class="device-state"><span class="dot"></span><span>静态设计稿</span><span class="review-badge">样例数据 · 非实测</span></div>
+      </div>
+
+      <div class="dir-pane active" data-pane="A">
+        <section class="view active" data-view="overview">
+          <div class="precision-overview">
+            <div class="precision-heading"><div><div class="view-kicker">INSTRUMENT / OVERVIEW</div><h2 class="section-title">导波检测工作站</h2><div class="small-copy">结构健康监测 · 8 通道超声导波 · 静态示意</div></div><span class="sample-tag">演示样例 · 不代表实机状态</span></div>
+            <div class="precision-layout">
+              <div class="instrument-plate">
+                <div class="plate-top"><span class="mono-label">通道总览 / 8 INPUTS</span><span class="mono-label">20 MS/s · ±5 V</span></div>
+                <div class="channel-list">
+                  <div class="channel-row"><div class="channel-mark"><i></i>A</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal" d="M0 15H158q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">−0.04 V</div></div>
+                  <div class="channel-row"><div class="channel-mark"><i></i>B</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal" d="M0 15H228q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">+0.02 V</div></div>
+                  <div class="channel-row"><div class="channel-mark"><i></i>C</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal" d="M0 15H301q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">+0.01 V</div></div>
+                  <div class="channel-row"><div class="channel-mark"><i></i>D</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal" d="M0 15H378q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">−0.02 V</div></div>
+                  <div class="channel-row"><div class="channel-mark"><i></i>E</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal" d="M0 15H194q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">+0.03 V</div></div>
+                  <div class="channel-row"><div class="channel-mark"><i></i>F</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal" d="M0 15H269q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">−0.01 V</div></div>
+                  <div class="channel-row"><div class="channel-mark"><i></i>G</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal" d="M0 15H341q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">+0.01 V</div></div>
+                  <div class="channel-row"><div class="channel-mark"><i></i>H</div><div class="channel-track"><svg viewBox="0 0 600 30" preserveAspectRatio="none"><path class="signal-soft" d="M0 15H600"/><path class="signal-amber" d="M0 15H420q8 0 11-5t9 10t8-17t9 21t10-12t10 3H600"/></svg></div><div class="channel-value">+0.10 V</div></div>
+                </div>
+              </div>
+              <aside class="precision-inspector">
+                <div class="mono-label">测量链路</div><div class="spec-list">
+                  <div class="spec"><span>采样率</span><strong>20 MS/s</strong></div><div class="spec"><span>记录时长</span><strong>10 ms</strong></div><div class="spec"><span>采样点 / 通道</span><strong>200 k</strong></div><div class="spec"><span>触发源</span><strong>H · 上升沿</strong></div><div class="spec"><span>波形激励</span><strong>Hann · 100 kHz</strong></div>
+                </div>
+                <p class="small-copy" style="margin:16px 0">将信号链与采集配置放在同一条阅读轴线上。空间留白负责秩序，色彩只标识通道角色。</p>
+                <button class="plain-action" type="button" data-route="measure">查看实时采集 →</button>
+              </aside>
+            </div>
+          </div>
+        </section>
+        <section class="view" data-view="measure">
+          <div class="precision-measure">
+            <header class="measure-head"><div><div class="view-kicker">/MEASURE · LIVE CAPTURE</div><h2 class="section-title">实时采集</h2><div class="small-copy">波形优先，采集参数作为随行检查器。</div></div><span class="sample-tag">静态样例 · 非设备数据</span></header>
+            <div class="precision-measure-grid">
+              <div>
+                <div class="channel-controls" aria-label="显示通道"><span class="mono-label">通道</span><button class="channel-toggle on" data-channel="A">A</button><button class="channel-toggle on" data-channel="B">B</button><button class="channel-toggle on" data-channel="C">C</button><button class="channel-toggle on" data-channel="D">D</button><button class="channel-toggle on" data-channel="E">E</button><button class="channel-toggle on" data-channel="F">F</button><button class="channel-toggle on" data-channel="G">G</button><button class="channel-toggle on" data-channel="H">H</button></div>
+                <div class="precision-chart">
+                  <svg class="wave-svg" viewBox="0 0 900 370" role="img" aria-label="八通道导波示例波形"><path class="gridline" d="M55 38H880M55 86H880M55 134H880M55 182H880M55 230H880M55 278H880M55 326H880"/><path class="gridline" d="M55 30V330M158 30V330M261 30V330M364 30V330M467 30V330M570 30V330M673 30V330M776 30V330M880 30V330"/><text class="axis-text" x="8" y="45">+1.0 V</text><text class="axis-text" x="13" y="186">0 V</text><text class="axis-text" x="7" y="329">−1.0 V</text><text class="axis-text" x="52" y="356">0</text><text class="axis-text" x="250" y="356">2.5</text><text class="axis-text" x="457" y="356">5.0</text><text class="axis-text" x="665" y="356">7.5</text><text class="axis-text" x="852" y="356">10 ms</text>
+                    <g class="plot-channel" data-plot="A" style="color:#2d8496"><path class="signal" d="M55 182H220q8 0 13-15t12 32t14-50t13 62t14-31t17 3H880"/></g>
+                    <g class="plot-channel" data-plot="B" style="color:#718bb2"><path class="signal" style="stroke:#718bb2" d="M55 182H280q8 0 13-12t12 26t14-41t13 51t14-23t17 2H880"/></g>
+                    <g class="plot-channel" data-plot="C" style="color:#719d82"><path class="signal" style="stroke:#719d82" d="M55 182H351q8 0 13-10t12 21t14-35t13 42t14-20t17 2H880"/></g>
+                    <g class="plot-channel" data-plot="D" style="color:#ad875e"><path class="signal" style="stroke:#ad875e" d="M55 182H437q8 0 13-9t12 19t14-31t13 39t14-17t17 2H880"/></g>
+                    <g class="plot-channel" data-plot="E" style="color:#977ca7"><path class="signal" style="stroke:#977ca7" d="M55 182H505q8 0 13-8t12 17t14-28t13 35t14-15t17 2H880"/></g>
+                    <g class="plot-channel" data-plot="F" style="color:#8c9a65"><path class="signal" style="stroke:#8c9a65" d="M55 182H588q8 0 13-8t12 16t14-26t13 32t14-14t17 2H880"/></g>
+                    <g class="plot-channel" data-plot="G" style="color:#9a7778"><path class="signal" style="stroke:#9a7778" d="M55 182H675q8 0 13-7t12 15t14-24t13 29t14-13t17 2H880"/></g>
+                    <g class="plot-channel" data-plot="H"><path class="signal-amber" d="M55 182H750q8 0 13-7t12 14t14-22t13 27t14-12t17 2H880"/></g>
+                  </svg>
+                </div>
+                <div class="wave-summary"><div class="readout"><b>10.000</b><span>ms · 窗口</span></div><div class="readout"><b>200 k</b><span>点 / 通道</span></div><div class="readout"><b>8</b><span>输入通道</span></div></div>
+              </div>
+              <aside class="measure-inspector">
+                <div class="inspector-group"><h3>采集配置 · 示例</h3><div class="inspect-line"><span>采样率</span><strong>20 MS/s</strong></div><div class="inspect-line"><span>输入量程</span><strong>±5 V</strong></div><div class="inspect-line"><span>采集点数</span><strong>200 k / ch</strong></div></div>
+                <div class="inspector-group"><h3>触发 / 激励</h3><div class="inspect-line"><span>触发</span><strong>H ↑ 0.1 V</strong></div><div class="inspect-line"><span>波形</span><strong>Hann burst</strong></div><div class="inspect-line"><span>频率</span><strong>100 kHz</strong></div><div class="inspect-line"><span>幅值</span><strong>2 Vpp</strong></div></div>
+                <p class="small-copy">真实界面中，采集始终由设备控制逻辑执行。本稿仅展示信息层级，不会触发采集。</p>
+                <button class="plain-action" type="button" data-notice>采集控制已停用</button>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="dir-pane" data-pane="B">
+        <section class="view" data-view="overview">
+          <div class="cinema-overview">
+            <div class="view-kicker">GUIDED WAVE · INSPECTION / 01</div>
+            <h2 class="cinema-title">让看不见的，<span class="light">成为可测量。</span></h2>
+            <svg class="hero-rail" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true"><path class="rail-line" d="M0 60H1000"/><path class="rail-signal" d="M0 60H370q8 0 13-11t14 23t15-38t16 46t17-21t19 1H1000"/><path class="defect" d="M705 25v70"/></svg>
+            <div class="cinema-meta"><div><div class="sample-tag">PicoScope 4824A · 演示配置</div><p>一束汉宁窗激励沿结构传播，在缺陷处产生可辨识的反射，再回到测量链中。</p></div><button class="start-button" type="button" data-route="measure">进入实时采集 →</button></div>
+          </div>
+        </section>
+        <section class="view" data-view="measure">
+          <div class="cinema-measure">
+            <div class="shot-header"><div><div class="view-kicker">/MEASURE · FOLLOW THE SIGNAL</div><div class="shot-note">连续镜头预演 · 固定示例信号 · 不连接硬件</div></div><span class="sample-tag">演示态</span></div>
+            <div class="shot-scene" id="shotScene" aria-label="导波传播到示波器波形的连续演示">
+              <div class="shot-world" id="shotWorld">
+                <svg class="shot-svg" viewBox="0 0 1000 340" role="img" aria-label="导波从发射端传播至缺陷并反射回接收端">
+                  <g class="physical-scene" id="physicalScene">
+                    <path class="specimen-line" d="M100 154H900M100 186H900"/>
+                    <path class="specimen-center" d="M100 170H900"/>
+                    <g class="distance-tick"><path d="M150 150v40M300 150v40M450 150v40M600 150v40M750 150v40M900 150v40"/></g>
+                    <path class="path-line" d="M180 170H850"/>
+                    <circle class="tx-node" cx="150" cy="170" r="10"/><circle class="rx-node" cx="150" cy="170" r="5"/>
+                    <circle class="rx-node" cx="850" cy="170" r="10"/>
+                    <path class="defect-node" d="M720 146l10 24-10 24-10-24z"/>
+                    <text class="scene-caption" x="132" y="224">TX / RX</text><text class="scene-caption" x="681" y="224">缺陷反射界面</text>
+                    <text class="scene-caption" x="146" y="270">0 mm</text><text class="scene-caption" x="805" y="270">传播距离 / mm</text>
+                    <g id="incidentPacket"><ellipse class="packet" cx="0" cy="170" rx="40" ry="10"/><ellipse class="packet-core" cx="0" cy="170" rx="11" ry="4"/></g>
+                    <g id="returnPacket"><ellipse class="reflection" cx="0" cy="170" rx="32" ry="8"/><ellipse class="packet-core" cx="0" cy="170" rx="9" ry="3"/></g>
+                    <path id="splitTrace" d="M720 170h0" stroke="var(--accent2)" stroke-width="2" fill="none" opacity="0"/>
+                  </g>
+                  <g class="shot-wave" id="shotWave">
+                    <path class="gridline" d="M80 75H930M80 130H930M80 185H930M80 240H930M80 295H930"/>
+                    <path class="gridline" d="M80 65V300M250 65V300M420 65V300M590 65V300M760 65V300M930 65V300"/>
+                    <path class="signal" d="M80 185H520q15 0 23-18t19 38t18-85t22 112t21-57t21 9q12 0 21-11t16 22t18-45t21 57t23-27t25 5H930"/>
+                    <path class="signal-amber" d="M80 185H750q15 0 23-11t19 23t18-49t22 62t21-30t21 5H930" opacity=".6"/>
+                    <text class="axis-text" x="75" y="326">0</text><text class="axis-text" x="408" y="326">5</text><text class="axis-text" x="744" y="326">10 μs</text>
+                    <text class="scene-caption" x="82" y="48">采集波形 · 视觉样例</text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+            <div class="shot-caption"><span class="phase-label" id="phaseLabel">信号路径待播放</span><span id="phaseDescription">播放仅演示采集的因果顺序；不会调用设备、生成实测结果或改变真实采集。</span><span class="mono" id="phaseClock">00.0 s</span></div>
+            <div class="cinema-foot"><div class="shot-controls"><button class="start-button" type="button" id="playShot">播放连续镜头</button><button class="text-button" type="button" id="skipShot">跳到波形</button><button class="text-button" type="button" id="replayShot">重播</button></div><span class="sample-limit">视觉评审样例 · 非仪器读数</span></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="dir-pane" data-pane="C">
+        <section class="view" data-view="overview">
+          <div class="living-overview">
+            <div class="living-head"><div><div class="view-kicker">SIGNAL FIELD / OVERVIEW</div><h2 class="section-title">信号生命实验室</h2><div class="small-copy">同一采集记录，在时间、频率与时频域中共享坐标。</div></div><span class="sample-tag">示例信号 · 非实测</span></div>
+            <div class="living-body">
+              <div class="signal-stack">
+                <div class="signal-lane"><div class="lane-head"><strong>TIME / 时域</strong><span>0 — 10 ms</span></div><div class="lane-plot"><svg viewBox="0 0 800 100" preserveAspectRatio="none"><path class="gridline" d="M0 50H800M0 20H800M0 80H800"/><path class="signal" d="M0 50H245q10 0 15-9t15 18t15-31t16 40t17-18t20 2H800"/></svg></div></div>
+                <div class="signal-lane"><div class="lane-head"><strong>FREQUENCY / 频域</strong><span>0 — 500 kHz</span></div><div class="lane-plot"><svg viewBox="0 0 800 100" preserveAspectRatio="none"><path class="gridline" d="M0 75H800M0 40H800"/><path class="signal-amber" d="M0 76H186q15 0 21-7t10-32t12-20t13 21t13 32t18 6H800"/></svg></div></div>
+                <div class="signal-lane"><div class="lane-head"><strong>TIME–FREQUENCY / 时频</strong><span>同步时间基准</span></div><div class="lane-plot"><svg viewBox="0 0 800 100" preserveAspectRatio="none"><path class="gridline" d="M0 50H800M0 20H800M0 80H800"/><path class="time-lock" d="M260 0V100"/><rect class="tf-grid" x="190" y="19" width="165" height="61"/><rect class="tf-hot" x="244" y="32" width="63" height="32"/><path class="signal" d="M0 89H220q8 0 13-8t12 16t14-24t13 30t14-15t17 1H800"/></svg></div></div>
+              </div>
+              <aside class="living-aside"><div class="mono-label">SHARED GEOMETRY</div><p class="small-copy">时间轴对齐，事件位置在三种表征中保持同一条垂直参考线。</p><div class="spec-list"><div class="spec"><span>采样率</span><strong>20 MS/s</strong></div><div class="spec"><span>激励频率</span><strong>100 kHz</strong></div><div class="spec"><span>窗口</span><strong>10 ms</strong></div><div class="spec"><span>设备数据</span><strong>未连接</strong></div></div><button class="plain-action" style="margin-top:15px" type="button" data-route="measure">进入采集视图 →</button></aside>
+            </div>
+          </div>
+        </section>
+        <section class="view" data-view="measure">
+          <div class="living-measure">
+            <header class="measure-head"><div><div class="view-kicker">/MEASURE · SHARED SIGNAL FIELD</div><h2 class="section-title">实时采集</h2><div class="small-copy">波形是主画布；频谱与时频图沿用同一时间参照。</div></div><span class="sample-tag">固定样例 · 非设备数据</span></header>
+            <div class="living-measure-grid">
+              <div class="living-main-signal">
+                <div class="lane-head"><strong>TIME / 时域波形</strong><span>0 — 10 ms · 20 MS/s</span></div>
+                <div class="lane-plot"><svg viewBox="0 0 1000 240" preserveAspectRatio="none"><path class="gridline" d="M0 40H1000M0 80H1000M0 120H1000M0 160H1000M0 200H1000"/><path class="gridline" d="M0 0V220M200 0V220M400 0V220M600 0V220M800 0V220M1000 0V220"/><path class="time-lock" d="M288 0V220M676 0V220"/><path class="signal" d="M0 120H225q10 0 17-19t17 39t18-77t21 102t20-49t22 8q13 0 19-12t14 25t16-49t18 63t20-30t22 5H1000"/></svg></div>
+                <div class="wave-summary"><div class="readout"><b>10.000</b><span>ms · 时间窗</span></div><div class="readout"><b>200 k</b><span>采样点</span></div><div class="readout"><b>H ↑</b><span>触发通道</span></div></div>
+                <div class="subsignal"><div class="lane-head"><strong>FREQUENCY / 频谱</strong><span>0 — 500 kHz</span></div><div class="lane-plot"><svg viewBox="0 0 1000 100" preserveAspectRatio="none"><path class="gridline" d="M0 75H1000M0 40H1000"/><path class="signal-amber" d="M0 76H266q15 0 22-9t10-36t14-19t14 20t13 32t19 10H1000"/></svg></div></div>
+                <div class="subsignal"><div class="lane-head"><strong>TIME–FREQUENCY / 时频</strong><span>同一时间轴</span></div><div class="lane-plot"><svg viewBox="0 0 1000 100" preserveAspectRatio="none"><path class="gridline" d="M0 50H1000M0 20H1000M0 80H1000"/><rect class="tf-grid" x="228" y="18" width="180" height="62"/><rect class="tf-hot" x="277" y="31" width="70" height="35"/><rect class="tf-grid" x="625" y="18" width="135" height="62"/><rect class="tf-hot" x="661" y="35" width="55" height="27"/><path class="time-lock" d="M288 0V100M676 0V100"/></svg></div></div>
+              </div>
+              <aside class="measure-inspector">
+                <div class="inspector-group"><h3>显示上下文</h3><div class="inspect-line"><span>通道</span><strong>A — H</strong></div><div class="inspect-line"><span>窗口</span><strong>10 ms</strong></div><div class="inspect-line"><span>触发</span><strong>H ↑ 0.1 V</strong></div></div>
+                <div class="inspector-group"><h3>派生视图</h3><div class="inspect-line"><span>时域</span><strong>原始样例</strong></div><div class="inspect-line"><span>频谱</span><strong>示意形状</strong></div><div class="inspect-line"><span>时频</span><strong>示意能量</strong></div></div>
+                <div class="filter-switch" role="switch" aria-checked="false" tabindex="0" id="filterSwitch"><span class="switch"></span><span>显示滤波示意</span></div>
+                <p class="small-copy">滤波开关仅切换示意层；实际原始数据与前端显示滤波遵循现有采集逻辑。</p>
+                <button class="plain-action" type="button" data-notice style="margin-top:8px">设备控制已停用</button>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </div>
+      <footer class="app-footer"><span><strong>功能语义来自 Pico_4824A</strong> · 本稿是独立静态视觉评审，不请求 API、不执行设备控制。</span><span>真实采集链：ADC 武装 → AWG 激励 → 硬件触发定义 t₀ → 读取结果</span></footer>
+    </section>
+
+    <aside class="direction-notes" aria-live="polite">
+      <div class="notes-top"><h2 id="noteTitle">A · 空间精密仪器</h2><span class="direction-code" id="noteCode">WG / A</span></div>
+      <section class="note-block"><div class="note-label">核心视觉思想</div><div class="note-text" id="noteIdea"></div></section>
+      <section class="note-block"><div class="note-label">Signature Motion</div><div class="note-text" id="noteMotion"></div></section>
+      <section class="note-block pros-cons"><div><div class="note-label">优点</div><ul id="notePros" class="yes"></ul></div><div><div class="note-label">代价</div><ul id="noteCons" class="no"></ul></div></section>
+      <section class="note-block"><div class="score-title"><div class="note-label" style="margin:0">设计维度 / 10</div><strong id="scoreAverage">—</strong></div><div class="score-list" id="scoreList"></div></section>
+      <section class="note-block"><div class="note-label">Design Snapshot</div><div class="snapshot" id="snapshot"></div></section>
+    </aside>
+  </main>
+</div>
+<script>
+(() => {
+  "use strict";
+  const data = {
+    A: {
+      title: "A · 空间精密仪器", code: "WG / A",
+      idea: "像一台被认真设计过的实验室测量仪器：准确、清晰、克制。靠网格、标尺和留白建立信任；参数紧邻其作用对象，信号颜色承担有限且稳定的语义。",
+      motion: "通道选择时只做短促的线迹显现；触发线与波形读数有微弱的同步定位。采集按钮在真实实现中直接下发，不等待任何装饰动画。",
+      pros: ["信息密度高而清楚", "长期操作负担低", "最容易承载真实设备状态"],
+      cons: ["惊艳感更依赖实体波形", "品牌情绪相对安静"],
+      scores: [9,10,8,9,8,7,10,7,10,7]
+    },
+    B: {
+      title: "B · 电影化科学工作站", code: "WG / B",
+      idea: "中文标题建立品牌冲击，示意导波承担物理叙事，精密检查器仍留在熟悉的位置。场景只在用户主动观看时进入导演状态，静置仍是一张可信的工作站画面。",
+      motion: "约 6.3 秒的同一条连续镜头：武装 → Hann 波包形成 → 发射 → 跟拍传播 → 缺陷处分裂反射 → RX → 轴线与刻度 morph 成波形。它是视觉样例，不代表真实采集时序或结果。",
+      pros: ["独特记忆点强", "物理因果可视化直观", "最适合产品发布演示"],
+      cons: ["需要严格守住动效边界", "连续镜头需专门验证窄屏"],
+      scores: [10,8,10,9,10,10,8,10,7,10]
+    },
+    C: {
+      title: "C · 信号生命实验室", code: "WG / C",
+      idea: "让信号成为布局语法：时域、频谱、时频图使用同一横向时间坐标。事件不是散落的卡片，而是在多个域里可追溯的同一条数据。",
+      motion: "固定参考线穿过对齐的波形、频谱和时频视图；选中事件时三域同步标记。新数据到达只更新信号绘图区域，参数检查器保持稳定。",
+      pros: ["数据关系一眼可见", "时域与派生分析连贯", "信号处理产品辨识度高"],
+      cons: ["视觉复杂度高于 A", "颜色和对齐需严格维护"],
+      scores: [9,9,9,9,10,8,8,9,8,9]
+    }
+  };
+  const artboard = document.getElementById("artboard");
+  const panes = Array.from(document.querySelectorAll(".dir-pane"));
+  let direction = "A";
+  let route = "overview";
+  const motionPref = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let forceReduced = false;
+  let shotFrame = 0;
+  let shotStart = 0;
+  const shotDuration = 6300;
+  const scene = document.getElementById("shotScene");
+  const world = document.getElementById("shotWorld");
+  const incident = document.getElementById("incidentPacket");
+  const returning = document.getElementById("returnPacket");
+  const split = document.getElementById("splitTrace");
+  const physicalScene = document.getElementById("physicalScene");
+  const shotWave = document.getElementById("shotWave");
+  const phaseLabel = document.getElementById("phaseLabel");
+  const phaseDescription = document.getElementById("phaseDescription");
+  const phaseClock = document.getElementById("phaseClock");
+
+  function setRoute(next) {
+    route = next;
+    document.querySelectorAll("[data-route]").forEach(el => {
+      if (el.tagName === "BUTTON" && el.closest(".selector")) {
+        el.setAttribute("aria-pressed", String(el.dataset.route === route));
+      }
+    });
+    panes.forEach(pane => {
+      pane.querySelectorAll(".view").forEach(view => view.classList.toggle("active", view.dataset.view === route));
+    });
+    resetShot();
+  }
+  function setDirection(next) {
+    direction = next;
+    artboard.dataset.direction = next;
+    panes.forEach(pane => pane.classList.toggle("active", pane.dataset.pane === next));
+    document.querySelectorAll("[data-pick]").forEach(btn => btn.setAttribute("aria-pressed", String(btn.dataset.pick === next)));
+    const d = data[next];
+    document.getElementById("noteTitle").textContent = d.title;
+    document.getElementById("noteCode").textContent = d.code;
+    document.getElementById("noteIdea").textContent = d.idea;
+    document.getElementById("noteMotion").textContent = d.motion;
+    document.getElementById("notePros").innerHTML = d.pros.map(x => "<li>+ " + x + "</li>").join("");
+    document.getElementById("noteCons").innerHTML = d.cons.map(x => "<li>− " + x + "</li>").join("");
+    const labels = ["产品识别","科研可信","中文排版","视觉层级","信号表达","动效潜力","久用舒适","独特程度","实现可行","惊艳瞬间"];
+    document.getElementById("scoreList").innerHTML = labels.map((label,i) => "<span>" + label + "</span><b>" + d.scores[i] + ".0</b>").join("");
+    const avg = d.scores.reduce((a,b) => a+b,0) / d.scores.length;
+    document.getElementById("scoreAverage").textContent = avg.toFixed(1) + " / 10";
+    document.getElementById("snapshot").innerHTML = "方向 " + next + " · " + (route === "overview" ? "总览" : "实时采集") + "<br>审阅基线：PicoScope 4824A · 8 通道<br>采样示例：20 MS/s · 10 ms · 200 k 点/ch<br>触发：H 上升沿 · 0.1 V<br>激励：Hann · 100 kHz · 5 周期 · 2 Vpp<br>日期：2026-09-29 · 静态样例，非实测";
+    resetShot();
+  }
+  document.querySelectorAll("[data-route]").forEach(el => el.addEventListener("click", () => setRoute(el.dataset.route)));
+  document.querySelectorAll("[data-pick]").forEach(el => el.addEventListener("click", () => setDirection(el.dataset.pick)));
+  document.querySelectorAll("[data-notice]").forEach(el => el.addEventListener("click", () => {
+    el.textContent = "仅供视觉评审 · 未连接设备";
+    window.setTimeout(() => { el.textContent = el.dataset.noticeText || (el.closest(".cinema-measure") ? "设备控制已停用" : "采集控制已停用"); }, 1500);
+  }));
+  document.querySelectorAll(".channel-toggle").forEach(button => button.addEventListener("click", () => {
+    const on = button.classList.toggle("on");
+    const plot = document.querySelector('[data-plot="' + button.dataset.channel + '"]');
+    if (plot) plot.style.opacity = on ? "1" : ".08";
+  }));
+  const filter = document.getElementById("filterSwitch");
+  function toggleFilter() {
+    const active = filter.getAttribute("aria-checked") !== "true";
+    filter.setAttribute("aria-checked", String(active));
+    document.querySelectorAll(".living-main-signal .signal").forEach(path => {
+      path.style.filter = active ? "blur(.45px)" : "none";
+      path.style.opacity = active ? ".72" : "1";
+    });
+  }
+  filter.addEventListener("click", toggleFilter);
+  filter.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleFilter(); } });
+  document.getElementById("reduceMotion").addEventListener("click", e => {
+    forceReduced = !forceReduced;
+    e.currentTarget.setAttribute("aria-pressed", String(forceReduced));
+    document.body.classList.toggle("forced-reduced", forceReduced);
+    e.currentTarget.textContent = forceReduced ? "动态已减少" : "减少动态";
+    if (forceReduced) settleShot();
+  });
+  function reduced() { return forceReduced || motionPref.matches; }
+  function resetShot() {
+    cancelAnimationFrame(shotFrame);
+    if (!scene) return;
+    scene.classList.remove("is-running","is-settled");
+    world.style.transform = "";
+    physicalScene.style.opacity = "1";
+    shotWave.style.opacity = "0";
+    shotWave.style.transform = "translateY(12px)";
+    incident.style.opacity = "1";
+    returning.style.opacity = "0";
+    split.setAttribute("d","M720 170h0");
+    split.style.opacity = "0";
+    phaseLabel.textContent = "信号路径待播放";
+    phaseDescription.textContent = "播放仅演示采集的因果顺序；不会调用设备、生成实测结果或改变真实采集。";
+    phaseClock.textContent = "00.0 s";
+    document.getElementById("playShot").textContent = "播放连续镜头";
+  }
+  function settleShot() {
+    cancelAnimationFrame(shotFrame);
+    scene.classList.remove("is-running");
+    scene.classList.add("is-settled");
+    world.style.transform = "";
+    physicalScene.style.opacity = "0";
+    shotWave.style.opacity = "1";
+    shotWave.style.transform = "translateY(0px)";
+    phaseLabel.textContent = "完成 · 波形视图";
+    phaseDescription.textContent = "TX → 缺陷反射 → RX；图形仅为视觉样例，不是设备采集结果。";
+    phaseClock.textContent = "06.3 s";
+    document.getElementById("playShot").textContent = "重播连续镜头";
+  }
+  function cubic(a,b,t) { return a+(b-a)*t; }
+  function renderShot(now) {
+    const elapsed = Math.min(now - shotStart, shotDuration);
+    const p = elapsed / shotDuration;
+    const morph = Math.max(0,Math.min(1,(p-.80)/.20));
+    physicalScene.style.opacity = String(1-morph);
+    shotWave.style.opacity = String(morph);
+    shotWave.style.transform = "translateY(" + ((1-morph)*12).toFixed(1) + "px)";
+    const phases = [
+      [0,.12,"SYSTEM ARM","ADC 先进入武装状态。"],
+      [.08,.24,"HANN BURST","Hann 窗激励形成波包。"],
+      [.19,.35,"TX FIRE","TX 发射；镜头开始跟随信号。"],
+      [.28,.58,"导波传播","同一波包沿试件向前传播。"],
+      [.53,.68,"缺陷交互","局部慢动作：入射能量连续分裂。"],
+      [.62,.79,"反射返回","反射分量从入射波包处出生并返回。"],
+      [.75,.88,"RX 接收","返回信号抵达接收端。"],
+      [.83,.98,"连续形变","中心轴、刻度与传播轨迹 morph 为波形。"],
+      [.9,1,"COMPLETE","同一信号成为采集波形的视觉表达。"]
+    ];
+    let current = phases[0];
+    for (let i=0;i<phases.length;i++) if (p >= phases[i][0]) current = phases[i];
+    phaseLabel.textContent = current[2];
+    phaseDescription.textContent = current[3];
+    phaseClock.textContent = (elapsed/1000).toFixed(1).padStart(4,"0") + " s";
+    const box = scene.getBoundingClientRect();
+    const sx = box.width / 1000;
+    const cx = box.width * .5;
+    const worldShift = p < .60 ? -Math.max(0,Math.min(1,(p-.23)/.32))*box.width*.25 : -box.width*.25 + Math.max(0,Math.min(1,(p-.60)/.23))*box.width*.25;
+    const zoom = p > .50 && p < .76 ? 1 + .04*Math.sin(Math.PI*(p-.50)/.26) : 1;
+    world.style.transform = "translateX(" + worldShift.toFixed(1) + "px) scale(" + zoom.toFixed(3) + ")";
+    let x = 150;
+    if (p < .22) x = cubic(150,220,p/.22);
+    else if (p < .54) x = cubic(220,720,(p-.22)/.32);
+    else x = 720;
+    const slowBeat = p > .52 && p < .60 ? 1 - Math.sin(Math.PI*(p-.52)/.08)*.10 : 1;
+    incident.setAttribute("transform","translate(" + x.toFixed(1) + " 0) scale(" + slowBeat.toFixed(3) + " 1)");
+    const returningProgress = Math.max(0,Math.min(1,(p-.58)/.20));
+    const rx = cubic(720,150,returningProgress);
+    returning.setAttribute("transform","translate(" + rx.toFixed(1) + " 0)");
+    returning.style.opacity = returningProgress > 0 && p < .84 ? String(Math.min(1,(p-.58)/.04)) : "0";
+    if (p > .54 && p < .63) {
+      const spread = Math.min(1,(p-.54)/.09);
+      split.setAttribute("d","M720 170 Q" + (720+35*spread).toFixed(1) + " 130 " + (720+45*spread).toFixed(1) + " 112 M720 170 Q" + (720+35*spread).toFixed(1) + " 210 " + (720+45*spread).toFixed(1) + " 228");
+      split.style.opacity = String(1-spread*.2);
+    } else { split.style.opacity = "0"; }
+    if (p < 1 && !reduced()) shotFrame = requestAnimationFrame(renderShot);
+    else settleShot();
+  }
+  function playShot() {
+    if (reduced()) { settleShot(); return; }
+    resetShot();
+    scene.classList.add("is-running");
+    shotStart = performance.now();
+    shotFrame = requestAnimationFrame(renderShot);
+    document.getElementById("playShot").textContent = "播放中…";
+  }
+  document.getElementById("playShot").addEventListener("click", playShot);
+  document.getElementById("replayShot").addEventListener("click", playShot);
+  document.getElementById("skipShot").addEventListener("click", settleShot);
+  motionPref.addEventListener && motionPref.addEventListener("change", () => { if (reduced() && scene.classList.contains("is-running")) settleShot(); });
+  setDirection("A");
+  setRoute("overview");
+})();
+</script>
+</body>
+</html>

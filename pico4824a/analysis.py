@@ -492,6 +492,8 @@ def export_filtered(
     raw: dict[str, Any],
     output_format: str,
 ) -> Path:
+    if output_format not in {"npz", "csv"}:
+        raise ValueError("导出格式必须是 npz 或 csv")
     source = Path(path).expanduser().resolve()
     time_s, channels, metadata = load_dataset(source)
     sample_rate_hz = float(metadata["sample_rate_hz"])
@@ -502,10 +504,11 @@ def export_filtered(
         name: fft_bandpass(values, sample_rate_hz, low_hz, high_hz, transition_hz)
         for name, values in channels.items()
     }
-    output_directory = source.parent / "processed"
-    output_directory.mkdir(parents=True, exist_ok=True)
+    from .storage_naming import readable_source
+    from .data_sessions import analysis_session
+    output_directory = analysis_session(source, {"low_hz": low_hz, "high_hz": high_hz, "transition_hz": transition_hz})
     band_label = f"{low_hz / 1000:g}-{high_hz / 1000:g}kHz"
-    target = output_directory / f"{source.stem}_bandpass_{band_label}.{output_format}"
+    target = output_directory / f"{readable_source(source.stem)}__带通{band_label}__过渡{transition_hz/1000:g}kHz.{output_format}"
     processing = {
         "source": str(source),
         "method": "zero_phase_fft_bandpass",
