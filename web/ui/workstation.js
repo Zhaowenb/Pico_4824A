@@ -59,18 +59,85 @@
     motionRuns.set(node, run);activeMotions.add(run);
     run.onfinish=run.oncancel=()=>activeMotions.delete(run);
   }
+  // Critically damped response: the same sampled progress drives position,
+  // dimensions, radius and workspace reservation. No content scaling.
+  const fluidSteps = Array.from({length:41},(_,i)=>{
+    const t=i/40, response=x=>1-(1+9*x)*Math.exp(-9*x);
+    return {offset:t,p:response(t)/response(1)};
+  });
+  const sampledEasing='linear('+fluidSteps.map(({offset,p})=>p.toFixed(6)+' '+(offset*100)+'%').join(',')+')';
+  const fluidEasing=CSS.supports('animation-timing-function',sampledEasing)?sampledEasing:'cubic-bezier(.2,.75,.25,1)';
+  const lerp=(a,b,p)=>a+(b-a)*p;
   function panelController({panel,trigger,host,onChange=()=>{},exclusive=true}) {
-    const controller={panel,trigger,isOpen:()=>!panel.hidden,set(open,{focus=false}={}){
-      const changed=panel.hidden===Boolean(open);
+    let desiredOpen=!panel.hidden, motion=null;
+    function clearMotion(interrupted=false) {
+      if(!motion)return;
+      const previous=motion;motion=null;previous.interrupted=interrupted;
+      previous.runs.forEach(run=>{activeMotions.delete(run);run.cancel();});
+      previous.shell.remove();panel.style.visibility=previous.visibility;
+    }
+    const controller={panel,trigger,isOpen:()=>desiredOpen,finishMotion(){
+      if(!motion)return;
+      const focus=motion.focus;
+      clearMotion();
+      trigger?.classList.toggle('wg-morph-origin-muted',desiredOpen);
+      if(focus)(desiredOpen?panel.querySelector('button,input,select,textarea'):trigger)?.focus({preventScroll:true});
+      requestPaint();
+    },set(open,{focus=false}={}){
+      open=Boolean(open);
+      if(open===desiredOpen)return;
       if(open&&exclusive)panels.forEach(p=>{if(p!==controller)p.set(false);});
-      panel.hidden=!open;trigger?.setAttribute('aria-expanded',String(open));
-      host?.classList.toggle('wg-inspector-open',Boolean(open));
-      if(changed){onChange(Boolean(open));if(open)transition(panel,"panel");requestPaint();}
-      if(focus){if(open)panel.querySelector('button,input,select,textarea')?.focus();else trigger?.focus();}
+      const current=motion?.shell.getBoundingClientRect();
+      const currentOpacity=motion?Number(getComputedStyle(motion.inner).opacity):null;
+      const from=current||(open?trigger?.getBoundingClientRect():panel.getBoundingClientRect());
+      const oldStyle=motion?getComputedStyle(motion.shell):getComputedStyle(open?(trigger||panel):panel);
+      const sourceRadius=Math.min(parseFloat(oldStyle.borderTopLeftRadius)||0,from.width/2,from.height/2);
+      const sourceBackground=oldStyle.backgroundColor, sourceBorder=oldStyle.borderColor;
+      const panelDimensions=panel.getBoundingClientRect();
+      const reserves=host?[...host.children].filter(n=>n.matches('.wg-stage-main,.wg-actions')).map(node=>({node,from:parseFloat(getComputedStyle(node).marginRight)||0})):[];
+      clearMotion(true);
+      desiredOpen=open;panel.hidden=!open;
+      trigger?.setAttribute('aria-expanded',String(open));
+      host?.classList.toggle('wg-inspector-open',open);
+      onChange(open);requestPaint();
+      const to=open?panel.getBoundingClientRect():trigger?.getBoundingClientRect();
+      const wantsFocus=focus||document.activeElement===trigger||panel.contains(document.activeElement);
+      const targetStyle=getComputedStyle(open?panel:(trigger||panel));
+      const targetRadius=Math.min(parseFloat(targetStyle.borderTopLeftRadius)||0,to.width/2,to.height/2);
+      if(!trigger||!from?.width||!from.height||!to?.width||!to.height||motionPreference.matches||!panel.animate){
+        trigger?.classList.toggle('wg-morph-origin-muted',open);
+        if(wantsFocus)(open?panel.querySelector('button,input,select,textarea'):trigger)?.focus({preventScroll:true});
+        return;
+      }
+      const panelBox=open?to:panelDimensions;
+      const shell=el('div','wg-fluid-shell'),inner=panel.cloneNode(true);
+      shell.setAttribute('aria-hidden','true');inner.inert=true;
+      shell.addEventListener('pointerdown',event=>event.stopPropagation());
+      inner.removeAttribute('id');inner.removeAttribute('hidden');
+      const sourceFields=panel.querySelectorAll('input,select,textarea');
+      inner.querySelectorAll('input,select,textarea').forEach((field,i)=>{field.value=sourceFields[i].value;if(field.type==='checkbox'||field.type==='radio')field.checked=sourceFields[i].checked;});
+      inner.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+      inner.querySelectorAll('canvas').forEach((canvas,i)=>{try{canvas.getContext('2d').drawImage(panel.querySelectorAll('canvas')[i],0,0);}catch{}});
+      inner.classList.add('wg-fluid-content');
+      Object.assign(inner.style,{width:panelBox.width+'px',height:panelBox.height+'px',visibility:'visible'});
+      shell.append(inner);document.body.append(shell);
+      const visibility=panel.style.visibility;
+      panel.style.visibility='hidden';trigger.classList.add('wg-morph-origin-muted');
+      const duration=open?560:440, runs=[];
+      const run=(node,frames,easing='linear')=>{const animation=node.animate(frames,{duration,easing,fill:'both'});runs.push(animation);activeMotions.add(animation);return animation;};
+      const background=sourceBackground==='rgba(0, 0, 0, 0)'?getComputedStyle(host||document.body).backgroundColor:sourceBackground;
+      const geometry=run(shell,fluidSteps.map(({offset,p})=>({offset,left:lerp(from.left,to.left,p)+'px',top:lerp(from.top,to.top,p)+'px',width:lerp(from.width,to.width,p)+'px',height:lerp(from.height,to.height,p)+'px',borderRadius:lerp(sourceRadius,targetRadius,p)+'px'})));
+      run(shell,[{backgroundColor:background,borderColor:sourceBorder},{backgroundColor:targetStyle.backgroundColor==='rgba(0, 0, 0, 0)'?getComputedStyle(host||document.body).backgroundColor:targetStyle.backgroundColor,borderColor:targetStyle.borderColor}],fluidEasing);
+      run(inner,fluidSteps.map(({offset,p})=>({offset,opacity:open?lerp(currentOpacity??0,1,Math.max(0,(p-.45)/.55)):lerp(currentOpacity??1,0,Math.min(1,p*2.4)),transform:'translateY('+((open?1-p:p)*6)+'px)'})));
+      reserves.forEach(({node,from:start})=>{const end=parseFloat(getComputedStyle(node).marginRight)||0;if(start!==end)run(node,fluidSteps.map(({offset,p})=>({offset,marginRight:lerp(start,end,p)+'px'})));});
+      motion={shell,inner,runs,visibility,focus:wantsFocus,interrupted:false};
+      geometry.onfinish=()=>controller.finishMotion();
+      geometry.oncancel=()=>{if(motion?.shell===shell&&!motion.interrupted)controller.finishMotion();};
     }};
     panels.add(controller);
     return controller;
   }
+  window.addEventListener('resize',()=>panels.forEach(p=>p.finishMotion?.()));
   function inspector({host,trigger,panel,title='任务参数',onChange}) {
     panel.classList.add('wg-inspector');panel.setAttribute('role','region');panel.setAttribute('aria-label',title);
     const heading=el('div','wg-inspector-heading'),label=el('strong','',title),close=el('button','wg-icon-button','×');
@@ -129,7 +196,7 @@
   }
   function activate(route) {
     const routeChanged=state.route!==route;
-    if(routeChanged){state.route=route;panels.forEach(p=>p.set(false));if(state.focus)setFocus(false);}
+    if(routeChanged){state.route=route;panels.forEach(p=>{p.set(false);p.finishMotion?.();});if(state.focus)setFocus(false);}
     stages.forEach((view,key)=>view.stage.hidden=key!==route);
     document.querySelectorAll('[data-pages]:not(.wg-stage)').forEach(node=>node.dataset.wgRouteHidden=String(!node.dataset.pages.split(/\s+/).includes(route)));
     document.querySelectorAll('.wg-nav a').forEach(link=>{const active=link.dataset.nav===route;link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});

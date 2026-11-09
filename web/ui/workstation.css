@@ -124,3 +124,32 @@ button,a,input,select {transition:background-color 160ms,border-color 160ms,colo
 .wg-inspector #awgPreviewCanvas {width:100%;height:150px;min-height:150px;display:block;}
 .analysis-input-filter {display:flex;align-items:center;gap:8px;font-size:12px;}
 .analysis-input-filter input {width:auto;accent-color:var(--wg-signal);}
+
+/* One shared capsule-to-inspector shape. Content is revealed, never stretched. */
+.wg-parameter-button {border-radius:999px;padding-inline:16px;}
+.wg-stage-bar .wg-parameter-button {border-radius:999px;}
+.wg-inspector {top:60px;right:8px;bottom:8px;width:min(var(--wg-inspector-width),calc(100% - 16px));border:1px solid var(--wg-line);border-radius:22px;box-shadow:0 12px 36px rgb(0 0 0 / .12);}
+.wg-appearance {border-radius:22px;}
+.wg-morph-origin-muted {opacity:0!important;pointer-events:none;}
+.wg-fluid-shell {position:fixed;z-index:1000;overflow:hidden;pointer-events:auto;border:1px solid var(--wg-line);box-shadow:0 12px 36px rgb(0 0 0 / .12);box-sizing:border-box;contain:layout paint;}
+.wg-fluid-shell>.wg-fluid-content {position:absolute!important;inset:0 auto auto 0!important;max-height:none!important;margin:0!important;display:block;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;box-sizing:border-box;}
+@media(prefers-reduced-motion:reduce){.wg-fluid-shell {display:none;}}
+
+/* Motion hierarchy: one instrument stage, precise cursor, quiet data. */
+.wg-ticker {display:inline-block;position:relative;font-variant-numeric:tabular-nums;font-family:Consolas,"Microsoft YaHei UI",monospace;white-space:pre;line-height:1.2;}
+.wg-ticker-roll {position:absolute;inset:0;display:flex;pointer-events:none;}
+.wg-ticker-slot {display:inline-block;position:relative;width:1ch;height:1.2em;overflow:hidden;}
+.wg-ticker-rail {display:flex;flex-direction:column;height:2.4em;}
+.wg-ticker-rail>span {display:block;flex:none;height:1.2em;line-height:1.2;white-space:pre;}
+button[data-wg-pressed=true] {box-shadow:inset 0 2px 5px rgb(0 0 0 / .23),inset 0 -1px 0 rgb(255 255 255 / .05)!important;}
+button:active:not(:disabled) {transform:none;}
+.scope-cursor-strip {display:flex;align-items:center;gap:18px;flex-wrap:wrap;min-height:34px;padding:7px 0 9px;border-top:1px solid var(--wg-stage-line);font-size:11px;color:var(--wg-data-muted);}
+.scope-cursor-strip[hidden] {display:none;}.scope-cursor-strip>span {display:inline-flex;align-items:baseline;gap:6px;}.scope-cursor-strip strong {font-size:12px;font-weight:500;color:var(--wg-stage-text);}.scope-cursor-strip small {font:10px Consolas,monospace;}
+#scopeCanvas {touch-action:pan-y;cursor:crosshair;}#scopeCanvas.dragging {cursor:grabbing;}#scopeCanvas:focus-visible {outline:1px solid var(--wg-signal-hi);outline-offset:-1px;}
+@property --wg-orbit {syntax:'<angle>';initial-value:0deg;inherits:false;}
+.wg-stage[data-wg-stage=measure]::before {border:0;padding:1px;opacity:.45;background:conic-gradient(from var(--wg-orbit),transparent 0deg 230deg,color-mix(in srgb,var(--wg-signal) 26%,transparent) 270deg,var(--wg-signal-hi) 306deg,transparent 335deg);mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);mask-composite:exclude;animation:wg-orbit 22s linear infinite;}
+.wg-main:has(>.wg-stage[data-wg-stage=measure]:not([hidden])) {position:relative;isolation:isolate;}
+.wg-main:has(>.wg-stage[data-wg-stage=measure]:not([hidden]))::after {content:'';position:absolute;left:8%;right:8%;bottom:25px;height:55px;background:radial-gradient(ellipse at center,color-mix(in srgb,var(--wg-signal) 65%,transparent),transparent 72%);filter:blur(22px);opacity:.13;pointer-events:none;z-index:-1;animation:wg-stage-aura 7.8s ease-in-out -1.6s infinite;}
+@keyframes wg-orbit {to {--wg-orbit:360deg;}}
+@keyframes wg-stage-aura {0%,100% {opacity:.08;filter:blur(22px);transform:scaleX(.94) translateY(1px);}50% {opacity:.18;filter:blur(28px);transform:scaleX(1.025) translateY(4px);}}
+@media(prefers-reduced-motion:reduce){.wg-stage[data-wg-stage=measure]::before {animation:none;opacity:.15;}.wg-main:has(>.wg-stage[data-wg-stage=measure]:not([hidden]))::after {animation:none;opacity:.06;}}

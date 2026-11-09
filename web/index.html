@@ -693,7 +693,7 @@
             <div>
               <p class="eyebrow">SYNCHRONOUS ACQUISITION</p>
               <h2>八通道波形</h2>
-              <small class="scope-interaction-help">滚轮：时间缩放　拖动：时间平移　Shift＋滚轮：幅值缩放　双击：恢复全时段</small>
+              <small class="scope-interaction-help">滚轮：时间缩放　横向拖动：平移　游标：吸附数据点　Shift＋滚轮：幅值缩放　双击：恢复全时段</small>
             </div>
             <div class="scope-actions">
               <button id="saveNpz" disabled>保存 NPZ</button>
@@ -701,8 +701,14 @@
             </div>
           </div>
           <div class="legend" id="legend"></div>
+          <div id="scopeCursorReadout" class="scope-cursor-strip">
+            <span>吸附游标 <b id="scopeCursorChannel">—</b></span>
+            <span>时间 <strong id="scopeCursorTime">—</strong><small>μs</small></span>
+            <span>幅值 <strong id="scopeCursorVoltage">—</strong><small>V</small></span>
+            <span>数据点 <strong id="scopeCursorIndex">—</strong></span>
+          </div>
           <div class="canvas-wrap">
-            <canvas id="scopeCanvas"></canvas>
+            <canvas id="scopeCanvas" tabindex="0" aria-label="采集波形：拖动平移，滚轮缩放，游标吸附显示数据点，方向键逐点移动"></canvas>
             <div id="emptyState" class="empty-state">
               <div class="pulse-ring"><i></i></div>
               <strong>等待首次采集</strong>
@@ -895,7 +901,7 @@
             <canvas id="analysisWaveCanvas"></canvas>
             <div id="analysisWaveEmpty" class="run-empty">输入文件或文件夹路径后开始分析</div>
           </div>
-          <div class="analysis-help">滚轮：时间缩放　拖动：时间平移　Shift＋滚轮：幅值缩放　双击：恢复全时段</div>
+          <div class="analysis-help">滚轮：时间缩放　横向拖动：平移　游标：吸附数据点　Shift＋滚轮：幅值缩放　双击：恢复全时段</div>
         </section>
 
         <section id="archiveIdleStage" class="scope-panel workspace-idle-stage page-only" data-pages="sweep-analysis" aria-live="polite">
@@ -1034,6 +1040,7 @@
       </section>
     </div>
     <script src="/ui/workstation.js?v=shared-ui-v2"></script>
+    <script src="/ui/micro-motion.js"></script>
     <script src="/ui/storage-naming.js"></script>
     <script src="/ui/software-update.js"></script>
     <script src="/ui/analysis-state.js"></script>

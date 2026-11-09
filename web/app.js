@@ -37,6 +37,7 @@ let measureFilterRequest = 0;
 let scopeTimeStart = null;
 let scopeTimeEnd = null;
 let scopeAmplitudeScale = 1;
+let scopeCursorIndex = null, scopeCursorChannel = null;
 let activeTripAlarmId = null;
 let tripAlarmMuted = false;
 let tripAlarmAudioContext = null;
@@ -1404,9 +1405,9 @@ function resetScopeView(redraw = true) {
 
 function updateResult(result, resetView = true) {
   const s = result.summary;
-  $("sampleMetric").textContent = s.samples.toLocaleString("zh-CN");
-  $("rateMetric").textContent = (s.actual_sample_rate_hz / 1e6).toPrecision(5).replace(/0+$/, "").replace(/\.$/, "");
-  $("intervalMetric").textContent = (s.sample_interval_s * 1e9).toPrecision(5).replace(/0+$/, "").replace(/\.$/, "");
+  WaveGuardMotion.ticker($("sampleMetric"),s.samples.toLocaleString("zh-CN"));
+  WaveGuardMotion.ticker($("rateMetric"),(s.actual_sample_rate_hz / 1e6).toPrecision(5).replace(/0+$/, "").replace(/\.$/, ""));
+  WaveGuardMotion.ticker($("intervalMetric"),(s.sample_interval_s * 1e9).toPrecision(5).replace(/0+$/, "").replace(/\.$/, ""));
   $("overflowMetric").textContent = s.overflow_channels.length ? s.overflow_channels.join(", ") : "正常";
   $("overflowMetric").style.color = s.overflow_channels.length ? "#d94b4b" : "#75b593";
   $("modeText").textContent = s.simulated ? "仿真数据 · 未访问硬件" : "PicoSDK 实机采集";
@@ -1661,6 +1662,31 @@ function drawSweepResult() {
   }
 }
 
+function snapScopeCursor(clientX,clientY) {
+  if(!latestResult?.time_s?.length)return;
+  const rect=$('scopeCanvas').getBoundingClientRect(),times=latestResult.time_s;
+  if(!rect.width||!rect.height)return;
+  const ratio=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
+  const time=(scopeTimeStart??times[0])+ratio*((scopeTimeEnd??times.at(-1))-(scopeTimeStart??times[0]));
+  let low=0,high=times.length-1;
+  while(low<high){const mid=(low+high)>>1;if(times[mid]<time)low=mid+1;else high=mid;}
+  scopeCursorIndex=low>0&&time-times[low-1]<times[low]-time?low-1:low;
+  const names=Object.keys(latestResult.channels).filter(c=>!hiddenScopeChannels.has(c));
+  scopeCursorChannel=names[Math.max(0,Math.min(names.length-1,Math.floor((clientY-rect.top)/rect.height*names.length)))];
+}
+function updateScopeCursorReadout(){
+  if(scopeCursorIndex===null||!latestResult)return;
+  const times=latestResult.time_s,index=Math.min(scopeCursorIndex,times.length-1),names=Object.keys(latestResult.channels).filter(c=>!hiddenScopeChannels.has(c));
+  if(!names.includes(scopeCursorChannel))scopeCursorChannel=names[0];
+  if(!scopeCursorChannel)return;
+  $('scopeCursorReadout').hidden=false;
+  $('scopeCursorChannel').textContent='CH '+scopeCursorChannel;
+  $('scopeCursorChannel').style.color=channelDisplayColor(scopeCursorChannel);
+  WaveGuardMotion.ticker($('scopeCursorTime'),(times[index]*1e6).toFixed(3));
+  WaveGuardMotion.ticker($('scopeCursorVoltage'),latestResult.channels[scopeCursorChannel][index].toFixed(6));
+  WaveGuardMotion.ticker($('scopeCursorIndex'),String(Math.round((times[index]-times[0])/latestResult.summary.sample_interval_s)));
+}
+
 function drawScope() {
   if (!latestResult) return;
   const canvas = $("scopeCanvas");
@@ -1673,6 +1699,7 @@ function drawScope() {
   const width = rect.width, height = rect.height;
   const names = Object.keys(latestResult.channels).filter((name) => !hiddenScopeChannels.has(name));
   if (!names.length) return;
+  if(!names.includes(scopeCursorChannel))scopeCursorChannel=names[0];
   const lane = height / names.length;
   const times = latestResult.time_s;
   const fullMin = times[0], fullMax = times[times.length - 1];
@@ -1700,6 +1727,11 @@ function drawScope() {
     ctx.strokeStyle = workstationDataColor("high");
     ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.moveTo(triggerX, 0); ctx.lineTo(triggerX, height); ctx.stroke(); ctx.setLineDash([]);
   }
+  if(scopeCursorIndex!==null){
+    scopeCursorIndex=Math.min(scopeCursorIndex,times.length-1);
+    const x=(times[scopeCursorIndex]-tMin)/Math.max(tMax-tMin,1e-30)*width;
+    if(x>=0&&x<=width){ctx.strokeStyle=workstationDataColor('high');ctx.lineWidth=1;ctx.setLineDash([2,4]);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke();ctx.setLineDash([]);}
+  }
   names.forEach((name, channelIndex) => {
     const values = latestResult.channels[name];
     const colorIndex = Math.max(0, channelNames.indexOf(name));
@@ -1714,17 +1746,37 @@ function drawScope() {
       if (i === first) ctx.moveTo(x, y); else ctx.lineTo(x, y);
     }
     ctx.stroke();
+    if(scopeCursorIndex!==null){
+      const x=(times[scopeCursorIndex]-tMin)/Math.max(tMax-tMin,1e-30)*width,y=middle-values[scopeCursorIndex]/peak*lane*.38*scopeAmplitudeScale;
+      if(x>=0&&x<=width&&y>=channelIndex*lane&&y<=(channelIndex+1)*lane){
+        ctx.fillStyle=channelDisplayColor(name);ctx.beginPath();ctx.arc(x,y,name===scopeCursorChannel?4.5:2.6,0,Math.PI*2);ctx.fill();
+        if(name===scopeCursorChannel){ctx.strokeStyle=channelDisplayColor(name);ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.stroke();}
+      }
+    }
     ctx.fillStyle = channelDisplayColor(name); ctx.font = "11px Consolas"; ctx.fillText(`CH ${name}`, 8, channelIndex * lane + 14);
     ctx.fillStyle = "#607a84"; ctx.textAlign = "right"; ctx.fillText(`±${peak.toPrecision(3)} V · ×${scopeAmplitudeScale.toFixed(2)}`, width - 8, channelIndex * lane + 14); ctx.textAlign = "left";
   });
+  updateScopeCursorReadout();
 }
 
 function installScopeCanvasInteraction() {
   const canvas = $("scopeCanvas");
-  let drag = null;
+  let drag = null, paintFrame=0;
+  const paint=()=>{cancelAnimationFrame(paintFrame);paintFrame=requestAnimationFrame(drawScope);};
+  const pan=(delta)=>{
+    const fullMin=latestResult.time_s[0],fullMax=latestResult.time_s.at(-1);
+    let start=scopeTimeStart+delta,end=scopeTimeEnd+delta;
+    if(start<fullMin){end+=fullMin-start;start=fullMin;}
+    if(end>fullMax){start-=end-fullMax;end=fullMax;}
+    scopeTimeStart=start;scopeTimeEnd=end;
+  };
   canvas.addEventListener("wheel", (event) => {
     if (!latestResult?.time_s?.length) return;
     event.preventDefault();
+    if(!event.shiftKey && Math.abs(event.deltaX)>Math.abs(event.deltaY)){
+      pan(event.deltaX/Math.max(canvas.getBoundingClientRect().width,1)*(scopeTimeEnd-scopeTimeStart));
+      snapScopeCursor(event.clientX,event.clientY);paint();return;
+    }
     if (event.shiftKey) {
       const factor = event.deltaY < 0 ? 1.2 : 1 / 1.2;
       scopeAmplitudeScale = Math.max(0.05, Math.min(100, scopeAmplitudeScale * factor));
@@ -1746,31 +1798,35 @@ function installScopeCanvasInteraction() {
     if (nextEnd > fullMax) { nextStart -= nextEnd - fullMax; nextEnd = fullMax; }
     scopeTimeStart = nextStart;
     scopeTimeEnd = nextEnd;
-    drawScope();
+    snapScopeCursor(event.clientX,event.clientY);paint();
   }, { passive: false });
-  canvas.addEventListener("mousedown", (event) => {
-    if (!latestResult || event.button !== 0) return;
-    drag = { x: event.clientX, start: scopeTimeStart, end: scopeTimeEnd };
-    canvas.classList.add("dragging");
+  canvas.addEventListener('pointerdown',event=>{
+    if(!latestResult||event.button!==0)return;
+    event.preventDefault();canvas.focus({preventScroll:true});canvas.setPointerCapture(event.pointerId);
+    drag={x:event.clientX,start:scopeTimeStart,end:scopeTimeEnd};
+    canvas.classList.add('dragging');snapScopeCursor(event.clientX,event.clientY);paint();
   });
-  canvas.addEventListener("mousemove", (event) => {
-    if (!drag || !latestResult) return;
-    const rect = canvas.getBoundingClientRect();
-    const fullMin = latestResult.time_s[0], fullMax = latestResult.time_s.at(-1);
-    const span = drag.end - drag.start;
-    const delta = -(event.clientX - drag.x) / Math.max(rect.width, 1) * span;
-    let start = drag.start + delta, end = drag.end + delta;
-    if (start < fullMin) { end += fullMin - start; start = fullMin; }
-    if (end > fullMax) { start -= end - fullMax; end = fullMax; }
-    scopeTimeStart = start;
-    scopeTimeEnd = end;
-    drawScope();
+  canvas.addEventListener('pointermove',event=>{
+    if(!latestResult)return;
+    if(drag){
+      const span=drag.end-drag.start;
+      scopeTimeStart=drag.start;scopeTimeEnd=drag.end;
+      pan(-(event.clientX-drag.x)/Math.max(canvas.getBoundingClientRect().width,1)*span);
+    }
+    snapScopeCursor(event.clientX,event.clientY);paint();
   });
-  window.addEventListener("mouseup", () => {
-    drag = null;
-    canvas.classList.remove("dragging");
+  const release=()=>{drag=null;canvas.classList.remove('dragging');};
+  canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('lostpointercapture',release);
+  canvas.addEventListener('keydown',event=>{
+    if(!latestResult||!['ArrowLeft','ArrowRight'].includes(event.key))return;
+    event.preventDefault();const times=latestResult.time_s;
+    scopeCursorIndex=Math.max(0,Math.min(times.length-1,(scopeCursorIndex??0)+(event.key==='ArrowRight'?1:-1)));
+    const time=times[scopeCursorIndex];
+    if(time<scopeTimeStart)pan(time-scopeTimeStart);
+    if(time>scopeTimeEnd)pan(time-scopeTimeEnd);
+    paint();
   });
-  canvas.addEventListener("dblclick", () => resetScopeView());
+  canvas.addEventListener('dblclick',()=>resetScopeView());
 }
 
 function engineering(value, unit = "") {

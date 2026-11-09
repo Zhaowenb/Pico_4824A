@@ -379,6 +379,15 @@ class WebApiTests(unittest.TestCase):
         self.assertAlmostEqual(max(reply["volts"]), 1.0, places=3)
         self.assertAlmostEqual(reply["volts"][0], 0.0, places=12)
 
+    def test_shared_micro_motion_asset_and_entrypoints(self) -> None:
+        with urlopen(self.base + '/ui/micro-motion.js', timeout=3) as response:
+            self.assertEqual(response.status, 200)
+            script = response.read().decode('utf-8')
+            self.assertIn('WaveGuardMotion', script)
+        for route in ['/measure', '/magnetic-diagnosis', '/interference', '/interference/manual']:
+            with self.subTest(route=route), urlopen(self.base + route, timeout=3) as response:
+                self.assertIn('/ui/micro-motion.js', response.read().decode('utf-8'))
+
     def test_web_page_exposes_both_tail_control_modes(self) -> None:
         for route in (
             "/",
