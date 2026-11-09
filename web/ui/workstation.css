@@ -130,7 +130,6 @@ button,a,input,select {transition:background-color 160ms,border-color 160ms,colo
 .wg-stage-bar .wg-parameter-button {border-radius:999px;}
 .wg-inspector {top:60px;right:8px;bottom:8px;width:min(var(--wg-inspector-width),calc(100% - 16px));border:1px solid var(--wg-line);border-radius:22px;box-shadow:0 12px 36px rgb(0 0 0 / .12);}
 .wg-appearance {border-radius:22px;}
-.wg-morph-origin-muted {opacity:0!important;pointer-events:none;}
 .wg-fluid-shell {position:fixed;z-index:1000;overflow:hidden;pointer-events:auto;border:1px solid var(--wg-line);box-shadow:0 12px 36px rgb(0 0 0 / .12);box-sizing:border-box;contain:layout paint;}
 .wg-fluid-shell>.wg-fluid-content {position:absolute!important;inset:0 auto auto 0!important;max-height:none!important;margin:0!important;display:block;overflow:hidden!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;box-sizing:border-box;}
 @media(prefers-reduced-motion:reduce){.wg-fluid-shell {display:none;}}
@@ -153,3 +152,7 @@ button:active:not(:disabled) {transform:none;}
 @keyframes wg-orbit {to {--wg-orbit:360deg;}}
 @keyframes wg-stage-aura {0%,100% {opacity:.08;filter:blur(22px);transform:scaleX(.94) translateY(1px);}50% {opacity:.18;filter:blur(28px);transform:scaleX(1.025) translateY(4px);}}
 @media(prefers-reduced-motion:reduce){.wg-stage[data-wg-stage=measure]::before {animation:none;opacity:.15;}.wg-main:has(>.wg-stage[data-wg-stage=measure]:not([hidden]))::after {animation:none;opacity:.06;}}
+
+/* Persistent capsule anchor: opening never removes the user's close control. */
+.wg-stage-bar .wg-parameter-button[aria-expanded=true] {background:color-mix(in srgb,var(--wg-signal) 14%,var(--wg-stage-2));border-color:color-mix(in srgb,var(--wg-signal) 65%,var(--wg-stage-line));color:var(--wg-signal-hi);}
+.workstation-settings-button[aria-expanded=true] {border-color:var(--wg-signal);color:var(--wg-signal);}

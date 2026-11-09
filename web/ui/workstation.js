@@ -68,8 +68,12 @@
   const sampledEasing='linear('+fluidSteps.map(({offset,p})=>p.toFixed(6)+' '+(offset*100)+'%').join(',')+')';
   const fluidEasing=CSS.supports('animation-timing-function',sampledEasing)?sampledEasing:'cubic-bezier(.2,.75,.25,1)';
   const lerp=(a,b,p)=>a+(b-a)*p;
+  function solidBackground(node){
+    for(let n=node;n;n=n.parentElement){const color=getComputedStyle(n).backgroundColor;if(color!=='rgba(0, 0, 0, 0)'&&color!=='transparent')return color;}
+    return getComputedStyle(document.body).getPropertyValue('--wg-surface').trim()||'#fbfcfd';
+  }
   function panelController({panel,trigger,host,onChange=()=>{},exclusive=true}) {
-    let desiredOpen=!panel.hidden, motion=null;
+    let desiredOpen=!panel.hidden, motion=null, retainedScroll={top:0,left:0};
     function clearMotion(interrupted=false) {
       if(!motion)return;
       const previous=motion;motion=null;previous.interrupted=interrupted;
@@ -80,7 +84,6 @@
       if(!motion)return;
       const focus=motion.focus;
       clearMotion();
-      trigger?.classList.toggle('wg-morph-origin-muted',desiredOpen);
       if(focus)(desiredOpen?panel.querySelector('button,input,select,textarea'):trigger)?.focus({preventScroll:true});
       requestPaint();
     },set(open,{focus=false}={}){
@@ -89,24 +92,27 @@
       if(open&&exclusive)panels.forEach(p=>{if(p!==controller)p.set(false);});
       const current=motion?.shell.getBoundingClientRect();
       const currentOpacity=motion?Number(getComputedStyle(motion.inner).opacity):null;
-      const from=current||(open?trigger?.getBoundingClientRect():panel.getBoundingClientRect());
+      const origin=trigger?.getBoundingClientRect();
+      const anchor=origin?{left:origin.left,top:origin.bottom-1,width:origin.width,height:2}:null;
+      const from=current||(open?anchor:panel.getBoundingClientRect());
       const oldStyle=motion?getComputedStyle(motion.shell):getComputedStyle(open?(trigger||panel):panel);
       const sourceRadius=Math.min(parseFloat(oldStyle.borderTopLeftRadius)||0,from.width/2,from.height/2);
       const sourceBackground=oldStyle.backgroundColor, sourceBorder=oldStyle.borderColor;
       const panelDimensions=panel.getBoundingClientRect();
+      if(!open&&!panel.hidden)retainedScroll={top:panel.scrollTop,left:panel.scrollLeft};
       const reserves=host?[...host.children].filter(n=>n.matches('.wg-stage-main,.wg-actions')).map(node=>({node,from:parseFloat(getComputedStyle(node).marginRight)||0})):[];
       clearMotion(true);
       desiredOpen=open;panel.hidden=!open;
+      if(open){panel.scrollTop=retainedScroll.top;panel.scrollLeft=retainedScroll.left;}
       trigger?.setAttribute('aria-expanded',String(open));
       host?.classList.toggle('wg-inspector-open',open);
       onChange(open);requestPaint();
-      const to=open?panel.getBoundingClientRect():trigger?.getBoundingClientRect();
+      const to=open?panel.getBoundingClientRect():anchor;
       const wantsFocus=focus||document.activeElement===trigger||panel.contains(document.activeElement);
       const targetStyle=getComputedStyle(open?panel:(trigger||panel));
       const targetRadius=Math.min(parseFloat(targetStyle.borderTopLeftRadius)||0,to.width/2,to.height/2);
       if(!trigger||!from?.width||!from.height||!to?.width||!to.height||motionPreference.matches||!panel.animate){
-        trigger?.classList.toggle('wg-morph-origin-muted',open);
-        if(wantsFocus)(open?panel.querySelector('button,input,select,textarea'):trigger)?.focus({preventScroll:true});
+          if(wantsFocus)(open?panel.querySelector('button,input,select,textarea'):trigger)?.focus({preventScroll:true});
         return;
       }
       const panelBox=open?to:panelDimensions;
@@ -122,12 +128,13 @@
       Object.assign(inner.style,{width:panelBox.width+'px',height:panelBox.height+'px',visibility:'visible'});
       shell.append(inner);document.body.append(shell);
       const visibility=panel.style.visibility;
-      panel.style.visibility='hidden';trigger.classList.add('wg-morph-origin-muted');
+      inner.scrollTop=retainedScroll.top;inner.scrollLeft=retainedScroll.left;
+      panel.style.visibility='hidden';
       const duration=open?560:440, runs=[];
       const run=(node,frames,easing='linear')=>{const animation=node.animate(frames,{duration,easing,fill:'both'});runs.push(animation);activeMotions.add(animation);return animation;};
-      const background=sourceBackground==='rgba(0, 0, 0, 0)'?getComputedStyle(host||document.body).backgroundColor:sourceBackground;
+      const background=sourceBackground==='rgba(0, 0, 0, 0)'?solidBackground(open?trigger:panel):sourceBackground;
       const geometry=run(shell,fluidSteps.map(({offset,p})=>({offset,left:lerp(from.left,to.left,p)+'px',top:lerp(from.top,to.top,p)+'px',width:lerp(from.width,to.width,p)+'px',height:lerp(from.height,to.height,p)+'px',borderRadius:lerp(sourceRadius,targetRadius,p)+'px'})));
-      run(shell,[{backgroundColor:background,borderColor:sourceBorder},{backgroundColor:targetStyle.backgroundColor==='rgba(0, 0, 0, 0)'?getComputedStyle(host||document.body).backgroundColor:targetStyle.backgroundColor,borderColor:targetStyle.borderColor}],fluidEasing);
+      run(shell,[{backgroundColor:background,borderColor:sourceBorder},{backgroundColor:targetStyle.backgroundColor==='rgba(0, 0, 0, 0)'?solidBackground(open?panel:trigger):targetStyle.backgroundColor,borderColor:targetStyle.borderColor}],fluidEasing);
       run(inner,fluidSteps.map(({offset,p})=>({offset,opacity:open?lerp(currentOpacity??0,1,Math.max(0,(p-.45)/.55)):lerp(currentOpacity??1,0,Math.min(1,p*2.4)),transform:'translateY('+((open?1-p:p)*6)+'px)'})));
       reserves.forEach(({node,from:start})=>{const end=parseFloat(getComputedStyle(node).marginRight)||0;if(start!==end)run(node,fluidSteps.map(({offset,p})=>({offset,marginRight:lerp(start,end,p)+'px'})));});
       motion={shell,inner,runs,visibility,focus:wantsFocus,interrupted:false};
